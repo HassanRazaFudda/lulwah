@@ -1,0 +1,35 @@
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+.next/
+.turbo/
+out/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# tests / coverage
+coverage/
+playwright-report/
+test-results/
+
+# misc
+*.tsbuildinfo
+.eslintcache
