@@ -1,0 +1,99 @@
+# docker-compose.dev.yml — LOCAL DEVELOPMENT ONLY.
+#
+# Per plan.md §25.1: local dev runs Mongo, Redis and Meilisearch in
+# containers, but the apps themselves (web/admin/api) run on the host via
+# `pnpm dev` — there is no app container here. Point the apps at these
+# services with:
+#
+#   MONGODB_URI=mongodb://127.0.0.1:27017/lulwah_dev?replicaSet=rs0&directConnection=true
+#   REDIS_URL=redis://:devpassword@127.0.0.1:6379/0
+#   MEILI_HOST=http://127.0.0.1:7700
+#
+# (see .env.example for the full list and dev defaults).
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml logs -f mongo-init   # confirm rs0 initialized
+#
+# All three services publish to 127.0.0.1 ONLY, never 0.0.0.0. This is the
+# habit that matters most in production (plan.md §36.10 gotcha #1: Docker
+# writes its own iptables rules and punches straight through ufw, so
+# "0.0.0.0:27017:27017" is reachable from the internet even with a deny-all
+# firewall) — practising it in dev means it's never a question on the server.
+
+name: lulwah-dev
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    # --bind_ip_all is the *container-internal* bind address, so mongo-init
+    # (and later, api/web/worker running on the host) can reach it. It is
+    # NOT the same as publishing the host port to 0.0.0.0 — see the `ports:`
+    # mapping below, which is deliberately pinned to 127.0.0.1.
+    command: >
+      mongod --replSet rs0 --bind_ip_all
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # One-shot: waits for mongo to be healthy, then initializes the rs0
+  # replica set (idempotent — safe to re-run on every `up`). See
+  # scripts/mongo-init.js and plan.md §36.6. Preferred over a
+  # docker-entrypoint-initdb.d script because it re-checks (and self-heals)
+  # on every startup rather than only on first-ever container creation.
+  mongo-init:
+    image: mongo:8
+    restart: "no"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./scripts/mongo-init.js:/scripts/mongo-init.js:ro
+    entrypoint: ["mongosh", "--host", "mongo:27017", "/scripts/mongo-init.js"]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD:-devpassword}
+                   --appendonly yes --appendfsync everysec
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-devpassword}", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.48
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-devMasterKeyChangeMe1234567890}
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - meili_dev_data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mongo_dev_data: {}
+  redis_dev_data: {}
+  meili_dev_data: {}

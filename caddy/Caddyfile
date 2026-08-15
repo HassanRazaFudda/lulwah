@@ -1,0 +1,106 @@
+# caddy/Caddyfile — production + staging, adapted from plan.md §36.5.
+#
+# `{$ACME_EMAIL}` and `{$STAGING_BCRYPT_HASH}` are read from the container's
+# environment (docker-compose.yml passes `.env` via `env_file`, and Caddy
+# reads placeholders like `{$VAR}` from its own process environment — add
+# `environment: { ACME_EMAIL: ..., STAGING_BCRYPT_HASH: ... }` or `env_file`
+# to the caddy service if these aren't already inherited).
+#
+# Generate the staging bcrypt hash with:
+#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<password>'
+{
+	email {$ACME_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+# Shared security headers — HSTS, no-sniff, no framing, conservative referrer
+# policy. Imported by every site block below. Target: A on securityheaders.com
+# and SSL Labs A+ (Cloudflare in "Full (strict)" mode terminates the edge leg;
+# Caddy holds the real origin cert — see plan.md §36.3, gotcha #8).
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Storefront — Next.js, public, SEO-indexed.
+lulwah.ae, www.lulwah.ae {
+	import secure_headers
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		health_uri /api/health
+		health_interval 10s
+		lb_policy least_conn
+	}
+}
+
+# Admin console — never indexed, regardless of what the app itself sets.
+admin.lulwah.ae {
+	import secure_headers
+	header X-Robots-Tag "noindex, nofollow"
+	encode zstd gzip
+	reverse_proxy admin:3001 {
+		health_uri /api/health
+		health_interval 15s
+	}
+}
+
+# REST API — round-robin across the 2 api replicas (see docker-compose.yml).
+api.lulwah.ae {
+	import secure_headers
+	reverse_proxy api:4000 {
+		health_uri /api/v1/health
+		health_interval 10s
+		lb_policy round_robin
+	}
+}
+
+# imgproxy — signed URLs only (plan.md §36.10 gotcha #13); long-lived
+# immutable caching since a transform's URL is content-addressed by its
+# signature/params.
+img.lulwah.ae {
+	import secure_headers
+	header Cache-Control "public, max-age=31536000, immutable"
+	reverse_proxy imgproxy:8080
+}
+
+# Staging — basic-auth protected, always noindex, and stopped by default
+# (./scripts/staging.sh up/down, see plan.md §25.1) to save ~1 GB of RAM on
+# the 8 GB box. Mirrors the production topology (separate web/admin/api
+# vhosts) with `-stg`-suffixed container names, rather than the doc's §36.5
+# example which routes all three staging hostnames to a single `web-stg`
+# container — that collapses admin/api staging behind the storefront app,
+# which doesn't match the per-app URL table in plan.md §25.1
+# (staging./admin-staging./api-staging. are three distinct apps).
+staging.lulwah.ae {
+	import secure_headers
+	header X-Robots-Tag "noindex, nofollow"
+	basic_auth {
+		lulwah {$STAGING_BCRYPT_HASH}
+	}
+	reverse_proxy web-stg:3000
+}
+
+admin-staging.lulwah.ae {
+	import secure_headers
+	header X-Robots-Tag "noindex, nofollow"
+	basic_auth {
+		lulwah {$STAGING_BCRYPT_HASH}
+	}
+	reverse_proxy admin-stg:3001
+}
+
+api-staging.lulwah.ae {
+	import secure_headers
+	header X-Robots-Tag "noindex, nofollow"
+	basic_auth {
+		lulwah {$STAGING_BCRYPT_HASH}
+	}
+	reverse_proxy api-stg:4000
+}

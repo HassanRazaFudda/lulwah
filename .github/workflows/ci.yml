@@ -1,0 +1,188 @@
+# .github/workflows/ci.yml
+#
+# Implements the pipeline shape from plan.md §25.2. Runs entirely on the
+# GitHub Actions runner, never on the VPS (per §25.2: "Images are built in
+# CI and only pulled on the server").
+#
+# Two kinds of jobs here, deliberately:
+#   - `verify` is real today and blocks merges.
+#   - `bundle-size`, `e2e-playwright`, `lighthouse` are placeholders
+#     (`if: false`) for stages the doc's pipeline calls for but that have
+#     nothing to run yet, because apps/web, apps/admin and apps/api don't
+#     exist in this repo yet (they're separate, parallel workstreams — see
+#     the note at the top of this file's companion PR). A green check that
+#     verifies nothing is worse than an honest skip: it would look done
+#     without being done. Flip each `if: false` once its prerequisites land.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # ==========================================================================
+  # REAL — install, lint, typecheck, format check, unit+integration tests,
+  # build. Mirrors plan.md §25.2 stages 1-4. This is the job that gates
+  # merges today.
+  # ==========================================================================
+  verify:
+    name: Install · lint · typecheck · test · build
+    runs-on: ubuntu-latest
+
+    # mongo/redis/meilisearch as live GH Actions services, for any workspace
+    # whose tests need a real instance rather than an in-memory fake.
+    # Nothing currently depends on these — apps/api's own test suite is
+    # expected to use mongodb-memory-server (spun up per test run, no
+    # service container needed, and able to run in single-node
+    # replica-set mode for transaction tests — see plan.md §24, §36.6) —
+    # but they're wired up here so a future workspace needing live Redis
+    # or Meilisearch behavior doesn't require a CI rewrite. Unused service
+    # containers cost nothing beyond the job's own wall-clock time.
+    services:
+      mongo:
+        image: mongo:8
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      meilisearch:
+        image: getmeili/meilisearch:v1.48
+        ports: ["7700:7700"]
+        env:
+          MEILI_MASTER_KEY: ci-master-key-not-a-secret-0123456789
+          MEILI_ENV: development
+          MEILI_NO_ANALYTICS: "true"
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:7700/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # NOTE: this `mongo` service is a plain standalone mongod — GitHub
+      # Actions' `services:` block can set image/env/options but cannot
+      # override the container's command, so it can't be started with
+      # `--replSet rs0`. It is NOT a substitute for the replica-set Mongo in
+      # docker-compose.dev.yml / docker-compose.yml and cannot run
+      # multi-document transactions (plan.md §36.6). It's here only for
+      # tests that need *a* live Mongo without transactions. Anything
+      # exercising order-placement transactions should use
+      # mongodb-memory-server in replica-set mode instead, which can start
+      # with an initiated single-node replica set.
+      MONGODB_URI: mongodb://127.0.0.1:27017/lulwah_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      MEILI_HOST: http://127.0.0.1:7700
+      MEILI_MASTER_KEY: ci-master-key-not-a-secret-0123456789
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        # No explicit version: pinned via the "packageManager" field in
+        # package.json (pnpm@11.5.3), so there's one place to bump it.
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint + typecheck
+        run: pnpm exec turbo run lint typecheck
+
+      - name: Format check
+        run: pnpm run format:check
+
+      - name: Unit + integration tests
+        run: pnpm exec turbo run test
+
+      - name: Build all apps
+        run: pnpm exec turbo run build
+
+  # ==========================================================================
+  # PLACEHOLDER — bundle-size gate (size-limit). Not active: no workspace
+  # has a size-limit config checked in yet, so there is no budget to gate
+  # on. Enabling this now would either silently no-op (false confidence) or
+  # fail every PR for reasons unrelated to the change under review — worse
+  # than not having the check. Activate by removing `if: false` once
+  # apps/web (and any other bundled app) defines size-limit budgets per
+  # plan.md §18.
+  # ==========================================================================
+  bundle-size:
+    name: Bundle size gate (placeholder — not active)
+    runs-on: ubuntu-latest
+    needs: verify
+    if: false
+    steps:
+      - name: Reserved
+        run: echo "Reserved for size-limit once bundle budgets exist (plan.md §18)."
+
+  # ==========================================================================
+  # PLACEHOLDER — Playwright E2E (+ axe a11y scan, run within the same
+  # suite per plan.md §25.2). Not active: apps/web, apps/admin and apps/api
+  # don't exist in this repo yet (separate, parallel workstreams), so there
+  # is no stack to boot and no journeys to run. Activate by removing
+  # `if: false` once a runnable stack and the 12 journeys from plan.md
+  # §24/§34 have specs. The mongo/redis/meilisearch services below are
+  # pre-wired for that day; delete this comment once the job is real.
+  # ==========================================================================
+  e2e-playwright:
+    name: Playwright E2E + axe a11y (placeholder — not active)
+    runs-on: ubuntu-latest
+    needs: verify
+    if: false
+    services:
+      mongo:
+        image: mongo:8
+        ports: ["27017:27017"]
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+      meilisearch:
+        image: getmeili/meilisearch:v1.48
+        ports: ["7700:7700"]
+        env:
+          MEILI_MASTER_KEY: ci-master-key-not-a-secret-0123456789
+    steps:
+      - name: Reserved
+        run: echo "Reserved — build the stack, then run pnpm exec playwright test against it."
+
+  # ==========================================================================
+  # PLACEHOLDER — Lighthouse CI. Not active: needs a built `web` app and a
+  # lighthouserc config carrying the budgets from plan.md §18 (mobile >= 90
+  # on home/PLP/PDP/cart). Activate by removing `if: false` once apps/web
+  # exists and those budgets are checked in.
+  # ==========================================================================
+  lighthouse:
+    name: Lighthouse CI (placeholder — not active)
+    runs-on: ubuntu-latest
+    needs: verify
+    if: false
+    steps:
+      - name: Reserved
+        run: echo "Reserved for @lhci/cli against the built web app (plan.md §18)."
