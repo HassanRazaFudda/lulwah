@@ -1,5 +1,6 @@
 node_modules/
 .pnpm-store/
+.claude/worktrees/
 
 # build outputs
 dist/
