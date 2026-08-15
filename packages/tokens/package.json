@@ -1,0 +1,24 @@
+{
+  "name": "@lulwah/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Design tokens as TS objects and generated CSS custom properties (plan.md §13).",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^10.8.1",
+    "typescript": "^6.0.0"
+  }
+}

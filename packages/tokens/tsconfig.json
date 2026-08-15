@@ -1,0 +1,13 @@
+// Relative path, not the @lulwah/config package specifier: config's
+// tailwind-preset.ts imports @lulwah/tokens, so a workspace dependency in
+// the other direction (tokens -> config) would make pnpm/Turborepo see a
+// cycle. Same base config either way.
+{
+  "extends": "../config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}
+
