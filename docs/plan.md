@@ -52,9 +52,9 @@ Custom e‑commerce platform: storefront (Next.js) + REST API (Node.js/Express/M
 | Field | Value |
 |---|---|
 | Document | `plan.md` — single source of truth for scope, architecture and decisions |
-| Version | 1.1 |
+| Version | 1.2 |
 | Status | **Decisions locked.** Anything not locked is listed in §31 "Open questions" with a default already chosen. |
-| Changelog | **1.1** — infrastructure moved from managed cloud (Vercel/Atlas/Upstash/Cloudinary) to **self-hosted Docker on one Contabo VPS**. Affects §4.3, §5.1, §5.6, §7.14 (Atlas Search → Meilisearch), §18, §25, §26, §29, §30, and adds §36. |
+| Changelog | **1.2** (2026-08-12) — dependency versions refreshed to what is actually current/LTS at build start, since 1.1 had drifted behind real releases. Node 22→**24 LTS**, Next.js 15→**16.3+**, React 19→**19.2+**, MongoDB 7→**8.3+**, Mongoose 8→**9.9+**, Redis 7→**8.10+**, Meilisearch 1.11→**1.48+**, Tailwind v4→**4.3+**. TypeScript pinned at **6.0** rather than the newly-released 7.0 — see the note in §4.1, revisit once 7.x has a stable programmatic API. Affects §4.1, §4.2, §4.3, §36.5. **1.1** — infrastructure moved from managed cloud (Vercel/Atlas/Upstash/Cloudinary) to **self-hosted Docker on one Contabo VPS**. Affects §4.3, §5.1, §5.6, §7.14 (Atlas Search → Meilisearch), §18, §25, §26, §29, §30, and adds §36. |
 | Audience | Engineering, design, client stakeholders |
 | Language | English (so any developer can pick it up). Client-facing summaries can be Urdu. |
 
@@ -307,9 +307,9 @@ Every choice below is final for R1–R2. Version numbers are the floor; patch up
 
 | Concern | Choice | Why this and not the alternative |
 |---|---|---|
-| Framework | **Next.js 15+, App Router, React 19, TypeScript strict** | SSR/ISR for SEO on ~5,000 product pages; Server Components cut client JS; brief specifies Next. |
+| Framework | **Next.js 16.3+, App Router, React 19.2+, TypeScript 6.0 strict** | SSR/ISR for SEO on ~5,000 product pages; Server Components cut client JS; brief specifies Next. TypeScript held at 6.0 (not the newly-shipped 7.0/native-Go compiler) until the ecosystem — Next.js, ESLint/typescript-eslint, Vitest — ships stable support for it; 7.0 itself notes it has no stable programmatic API yet. |
 | Rendering | Per-route strategy, see §12.2 | Home/collections ISR, PDP ISR+on-demand revalidate, cart/checkout/account CSR-with-auth. |
-| Styling | **Tailwind CSS v4** + a hand-written design-token layer (§13) | Utility speed, but tokens are ours — no default Tailwind palette, no default radii. This is what stops it looking templated. |
+| Styling | **Tailwind CSS 4.3+** + a hand-written design-token layer (§13) | Utility speed, but tokens are ours — no default Tailwind palette, no default radii. This is what stops it looking templated. |
 | Component primitives | **Radix UI primitives**, styled entirely by us | **Deliberately NOT shadcn/ui defaults.** shadcn's default skin is the single most recognisable "AI-generated site" signature. We take Radix's accessibility, throw away the skin. |
 | Icons | **Lucide**, but only for UI chrome. Brand/nav icons are custom SVG drawn from the logo's filigree | Generic icon sets are a tell. |
 | Animation (DOM) | **GSAP 3 + ScrollTrigger + Flip + SplitText** (Business licence via client) | Timeline control and scroll choreography that Framer Motion can't match. |
@@ -329,11 +329,11 @@ Every choice below is final for R1–R2. Version numbers are the floor; patch up
 
 | Concern | Choice | Why |
 |---|---|---|
-| Runtime | **Node.js 22 LTS**, TypeScript strict, ESM | Brief specifies Node. |
-| Framework | **Express 5** + `express-async-errors` | Brief-implied, universally understood, easiest to hire for. Fastify is faster but Express is not the bottleneck — Mongo and payments are. |
-| Database | **MongoDB 7 (Atlas)** + **Mongoose 8** | Brief specifies Mongo. Mongoose for schema enforcement, middleware, populate. |
-| Search | **Meilisearch 1.x** (self-hosted container) | Atlas Search does not exist on a self-hosted MongoDB. Meilisearch gives typo tolerance, facets, synonyms, Arabic support and sub-20 ms queries in ~400 MB RAM — correctly sized for one box. Synced by a BullMQ job on `product.updated`. |
-| Cache / sessions / locks | **Redis 7** (self-hosted container, AOF on) | Cart TTL, rate limits, hot product cache, idempotency keys, distributed stock locks, and the shared Next.js ISR cache. |
+| Runtime | **Node.js 24 LTS**, TypeScript 6.0 strict, ESM | Brief specifies Node. Node 24 is Active LTS (22 is Maintenance LTS as of 2026-08). |
+| Framework | **Express 5.2+** + `express-async-errors` | Brief-implied, universally understood, easiest to hire for. Fastify is faster but Express is not the bottleneck — Mongo and payments are. |
+| Database | **MongoDB 8.3+ (Atlas)** + **Mongoose 9.9+** | Brief specifies Mongo. Mongoose for schema enforcement, middleware, populate. |
+| Search | **Meilisearch 1.48+** (self-hosted container) | Atlas Search does not exist on a self-hosted MongoDB. Meilisearch gives typo tolerance, facets, synonyms, Arabic support and sub-20 ms queries in ~400 MB RAM — correctly sized for one box. Synced by a BullMQ job on `product.updated`. |
+| Cache / sessions / locks | **Redis 8.10+** (self-hosted container, AOF on) | Cart TTL, rate limits, hot product cache, idempotency keys, distributed stock locks, and the shared Next.js ISR cache. |
 | Background jobs | **BullMQ** on Redis | Emails, webhooks, image processing, exports, abandoned-cart, scheduled drops. |
 | Validation | **Zod** at every boundary | One schema shared front↔back. |
 | Auth | **JWT access (15 min) + rotating refresh (30 d) in httpOnly cookies** | See §10. |
@@ -356,8 +356,8 @@ Every choice below is final for R1–R2. Version numbers are the floor; patch up
 | Orchestration | **Docker Compose** (not Kubernetes, not Swarm) | One box, one file, readable by anyone. K8s on a single node is pure overhead. |
 | Reverse proxy / TLS | **Caddy 2** | Automatic Let's Encrypt, HTTP/3, health-checked upstreams, 20-line config. |
 | Edge / CDN / WAF | **Cloudflare (free plan)** | This is not optional — it is what makes a Mumbai origin feel fast in Dubai, hides the origin IP, and absorbs drop-day traffic. |
-| Database | **MongoDB 7 in Docker, single-node replica set** | The replica set is **mandatory**, not optional — multi-document transactions (order placement) do not work on a standalone mongod. See §36.6. |
-| Cache / queues | **Redis 7** in Docker, AOF persistence | |
+| Database | **MongoDB 8.3+ in Docker, single-node replica set** | The replica set is **mandatory**, not optional — multi-document transactions (order placement) do not work on a standalone mongod. See §36.6. |
+| Cache / queues | **Redis 8.10+** in Docker, AOF persistence | |
 | Search | **Meilisearch** in Docker | |
 | Media | **Contabo Object Storage** (S3) + **imgproxy** | |
 | Images/CI | Images built in **GitHub Actions**, pushed to **GHCR**, pulled by the VPS | **Never build on the server** — a Next.js build alone wants 2–4 GB and would OOM production. |
@@ -406,7 +406,7 @@ no auto-scaling, no managed failover, **one machine is a single point of failure
              ║      │          │          │         │     ║
              ║  ┌───▼────┐ ┌───▼────┐ ┌───▼───┐ ┌───▼───┐ ║
              ║  │ web    │ │ admin  │ │  api  │ │imgproxy│║
-             ║  │Next 15 │ │Next 15 │ │ ×2    │ │        │║
+             ║  │Next 16 │ │Next 16 │ │ ×2    │ │        │║
              ║  │standalone│ CSR   │ │Express│ │        │ ║
              ║  └───┬────┘ └───┬────┘ └──┬────┘ └───┬───┘ ║
              ║      └──────────┴─────┬───┘          │     ║
@@ -508,7 +508,7 @@ In-process EventEmitter for R1, published to a **BullMQ `domain-events` queue** 
 ```
 lulwah/
 ├── apps/
-│   ├── web/                     Storefront — Next.js 15
+│   ├── web/                     Storefront — Next.js 16
 │   │   ├── app/
 │   │   │   ├── [locale]/
 │   │   │   │   ├── (shop)/      home, collections, product, search, brand
@@ -526,7 +526,7 @@ lulwah/
 │   │   │   └── webgl/           lazy R3F scenes
 │   │   ├── lib/                 api client, formatters, seo, analytics
 │   │   ├── hooks/  stores/  styles/  messages/{en.json,ar.json}
-│   ├── admin/                   Admin console — Next.js 15, CSR, no SEO
+│   ├── admin/                   Admin console — Next.js 16, CSR, no SEO
 │   │   ├── app/(dashboard)/     orders, products, inventory, discounts,
 │   │   │                        customers, content, reports, settings, users
 │   │   └── components/          DataTable, Filters, BulkBar, StatusFlagControl…
@@ -2527,7 +2527,7 @@ services:
       redis: { condition: service_started }
 
   mongo:
-    image: mongo:7
+    image: mongo:8
     restart: unless-stopped
     command: >
       mongod --replSet rs0 --bind_ip_all
@@ -2547,7 +2547,7 @@ services:
     # NOT published to the host — reachable only on the compose network
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     command: >
       redis-server --requirepass ${REDIS_PASSWORD}
@@ -2558,7 +2558,7 @@ services:
     logging: *logging
 
   meilisearch:
-    image: getmeili/meilisearch:v1.11
+    image: getmeili/meilisearch:v1.48
     restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}

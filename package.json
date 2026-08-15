@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Lulwah Fashion — Pakistani designer fashion retailed in the UAE. Storefront, admin console and API.",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "packageManager": "pnpm@11.5.3",
   "scripts": {
@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "turbo": "^2.3.3",
-    "typescript": "^5.7.2",
+    "typescript": "^6.0.0",
     "prettier": "^3.4.2"
   }
 }
