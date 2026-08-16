@@ -45,7 +45,7 @@ export function PriceRangeFilter({ minFils, maxFils }: PriceRangeFilterProps) {
             min={0}
             value={localMin}
             onChange={(event) => setLocalMin(event.target.value)}
-            className="w-full border-0 border-b border-ink-20 bg-nacre px-8 py-6 font-body text-body-sm text-ink tabular-nums outline-none focus:border-b-2 focus:border-zamurrad"
+            className="w-full border-0 border-b border-ink-20 bg-nacre px-8 py-8 font-body text-body-sm text-ink tabular-nums outline-none focus:border-b-2 focus:border-zamurrad"
           />
         </label>
         <label className="flex flex-1 flex-col gap-4">
@@ -56,7 +56,7 @@ export function PriceRangeFilter({ minFils, maxFils }: PriceRangeFilterProps) {
             min={0}
             value={localMax}
             onChange={(event) => setLocalMax(event.target.value)}
-            className="w-full border-0 border-b border-ink-20 bg-nacre px-8 py-6 font-body text-body-sm text-ink tabular-nums outline-none focus:border-b-2 focus:border-zamurrad"
+            className="w-full border-0 border-b border-ink-20 bg-nacre px-8 py-8 font-body text-body-sm text-ink tabular-nums outline-none focus:border-b-2 focus:border-zamurrad"
           />
         </label>
       </div>

@@ -77,7 +77,7 @@ export function AddToBagForm({ product }: AddToBagFormProps) {
                 aria-label={color.name}
                 onClick={() => setSelectedColor(color.name)}
                 className={cx(
-                  'size-32 rounded-full border-2 p-2 transition-colors duration-fast ease-out',
+                  'size-32 rounded-full border-2 p-4 transition-colors duration-fast ease-out',
                   selectedColor === color.name ? 'border-zamurrad' : 'border-transparent',
                 )}
               >
@@ -107,7 +107,7 @@ export function AddToBagForm({ product }: AddToBagFormProps) {
                 aria-pressed={selectedSize === size}
                 onClick={() => setSelectedSize(size)}
                 className={cx(
-                  'flex h-40 min-w-40 items-center justify-center border px-12 font-body text-body-sm transition-colors duration-fast ease-out',
+                  'flex h-48 min-w-48 items-center justify-center border px-12 font-body text-body-sm transition-colors duration-fast ease-out',
                   selectedSize === size ? 'border-zamurrad bg-zamurrad text-paper' : 'border-ink-20 text-ink hover:border-ink',
                 )}
               >

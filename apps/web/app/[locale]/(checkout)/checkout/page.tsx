@@ -284,7 +284,7 @@ function PaymentOption({
   return (
     <label className={`flex cursor-pointer items-start gap-12 border p-16 ${checked ? 'border-zamurrad' : 'border-ink-20'} ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}>
       <input type="radio" value={value} disabled={disabled} className="mt-4 accent-zamurrad" {...registerProps} />
-      <span className="flex flex-col gap-2">
+      <span className="flex flex-col gap-4">
         <span className="font-body text-body font-medium text-ink">{label}</span>
         <span className="font-body text-body-sm text-mukaish">{description}</span>
       </span>

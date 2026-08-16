@@ -12,7 +12,7 @@ export default function BrandsPage() {
   return (
     <div className="flex flex-col gap-32 px-24 py-32 lg:px-[clamp(24px,5vw,88px)]">
       <h1 className="font-display text-heading-1 tracking-display text-ink">Brands</h1>
-      <ul className="grid grid-cols-2 gap-1 border border-line lg:grid-cols-3">
+      <ul className="grid grid-cols-2 gap-[1px] border border-line lg:grid-cols-3">
         {BRANDS.map((brand) => (
           <li key={brand.slug} className="border border-line">
             <Link

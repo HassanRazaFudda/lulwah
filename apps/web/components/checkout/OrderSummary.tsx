@@ -24,10 +24,10 @@ export function OrderSummary({ locale, isCod }: OrderSummaryProps) {
       <ul className="flex flex-col gap-16 border-b border-line pb-16">
         {items.map((item) => (
           <li key={item.id} className="flex gap-12">
-            <div className="relative aspect-[3/4] w-56 shrink-0 overflow-hidden bg-pearl">
+            <div className="relative aspect-[3/4] w-[56px] shrink-0 overflow-hidden bg-pearl">
               <Image src={item.image.src} alt={item.image.alt} fill sizes="56px" className="object-cover" />
             </div>
-            <div className="flex flex-1 flex-col gap-2">
+            <div className="flex flex-1 flex-col gap-4">
               <span className="font-body text-body-sm font-medium text-ink">{item.title}</span>
               <span className="font-body text-body-sm text-mukaish">Qty {item.quantity}</span>
             </div>

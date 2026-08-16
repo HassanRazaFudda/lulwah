@@ -19,11 +19,11 @@ export function QuantityStepper({ quantity, onChange, min = 1, max = 10, label }
         onClick={() => onChange(Math.max(min, quantity - 1))}
         disabled={quantity <= min}
         aria-label="Decrease quantity"
-        className="inline-flex h-full w-40 items-center justify-center text-ink transition-colors duration-fast ease-out hover:bg-nacre disabled:cursor-not-allowed disabled:opacity-30"
+        className="inline-flex h-full w-48 items-center justify-center text-ink transition-colors duration-fast ease-out hover:bg-nacre disabled:cursor-not-allowed disabled:opacity-30"
       >
         <Minus size={14} strokeWidth={1.5} aria-hidden="true" />
       </button>
-      <span className="w-40 text-center font-body text-body font-medium tabular-nums text-ink" aria-live="polite">
+      <span className="w-48 text-center font-body text-body font-medium tabular-nums text-ink" aria-live="polite">
         {quantity}
       </span>
       <button
@@ -31,7 +31,7 @@ export function QuantityStepper({ quantity, onChange, min = 1, max = 10, label }
         onClick={() => onChange(Math.min(max, quantity + 1))}
         disabled={quantity >= max}
         aria-label="Increase quantity"
-        className="inline-flex h-full w-40 items-center justify-center text-ink transition-colors duration-fast ease-out hover:bg-nacre disabled:cursor-not-allowed disabled:opacity-30"
+        className="inline-flex h-full w-48 items-center justify-center text-ink transition-colors duration-fast ease-out hover:bg-nacre disabled:cursor-not-allowed disabled:opacity-30"
       >
         <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
       </button>

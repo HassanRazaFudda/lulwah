@@ -51,7 +51,7 @@ export function Footer() {
         {/* The filigree ornament — a single gold hairline, centred, standing in for the logo's flourish (§13.6/§13.3: "gold ... used only as a hairline, rule, or 1px border"). */}
         <div className="my-48 flex items-center justify-center gap-16" role="presentation">
           <span className="h-px w-full max-w-[120px] bg-gold-dark/45" />
-          <span className="size-6 rounded-full bg-gold" />
+          <span className="size-4 rounded-full bg-gold" />
           <span className="h-px w-full max-w-[120px] bg-gold-dark/45" />
         </div>
 

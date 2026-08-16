@@ -81,7 +81,7 @@ export function NewsletterForm({ variant = 'panel', className }: NewsletterFormP
           id={consentId}
           type="checkbox"
           {...register('consent')}
-          className="mt-2 size-16 shrink-0 border border-current bg-transparent accent-gold"
+          className="mt-[2px] size-16 shrink-0 border border-current bg-transparent accent-gold"
         />
         <label htmlFor={consentId} className={cx('font-body text-body-sm', isPanel ? 'text-paper/80' : 'text-ink-70')}>
           {t('consent')}

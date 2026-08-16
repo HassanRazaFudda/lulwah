@@ -31,7 +31,7 @@ export function ProductGallery({ images, productTitle }: ProductGalleryProps) {
   return (
     <div className="flex flex-col-reverse gap-16 lg:flex-row">
       {images.length > 1 ? (
-        <div className="flex gap-8 overflow-x-auto lg:w-80 lg:shrink-0 lg:flex-col">
+        <div className="flex gap-8 overflow-x-auto lg:w-96 lg:shrink-0 lg:flex-col">
           {images.map((image, index) => (
             <button
               key={image.src}

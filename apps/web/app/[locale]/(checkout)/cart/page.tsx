@@ -150,7 +150,7 @@ function CartLine({
       </Link>
       <div className="flex flex-1 flex-col gap-8">
         <div className="flex items-start justify-between gap-16">
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-4">
             <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
               {item.brandName}
             </span>

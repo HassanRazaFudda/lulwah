@@ -93,7 +93,7 @@ function FacetFieldset({
                       option.isSelected ? 'border-zamurrad bg-zamurrad' : 'border-ink-20 bg-transparent',
                     )}
                   >
-                    {option.isSelected ? <span className="size-6 bg-paper" /> : null}
+                    {option.isSelected ? <span className="size-8 bg-paper" /> : null}
                   </span>
                   {option.label}
                 </span>

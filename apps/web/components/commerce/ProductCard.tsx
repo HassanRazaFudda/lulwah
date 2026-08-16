@@ -139,7 +139,7 @@ export function ProductCard({
             {availableSizes.map((size) => (
               <span
                 key={size}
-                className="bg-paper px-8 py-2 font-body text-label font-semibold tracking-label text-ink uppercase"
+                className="bg-paper px-8 py-[2px] font-body text-label font-semibold tracking-label text-ink uppercase"
               >
                 {size}
               </span>

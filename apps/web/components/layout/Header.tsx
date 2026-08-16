@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cx } from '@lulwah/ui';
 import { Link, usePathname } from '@/i18n/navigation';
+
+// Client-provided mark (logo.png at the repo root) extracted onto a
+// transparent background in two colorways: gold for the transparent
+// header state over the dark hero, ink for the solid-paper state
+// elsewhere (plan.md §15.1). Native aspect ratio preserved (731:640)
+// so next/image never has to guess and shift layout.
+const LOGO_ASPECT = 731 / 640;
+const LOGO_HEIGHT = 40;
 
 /**
  * plan.md §15.1: transparent over the homepage hero, solid `paper`
@@ -96,9 +105,17 @@ export function Header() {
 
         <Link
           href="/"
-          className="absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-heading-1 tracking-display"
+          aria-label="Lulwah Fashion"
+          className="absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
-          Lulwah
+          <Image
+            src={isTransparent ? '/brand/logo-lockup-gold.png' : '/brand/logo-lockup-ink.png'}
+            alt="Lulwah Fashion"
+            width={Math.round(LOGO_HEIGHT * LOGO_ASPECT)}
+            height={LOGO_HEIGHT}
+            priority
+            className="h-[40px] w-auto"
+          />
         </Link>
 
         <div className="flex items-center gap-16">
