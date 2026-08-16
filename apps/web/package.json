@@ -8,9 +8,9 @@
     "generate:tokens": "node scripts/generate-tokens-css.mjs",
     "predev": "pnpm run generate:tokens",
     "prebuild": "pnpm run generate:tokens",
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

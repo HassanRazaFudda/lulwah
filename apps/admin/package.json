@@ -5,9 +5,9 @@
   "type": "module",
   "description": "Admin console — Next.js 16, CSR, no SEO (plan.md §11). Dense, fast, keyboard-driven; explicitly not the storefront's editorial visual language.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
