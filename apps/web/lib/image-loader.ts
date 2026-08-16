@@ -21,6 +21,23 @@ export interface ImageLoaderParams {
 }
 
 export default function imgproxyLoader({ src, width, quality }: ImageLoaderParams): string {
+  // No imgproxy container runs in local dev (docker-compose.dev.yml
+  // deliberately doesn't include one -- see plan.md §25.1, only
+  // mongo/redis/meilisearch run there). Routing every image, including
+  // plain /public assets, through a hardcoded imgproxy origin that
+  // doesn't exist would make every image permanently broken in dev with
+  // no way to preview the storefront. Serve local assets directly
+  // instead; production sets NEXT_PUBLIC_IMGPROXY_URL for real and gets
+  // the real transform pipeline.
+  if (!process.env.NEXT_PUBLIC_IMGPROXY_URL) {
+    // `?w=` is inert against Next's static file server (no resizing
+    // happens), but its presence keeps the URL width-dependent, which
+    // is what silences next/image's "loader doesn't implement width"
+    // dev warning -- otherwise every request the same width-invariant
+    // src, which is exactly what that check flags.
+    return `${src}?w=${width}`;
+  }
+
   // Already-absolute URLs (e.g. a CDN URL from seed/placeholder data) are
   // passed straight to imgproxy as the "plain" source; local/public assets
   // resolve against the app's own origin at request time.
