@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+@config '../tailwind.config.ts';
+
+/* plan.md §11: a dense, fast tool — full-height layout so the sidebar and
+   the sticky-header tables can use the whole viewport. */
+html,
+body {
+  height: 100%;
+}
+
+* {
+  border-color: var(--line);
+}
