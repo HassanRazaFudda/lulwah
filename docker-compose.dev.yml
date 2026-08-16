@@ -5,11 +5,18 @@
 # `pnpm dev` — there is no app container here. Point the apps at these
 # services with:
 #
-#   MONGODB_URI=mongodb://127.0.0.1:27017/lulwah_dev?replicaSet=rs0&directConnection=true
+#   MONGODB_URI=mongodb://127.0.0.1:27018/lulwah_dev?replicaSet=rs0&directConnection=true
 #   REDIS_URL=redis://:devpassword@127.0.0.1:6379/0
 #   MEILI_HOST=http://127.0.0.1:7700
 #
 # (see .env.example for the full list and dev defaults).
+#
+# Mongo is published on host port 27018, not the default 27017: this box's
+# app requires a single-node REPLICA SET (see the `command:` below and
+# plan.md §36.6 — order placement uses a multi-document transaction, which a
+# standalone mongod cannot run), so it must be a separate instance from any
+# plain local `mongod` a developer already has running on 27017. Using a
+# different port means both can coexist without one shadowing the other.
 #
 # Usage:
 #   docker compose -f docker-compose.dev.yml up -d
@@ -34,7 +41,7 @@ services:
     command: >
       mongod --replSet rs0 --bind_ip_all
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27018:27017"
     volumes:
       - mongo_dev_data:/data/db
     healthcheck:
