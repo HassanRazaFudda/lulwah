@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "defaultTitle": "Lulwah Fashion — Pakistani Designer Wear in the UAE",
+    "titleTemplate": "%s — Lulwah Fashion",
+    "description": "Khaadi, Asim Jofa, Sana Safinaz and more — unstitched lawn, pret and wedding formals, delivered across the UAE in 2–4 days."
+  },
+  "nav": {
+    "unstitched": "Unstitched",
+    "readyToWear": "Ready to Wear",
+    "formalWedding": "Formal & Wedding",
+    "brands": "Brands",
+    "sale": "Sale",
+    "menu": "Menu",
+    "primary": "Primary",
+    "search": "Search",
+    "account": "Account",
+    "cart": "Bag"
+  },
+  "announcement": {
+    "label": "Store announcements",
+    "dismiss": "Dismiss announcement",
+    "freeShipping": "Free delivery over AED 300, across the UAE",
+    "delivery": "Delivery in 2–4 days across the UAE",
+    "cod": "Cash on delivery available, up to AED 2,000"
+  },
+  "newsletter": {
+    "emailLabel": "Email address",
+    "cta": "Subscribe",
+    "consent": "I agree to receive marketing emails from Lulwah Fashion. Unsubscribe anytime.",
+    "success": "You're on the list. Watch your inbox."
+  },
+  "footer": {
+    "shop": "Shop",
+    "help": "Help",
+    "about": "About",
+    "collections": "Collections",
+    "faq": "FAQ",
+    "trackOrder": "Track your order",
+    "shippingReturns": "Shipping & returns",
+    "ourStory": "Our story",
+    "newsletterTitle": "Stay ahead of the drop",
+    "newsletterSubtitle": "New collections, restocks and Eid edits — before they sell out.",
+    "legalLine": "© {year} Lulwah Fashion FZE. TRN 100123456700003. Registered in Dubai, UAE.",
+    "paymentMethods": "Visa · Mastercard · Apple Pay · Cash on delivery",
+    "whatsapp": "Chat with us on WhatsApp"
+  },
+  "home": {
+    "hero": {
+      "eyebrow": "Lawn '26 — Volume One",
+      "title": "Forty-two designs, cut for Dubai's summer.",
+      "cta": "See the collection"
+    },
+    "newArrivals": {
+      "title": "New In",
+      "viewAll": "View all new in"
+    },
+    "shopByStitching": {
+      "title": "Shop by stitching",
+      "unstitched": {
+        "title": "Unstitched",
+        "description": "Fabric by the piece — lawn, khaddar, chiffon. Take it to your tailor, or let ours finish it."
+      },
+      "pret": {
+        "title": "Ready to Wear",
+        "description": "Stitched to standard sizing, ready to wear tonight."
+      },
+      "formal": {
+        "title": "Formal & Wedding",
+        "description": "Mehndi, barat, walima, nikkah — festive weight, festive work."
+      }
+    },
+    "editorial": {
+      "eyebrow": "The Edit",
+      "title": "Eid Edition, in five silhouettes",
+      "body": "Forty-two pieces from Pakistan's leading fashion houses, shot in Dubai against the fabric they're cut from. Nothing sized for a Western catalogue — every chart is the brand's own.",
+      "cta": "Read the edit"
+    },
+    "brandStrip": {
+      "title": "Houses we carry"
+    },
+    "bestSellers": {
+      "title": "Best sellers this week",
+      "viewAll": "View all best sellers"
+    },
+    "occasion": {
+      "title": "Shop by occasion",
+      "tiles": {
+        "everyday": "Everyday",
+        "eid": "Eid",
+        "mehndi": "Mehndi",
+        "barat": "Barat",
+        "walima": "Walima"
+      }
+    },
+    "usp": {
+      "authentic": "Authentic designer pieces, sourced direct from Pakistan",
+      "delivery": "2–4 day delivery across the UAE",
+      "returns": "14-day returns on unstitched pieces with seals intact",
+      "cod": "Cash on delivery available"
+    },
+    "newsletterSection": {
+      "title": "Know when Lawn '26 lands.",
+      "subtitle": "One email, before a collection sells out — not a weekly blast."
+    }
+  }
+}
