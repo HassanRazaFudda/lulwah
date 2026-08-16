@@ -6,16 +6,16 @@
   "description": "Lulwah Fashion — Node/Express API (plan.md §5, §9, §10).",
   "main": "./dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:worker": "tsx watch src/worker.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "dev:worker": "tsx watch --env-file-if-exists=.env src/worker.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "start:worker": "node dist/worker.js",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "start:worker": "node --env-file-if-exists=.env dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts"
   },
   "dependencies": {
     "@lulwah/contracts": "workspace:*",

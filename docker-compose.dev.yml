@@ -6,7 +6,7 @@
 # services with:
 #
 #   MONGODB_URI=mongodb://127.0.0.1:27018/lulwah_dev?replicaSet=rs0&directConnection=true
-#   REDIS_URL=redis://:devpassword@127.0.0.1:6379/0
+#   REDIS_URL=redis://:devpassword@127.0.0.1:6380/0
 #   MEILI_HOST=http://127.0.0.1:7700
 #
 # (see .env.example for the full list and dev defaults).
@@ -17,6 +17,10 @@
 # standalone mongod cannot run), so it must be a separate instance from any
 # plain local `mongod` a developer already has running on 27017. Using a
 # different port means both can coexist without one shadowing the other.
+#
+# Redis is likewise published on 6380, not the default 6379, since a
+# developer's machine may already be running an unrelated project's Redis
+# (or any other service) on the default port -- same reasoning as Mongo above.
 #
 # Usage:
 #   docker compose -f docker-compose.dev.yml up -d
@@ -73,7 +77,7 @@ services:
       redis-server --requirepass ${REDIS_PASSWORD:-devpassword}
                    --appendonly yes --appendfsync everysec
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_dev_data:/data
     healthcheck:
