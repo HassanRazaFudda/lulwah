@@ -2223,6 +2223,7 @@ The saving is real (~$350/month, ~$4,200/year). The cost is engineering time and
 | Q12 | Physical store(s) in UAE — do we need a store locator and click-and-collect? | No store locator in R1 | Client · week 6 |
 | Q13 | **VPS region** — Mumbai, Singapore or EU? Mumbai is ~3× faster to Dubai; EU is the neutral/GDPR-familiar choice. Also worth confirming the client is comfortable with UAE customer data residing in India (permitted under UAE PDPL with safeguards, but a business call). | **Mumbai**, with Cloudflare in front | Client · week 1 |
 | Q14 | Is a second VPS acceptable later for warm standby / HA (~$7/mo)? | Single box at launch; revisit at month 4 or 300 orders/month | Client · week 12 |
+| Q15 | §20 names Stripe as the primary card gateway, but **Ziina** (UAE-native payment app/wallet) has significant adoption with UAE SMBs and may be worth adding alongside or instead of Stripe. Flagged during build, not yet evaluated against §20's `PaymentGateway` interface (`createIntent`/`capture`/`refund`/`verifyWebhook`) or UAE trade-licence/settlement requirements. | **Defer** — R1 ships against Stripe as planned; evaluate Ziina in the P4/P5 phase alongside the Tabby/Tamara BNPL integrations (§20, §28), not before | Client · pre-P4 |
 
 ---
 
