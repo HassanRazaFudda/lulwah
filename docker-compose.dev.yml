@@ -98,7 +98,15 @@ services:
     volumes:
       - meili_dev_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7700/health"]
+      # 127.0.0.1, not localhost: this image's /etc/hosts lists localhost's
+      # ::1 (IPv6) entry ahead of 127.0.0.1, and BusyBox wget's resolver
+      # tries it first -- but the server only binds 0.0.0.0 (IPv4), so
+      # every "localhost" healthcheck gets a hard connection-refused and the
+      # container is permanently marked unhealthy despite serving fine.
+      # Reproduced directly: `wget http://localhost:...` failed 31/31 times
+      # in this exact container while `wget http://127.0.0.1:...` succeeded
+      # every time.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
       interval: 10s
       timeout: 5s
       retries: 5

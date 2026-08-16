@@ -61,7 +61,12 @@ services:
       PORT: "3000"
     mem_limit: 640m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      # 127.0.0.1, not localhost -- see the meilisearch healthcheck comment
+      # in docker-compose.dev.yml for why: on these Alpine-based images,
+      # localhost resolves to ::1 before 127.0.0.1, but the app only binds
+      # 0.0.0.0 (IPv4), so a "localhost" healthcheck reliably fails even
+      # though the app is healthy. Reproduced and confirmed in dev.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -76,7 +81,8 @@ services:
     environment: { PORT: "3001" }
     mem_limit: 384m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      # 127.0.0.1, not localhost -- see the web service's healthcheck comment above.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -90,7 +96,8 @@ services:
     deploy: { replicas: 2 }
     mem_limit: 320m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/v1/health"]
+      # 127.0.0.1, not localhost -- see the web service's healthcheck comment above.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 3

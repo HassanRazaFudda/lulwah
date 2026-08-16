@@ -54,6 +54,13 @@ COPY --from=build --chown=lulwah:lulwah /repo/apps/api/package.json ./package.js
 USER lulwah
 EXPOSE 4000
 # Liveness: GET /api/v1/health must return 200 (see src/app.ts).
+# 127.0.0.1, not localhost: on this Alpine base, a musl/BusyBox resolver
+# has been observed (see docker-compose.yml's healthcheck comments)
+# trying localhost's ::1 (IPv6) entry first and getting refused, even
+# though the app only binds 0.0.0.0 (IPv4) -- 127.0.0.1 sidesteps the
+# whole question. This HEALTHCHECK is overridden by docker-compose.yml's
+# own `healthcheck:` block under Compose; it only matters for a bare
+# `docker run`.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:'+(process.env.PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.js"]
