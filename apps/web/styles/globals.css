@@ -1,0 +1,110 @@
+@import 'tailwindcss';
+@config '../tailwind.config.ts';
+@import './tokens.css';
+
+/**
+ * Font-family wiring — plan.md §13.4 / §4.1 ("self-hosted via
+ * next/font/local, WOFF2, subset; no render-blocking Google Fonts
+ * request; no CLS").
+ *
+ * `@lulwah/config/tailwind-preset` (loaded above via `@config`, not
+ * editable by this workstream) declares `font-display` / `font-body` /
+ * `font-display-ar` / `font-body-ar` utilities against literal family
+ * names ("Bodoni Moda", Archivo, ...). A JS-config theme loaded through
+ * the v4 `@config` compatibility path does not also expose those values
+ * as CSS custom properties the way a native `@theme` block would, so
+ * there is nothing to point next/font's generated `@font-face` at by
+ * variable substitution.
+ *
+ * Instead, `app/[locale]/layout.tsx` applies each `next/font/local`
+ * object's `.variable` class to `<html>`, which defines
+ * `--font-bodoni-moda` / `--font-archivo` / `--font-aref-ruqaa` /
+ * `--font-ibm-plex-arabic` scoped to the document (next/font's generated,
+ * hashed local font-family name — the actual self-hosted `@font-face`).
+ * The block below re-declares the same four utility classes inside
+ * `@layer utilities`, after Tailwind's own generated utilities in source
+ * order, so — at equal specificity, same layer — these declarations win
+ * the cascade and every `font-display`/`font-body`/etc. usage resolves to
+ * the real self-hosted font, falling back to the named family and a
+ * generic if the variable is ever unset (e.g. this stylesheet loaded
+ * outside the locale layout).
+ */
+@layer utilities {
+  .font-display {
+    font-family: var(--font-bodoni-moda), 'Bodoni Moda', serif;
+  }
+  .font-body {
+    font-family: var(--font-archivo), Archivo, sans-serif;
+  }
+  .font-display-ar {
+    font-family: var(--font-aref-ruqaa), 'Aref Ruqaa', serif;
+  }
+  .font-body-ar {
+    font-family: var(--font-ibm-plex-arabic), 'IBM Plex Sans Arabic', sans-serif;
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    display: block;
+  }
+
+  /* Gold focus ring — plan.md §13.3: "Gold is metal... focus rings." */
+  :focus-visible {
+    outline: 2px solid var(--gold-dark);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--gold-light);
+    color: var(--ink);
+  }
+}
+
+/* plan.md §14.4: "Marquee brand strip — Continuous horizontal loop, pauses
+   on hover, 60s per cycle." `BrandStrip` renders the brand list twice back
+   to back and translates exactly one copy's width (-50%) so the loop reads
+   as seamless. */
+@keyframes marquee {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* plan.md §14.1 rule 4: reduced motion collapses every transform-based
+   transition to a near-instant opacity change. Component-level motion
+   (GSAP/Motion, out of scope for this skeleton) must honour the same
+   media query itself; this is the CSS-only floor every element gets for
+   free. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+}
