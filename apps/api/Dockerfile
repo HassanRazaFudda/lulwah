@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-stage build for @lulwah/api. The build context is the MONOREPO
+# ROOT (`docker build -f apps/api/Dockerfile .`), not apps/api — pnpm
+# workspaces need the root lockfile and the sibling `packages/*` sources
+# to resolve `@lulwah/contracts` / `@lulwah/utils` / `@lulwah/config`,
+# and Turborepo needs the root `turbo.json`. Actual `docker-compose*`
+# wiring is a separate workstream (see plan.md §36); this Dockerfile only
+# needs to build and run the image standalone.
+
+# ---- deps ------------------------------------------------------------
+# Installs the full workspace's dependency graph with a frozen lockfile,
+# cached separately from the source copy so `pnpm install` only reruns
+# when a package.json / the lockfile actually changes.
+FROM node:24-alpine AS deps
+WORKDIR /repo
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/utils/package.json packages/utils/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/tokens/package.json packages/tokens/package.json
+COPY packages/ui/package.json packages/ui/package.json
+COPY apps/api/package.json apps/api/package.json
+RUN pnpm install --frozen-lockfile --filter @lulwah/api...
+
+# ---- build -------------------------------------------------------------
+# `--filter @lulwah/api...` builds @lulwah/api plus every workspace
+# package it depends on (contracts, utils), in dependency order.
+FROM node:24-alpine AS build
+WORKDIR /repo
+RUN corepack enable
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/packages ./packages
+COPY --from=deps /repo/apps/api/node_modules ./apps/api/node_modules
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm --filter @lulwah/api... run build
+# Drop everything not needed at runtime (dev deps, TS sources, test files).
+RUN pnpm --filter @lulwah/api deploy --prod --legacy /repo/out/api
+
+# ---- runtime -------------------------------------------------------------
+# Slim, non-root, no build toolchain. §36.6: MONGODB_URI is expected to be
+# a replica-set connection string in every environment, including this
+# container — see src/shared/mongo.ts.
+FROM node:24-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN addgroup -S lulwah && adduser -S lulwah -G lulwah
+COPY --from=build --chown=lulwah:lulwah /repo/out/api/node_modules ./node_modules
+COPY --from=build --chown=lulwah:lulwah /repo/apps/api/dist ./dist
+COPY --from=build --chown=lulwah:lulwah /repo/apps/api/package.json ./package.json
+USER lulwah
+EXPOSE 4000
+# Liveness: GET /api/v1/health must return 200 (see src/app.ts).
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:'+(process.env.PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "dist/server.js"]
