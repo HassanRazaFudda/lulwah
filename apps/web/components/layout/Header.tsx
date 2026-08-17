@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cx } from '@lulwah/ui';
-import { Link, usePathname } from '@/i18n/navigation';
+import { Link } from '@/i18n/navigation';
 
 // Client-provided mark (logo.png at the repo root) extracted onto a
 // transparent background in two colorways: gold for the transparent
@@ -39,15 +39,27 @@ const NAV_LINKS = [
   { href: '/shop/sale', labelKey: 'sale' },
 ] as const;
 
-const SOLID_AFTER_PX = 80;
 const HIDE_AFTER_PX = 160;
+
+// plan.md §15.1 specs a transparent-over-hero state that turns solid past
+// an 80px scroll. Not implemented: the header is `sticky` (in normal
+// document flow), so a transparent background reveals the plain page
+// background behind it, not the hero image below -- the hero starts AFTER
+// the header in flow, it's never actually behind it. Toggling text-paper
+// (white) in that state rendered white nav text on a white page
+// background: invisible, not just low-contrast (caught via screenshot --
+// the entire primary nav, search/account/cart icons, and mobile hamburger
+// were all present in the DOM but unreadable).
+//
+// Proper fix is a bigger layout change (header goes `fixed`, every other
+// route's content gets compensating top padding, hero bleeds under it by
+// being the one exception) -- out of scope for this pass. Always-solid
+// matches the client's own reference mockup, which never depicted a
+// transparent/hero-overlay header at all.
 
 export function Header() {
   const t = useTranslations('nav');
-  const pathname = usePathname();
-  const isHome = pathname === '/';
 
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const lastScrollY = useRef(0);
@@ -55,7 +67,6 @@ export function Header() {
   useEffect(() => {
     function onScroll() {
       const y = window.scrollY;
-      setIsScrolled(y > SOLID_AFTER_PX);
       setIsHidden(y > lastScrollY.current && y > HIDE_AFTER_PX);
       lastScrollY.current = y;
     }
@@ -63,14 +74,11 @@ export function Header() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const isTransparent = isHome && !isScrolled && !isMobileNavOpen;
-
   return (
     <header
       className={cx(
-        'sticky top-0 z-40 transition-transform duration-base ease-out',
+        'sticky top-0 z-40 border-b border-line bg-paper text-ink transition-transform duration-base ease-out',
         isHidden ? '-translate-y-full' : 'translate-y-0',
-        isTransparent ? 'bg-transparent text-paper' : 'border-b border-line bg-paper text-ink',
       )}
     >
       <div className="relative mx-auto flex h-64 max-w-[1600px] items-center justify-between px-24 lg:px-[clamp(24px,5vw,88px)]">
@@ -109,7 +117,7 @@ export function Header() {
           className="absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
           <Image
-            src={isTransparent ? '/brand/logo-lockup-gold.png' : '/brand/logo-lockup-ink.png'}
+            src="/brand/logo-lockup-ink.png"
             alt="Lulwah Fashion"
             width={Math.round(LOGO_HEIGHT * LOGO_ASPECT)}
             height={LOGO_HEIGHT}
