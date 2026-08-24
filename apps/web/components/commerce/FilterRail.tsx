@@ -56,7 +56,16 @@ export function FilterRail({ groups, priceRangeFils, clearHref, hasActiveFilters
       </div>
 
       {groups.map((group) =>
-        group.options.length > 0 ? (
+        // The Price range control is anchored right after the Size group
+        // (`PRICE_AFTER_GROUP_KEY`) regardless of whether Size itself has
+        // any options to show — real product listings don't carry
+        // per-product size data (`GET /products` embeds no variants), so
+        // Size is routinely empty against the real API. Gating this whole
+        // fieldset on `options.length > 0` would silently drop Price too
+        // whenever Size is empty; only the size *checkboxes* should
+        // disappear in that case, not the price filter riding alongside
+        // them (see `FacetFieldset` below).
+        group.options.length > 0 || group.key === PRICE_AFTER_GROUP_KEY ? (
           <FacetFieldset key={group.key} group={group} priceRangeFils={priceRangeFils} />
         ) : null,
       )}
@@ -73,36 +82,38 @@ function FacetFieldset({
 }) {
   return (
     <>
-      <fieldset className="flex flex-col gap-12 border-t border-line pt-24">
-        <legend className="mb-4 font-body text-label font-semibold tracking-label text-ink uppercase">
-          {group.label}
-        </legend>
-        <ul className="flex flex-col gap-8">
-          {group.options.map((option) => (
-            <li key={option.value}>
-              <Link
-                href={option.href}
-                aria-current={option.isSelected ? 'true' : undefined}
-                className="flex items-center justify-between gap-8 font-body text-body-sm text-ink-70 hover:text-ink"
-              >
-                <span className="flex items-center gap-8">
-                  <span
-                    aria-hidden="true"
-                    className={cx(
-                      'inline-flex size-16 shrink-0 items-center justify-center border',
-                      option.isSelected ? 'border-zamurrad bg-zamurrad' : 'border-ink-20 bg-transparent',
-                    )}
-                  >
-                    {option.isSelected ? <span className="size-8 bg-paper" /> : null}
+      {group.options.length > 0 ? (
+        <fieldset className="flex flex-col gap-12 border-t border-line pt-24">
+          <legend className="mb-4 font-body text-label font-semibold tracking-label text-ink uppercase">
+            {group.label}
+          </legend>
+          <ul className="flex flex-col gap-8">
+            {group.options.map((option) => (
+              <li key={option.value}>
+                <Link
+                  href={option.href}
+                  aria-current={option.isSelected ? 'true' : undefined}
+                  className="flex items-center justify-between gap-8 font-body text-body-sm text-ink-70 hover:text-ink"
+                >
+                  <span className="flex items-center gap-8">
+                    <span
+                      aria-hidden="true"
+                      className={cx(
+                        'inline-flex size-16 shrink-0 items-center justify-center border',
+                        option.isSelected ? 'border-zamurrad bg-zamurrad' : 'border-ink-20 bg-transparent',
+                      )}
+                    >
+                      {option.isSelected ? <span className="size-8 bg-paper" /> : null}
+                    </span>
+                    {option.label}
                   </span>
-                  {option.label}
-                </span>
-                <span className="tabular-nums text-mukaish">{option.count}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </fieldset>
+                  <span className="tabular-nums text-mukaish">{option.count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      ) : null}
       {group.key === PRICE_AFTER_GROUP_KEY ? (
         <div className="flex flex-col gap-12 border-t border-line pt-24">
           <h3 className="font-body text-label font-semibold tracking-label text-ink uppercase">Price</h3>
