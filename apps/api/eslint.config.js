@@ -1,10 +1,10 @@
 // @ts-check
 import { baseConfig } from '@lulwah/config/eslint.config.js';
 
-// Module boundary enforcement — plan.md §5.3. Only `identity` exists so
-// far; the other module names from the §5.3 table get added to this list
-// as they land so the rule keeps policing new cross-module imports from
-// day one instead of being retrofitted later.
+// Module boundary enforcement — plan.md §5.3. `identity`, `catalog` and
+// `inventory` exist so far; the remaining module names from the §5.3 table
+// get added to this list as they land so the rule keeps policing new
+// cross-module imports from day one instead of being retrofitted later.
 //
 // Deliberately NOT using @lulwah/config's `createModuleBoundaryZones`
 // helper here: its `except` glob is resolved relative to the `from`
@@ -18,7 +18,7 @@ import { baseConfig } from '@lulwah/config/eslint.config.js';
 // — no `except`, so no ambiguity about what it's relative to. With only
 // one module today that list is empty (nothing to forbid yet); it fills
 // in correctly the moment a second module name is added to MODULES.
-const MODULES = ['identity'];
+const MODULES = ['identity', 'catalog', 'inventory'];
 
 const moduleBoundaryZones = MODULES.map((moduleName) => ({
   target: `./src/modules/${moduleName}/**/*`,
@@ -49,5 +49,20 @@ export default [
     // limit (plan.md §27.3).
     files: ['**/*.routes.ts', '**/*.model.ts'],
     rules: { 'max-lines': 'off' },
+  },
+  {
+    // Integration tests legitimately assert on another module's persisted
+    // state directly (e.g. "adjusting inventory stock updates the parent
+    // Product's totalStock" — `inventory.integration.test.ts` reads
+    // `ProductModel` to prove the cross-module side effect actually
+    // happened, and `catalog.integration.test.ts`/
+    // `inventory.integration.test.ts` both log a test user in via
+    // `identity.model.ts`'s `UserModel`, same shortcut
+    // `auth.integration.test.ts` already uses). The module boundary rule
+    // (plan.md §5.3) exists to keep *production* code talking through
+    // service interfaces/events, not to stop a test from checking the
+    // database it just exercised over HTTP.
+    files: ['**/__tests__/**/*.ts'],
+    rules: { 'import-x/no-restricted-paths': 'off' },
   },
 ];

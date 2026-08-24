@@ -4,6 +4,8 @@ import { logger } from './shared/logger.js';
 import { connect as connectMongo } from './shared/mongo.js';
 import { connect as connectRedis } from './shared/redis.js';
 import { RedisRateLimitStore } from './shared/rate-limit.js';
+import { createDomainEventsQueue } from './jobs/domain-events.queue.js';
+import { registerMeilisearchSyncOnQueue } from './jobs/meilisearch-sync.job.js';
 
 /**
  * Boots the HTTP API. Connects to Mongo/Redis first and lets a failure
@@ -16,6 +18,11 @@ async function main(): Promise<void> {
   await connectMongo();
   const redis = connectRedis();
   const app = createApp({ rateLimitStore: new RedisRateLimitStore(redis) });
+
+  // Bridges `catalog`'s in-process events onto the BullMQ `domain-events`
+  // queue (plan.md §5.5) — only done here, in the real boot path, never in
+  // `app.ts` (imported by integration tests with no live Redis).
+  registerMeilisearchSyncOnQueue(createDomainEventsQueue());
 
   app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'api listening');

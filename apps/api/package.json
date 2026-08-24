@@ -11,11 +11,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "start:worker": "node --env-file-if-exists=.env dist/worker.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "reindex": "tsx --env-file-if-exists=.env scripts/reindex.ts"
   },
   "dependencies": {
     "@lulwah/contracts": "workspace:*",
@@ -28,6 +29,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
+    "meilisearch": "^0.60.0",
     "mongoose": "^9.9.2",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",

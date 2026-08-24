@@ -1,7 +1,20 @@
+import type { Job } from 'bullmq';
 import { env } from './shared/env.js';
 import { logger } from './shared/logger.js';
 import { connect as connectMongo } from './shared/mongo.js';
 import { createDomainEventsWorker } from './jobs/domain-events.queue.js';
+import { MEILISEARCH_SYNC_JOB_NAME, processMeilisearchSyncJob } from './jobs/meilisearch-sync.job.js';
+
+/** Job name → handler dispatch table (plan.md §5.5). One entry today;
+ *  more side-effect handlers (email, webhook, analytics, cache
+ *  invalidation) land here as the modules that own them are built. */
+async function processDomainEventJob(job: Job): Promise<void> {
+  if (job.name === MEILISEARCH_SYNC_JOB_NAME) {
+    await processMeilisearchSyncJob(job.data as unknown);
+    return;
+  }
+  logger.warn({ jobId: job.id, jobName: job.name }, 'domain-events: no registered handler for this job name');
+}
 
 /**
  * Boots the BullMQ worker process — a separate container from the API
@@ -17,7 +30,7 @@ async function main(): Promise<void> {
   }
 
   await connectMongo();
-  const worker = createDomainEventsWorker();
+  const worker = createDomainEventsWorker(processDomainEventJob);
   worker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err }, 'domain-events job failed');
   });

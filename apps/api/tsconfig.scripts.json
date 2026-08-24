@@ -1,0 +1,10 @@
+{
+  "extends": "@lulwah/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-scripts",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src", "scripts"],
+  "exclude": ["node_modules", "dist", "dist-scripts", "src/**/__tests__/**"]
+}

@@ -107,7 +107,12 @@ const envSchema = z.object({
   ARAMEX_ACCOUNT_PIN: optionalString(),
   ARAMEX_ENTITY: optionalString(),
 
-  // --- media (catalog/content modules not built yet) ------------------------
+  // --- media (`content` module not built yet; Meilisearch vars below ARE
+  // consumed today, by `catalog`'s search sync — plan.md §7.14) -----------
+  // Deliberately still `.optional()`, not required: an unset `MEILI_HOST`
+  // is a valid runtime state, not a config error — `search.service.ts`
+  // always falls back to the Mongo regex path (plan.md §7.14: "search
+  // never returns a 500"), so there is nothing to crash boot over.
   MEILI_HOST: optionalString(),
   MEILI_MASTER_KEY: optionalString(),
   MEILI_INDEX_PREFIX: z.string().default('dev_'),

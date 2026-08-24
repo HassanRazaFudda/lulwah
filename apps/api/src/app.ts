@@ -11,6 +11,8 @@ import { requestId } from './shared/request-id.js';
 import { sendSuccess } from './shared/response.js';
 import type { RateLimitStore } from './shared/rate-limit.js';
 import { createIdentityRouter } from './modules/identity/identity.routes.js';
+import { createCatalogRouter } from './modules/catalog/catalog.routes.js';
+import { createInventoryRouter } from './modules/inventory/inventory.routes.js';
 
 export interface CreateAppOptions {
   rateLimitStore: RateLimitStore;
@@ -58,10 +60,12 @@ export function createApp({ rateLimitStore }: CreateAppOptions): Express {
   });
 
   app.use(API_PREFIX, createIdentityRouter({ rateLimitStore }));
+  app.use(API_PREFIX, createCatalogRouter());
+  app.use(API_PREFIX, createInventoryRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet
-  // (catalog, cart, order, ...) 404 the same way a typo'd real route would.
+  // (cart, order, ...) 404 the same way a typo'd real route would.
   app.use(API_PREFIX, (_req: Request, _res: Response, next: NextFunction) => {
     next(new AppError('NOT_FOUND', 404, { messageEn: 'Not found.' }));
   });
