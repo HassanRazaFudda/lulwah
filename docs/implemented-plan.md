@@ -6,8 +6,8 @@
 |---|---|
 | Document | `implemented-plan.md` — records what has actually been built, where, how, and why it may differ from `plan.md` |
 | Companion to | [`plan.md`](./plan.md) — the target architecture/spec. This document never restates decisions `plan.md` already covers; it only records implementation reality and deltas. |
-| Status | Phase **P0 (Foundation)** complete, per `plan.md` §28's delivery plan. Nothing in P1 onward has been started. |
-| As of | 2026-08-17, commit `25ff4f7` |
+| Status | Phase **P0 (Foundation)** and **P1 (Catalogue)** complete, per `plan.md` §28's delivery plan. Nothing in P2 onward has been started. |
+| As of | 2026-08-24, commit `f279ee2` |
 | Audience | Whoever picks this up next — a future session, a human developer, or the client — needing full context without re-reading the build transcript |
 
 ### 0.1 How to read this document
@@ -23,14 +23,14 @@
 | Phase (plan.md §28) | Status |
 |---|---|
 | **P0 — Foundation** (monorepo, CI, envs, Docker, design tokens, primitives, API skeleton, auth module, seed script) | **Done**, with real bug fixes beyond scaffolding (§8) |
-| P1 — Catalogue | Not started (storefront/admin UI exists against **placeholder data only** — see §9) |
-| P2 — Commerce (cart, checkout, discount engine, payments, orders) | Not started (UI shells exist, no backend wiring) |
-| P3 — Operations (full admin, RBAC enforcement beyond identity, CMS) | Not started, except the order-status state machine (§6) |
+| **P1 — Catalogue** (catalog + inventory modules, admin product editor, media, taxonomy seed, PLP + facets + search, PDP) | **Done** — real `catalog`/`inventory` API modules, storefront and admin both wired to them, real seed data (§4.4, §5, §6) |
+| P2 — Commerce (cart, checkout, discount engine, payments, orders) | Not started (cart is still client-only local state; no order/payment/discount module exists) |
+| P3 — Operations (full admin, RBAC enforcement beyond identity, CMS) | Not started, except the order-status state machine (§6.1) and the now-real Products/Inventory screens (§6.3) |
 | P4 — Experience (GSAP/WebGL, Arabic content, reviews) | Not started |
 | P5 — Depth (custom stitching, returns, Aramex, BNPL) | Not started |
 | P6 — Hardening | Not started |
 
-**What actually runs today:** `pnpm install && pnpm dev` per app boots a real Express API with working auth against real MongoDB/Redis (in Docker), and two Next.js apps (storefront, admin) with realistic placeholder content. See §10 for exact steps.
+**What actually runs today:** `pnpm install && pnpm dev` per app boots a real Express API — auth (P0) and a real product/brand/category/collection/inventory catalog (P1) — against real MongoDB/Redis/Meilisearch (in Docker), a storefront rendering real seeded products end to end (home → PLP with working facets → PDP with live stock → search), and an admin console where the Products and Inventory screens are real CRUD against that same API. Cart/checkout/orders/payments remain unbuilt — see §1's table. See §10 for exact steps.
 
 ---
 
@@ -60,7 +60,7 @@ The local dev machine actually runs **Node 22** (not 24) — `pnpm` prints an `U
 ### 2.2 What's NOT set up
 
 - No GitHub remote exists yet — this is a fully local repo. `.github/workflows/ci.yml` exists and is correct but has never run.
-- No `.env` is committed (correctly gitignored); a local dev-only `.env` exists at repo root and in `apps/api/` with placeholder secrets, generated during this session — see §10.
+- No `.env` is committed (correctly gitignored); a local dev-only `.env` exists at repo root, in `apps/api/`, and in `apps/web/` with placeholder secrets — see §10.
 
 ---
 
@@ -80,7 +80,7 @@ All five built, typechecked, linted, and building clean.
 
 ## 4. API — `apps/api` (plan.md §5, §9, §10)
 
-Express 5.2 modular monolith. **Only the `identity` module is built** — no catalog, inventory, pricing, cart, checkout, order, payment, shipping, stitching, content, engagement, or analytics module exists yet, not even as stubs. This is the single biggest gap versus `plan.md`'s architecture: the module-boundary lint rule (§5.3) and event system (§5.5) exist in skeleton form but have nothing to enforce boundaries *between* yet.
+Express 5.2 modular monolith. **`identity`, `catalog`, and `inventory` modules are built.** No pricing (discount engine), cart, checkout, order, payment, shipping, stitching, content, engagement, or analytics module exists yet, not even as stubs. The module-boundary lint rule (§5.3) now has two real cross-module boundaries to enforce (identity↔catalog, catalog↔inventory), not just one module in isolation.
 
 ### 4.1 What's real
 
@@ -96,28 +96,44 @@ Express 5.2 modular monolith. **Only the `identity` module is built** — no cat
 
 31 tests (Vitest + Supertest + `mongodb-memory-server`) covering the auth flows above, plus a live smoke test in this session: real `docker compose` Mongo/Redis, real `pnpm dev`, and an actual `curl` register → login → authenticated `/me` round trip that worked end to end (not the mocked test harness).
 
-### 4.3 `scripts/seed.ts`
+### 4.3 `scripts/seed.ts` and `scripts/reindex.ts`
 
-Exists as a documented stub only. **No real seed script was written.** Depth went to the identity module's correctness instead, per an explicit scope call made during the build.
+Both real now. `pnpm --filter @lulwah/api seed` clears and reseeds: the full §7.4 category tree (46 categories), the 6 brands the storefront's placeholder data already assumed (Khaadi, Asim Jofa, Sana Safinaz, Maria B, Gul Ahmed, Elan), 33 products across all 4 stitching types with real variants/inventory, 3 collections, and a `super_admin` user. It then triggers a Meilisearch reindex — `pnpm --filter @lulwah/api reindex` does the same rebuild standalone. Idempotent (safe to rerun).
+
+### 4.4 Catalog & inventory (plan.md §5.3, §7.3–§7.9, §9.2, §9.7)
+
+- **Models**: Brand, Category (tree, `parentId`/`path`), Collection (manual `productIds` only — rule-based automated collections per §7.9 not built), Product (the Pakistani-fashion fields — `stitchingType`, `pieceCount`, `pieces[]`, `fabric`, `work[]`, `dupattaType`, `occasion[]`, `season`, `colorName`/`colorFamily`/`colorHex`, `articleCode` — are all there and indexed), Variant. Stock is correctly NOT on Variant — single source of truth is `inventory`, per the plan's explicit rule.
+- **Public endpoints** (no auth): `GET /products` (facet-filtered: category/brand/collection/stitchingType/fabric/work/occasion/colorFamily/size/price/inStock/onSale, sort, pagination), `/products/:slug` (full PDP payload — product + live per-variant availability + brand + breadcrumbs), `/products/:slug/related`, `/collections[/:slug]`, `/brands[/:slug]`, `/categories/tree`, `/search`.
+- **Admin endpoints** (RBAC via `requireCatalogRead()`/`requireCatalogWrite()`, reusing identity's `requirePermission()`): full CRUD on products (+ variants + media), brands, categories, collections.
+- **Inventory**: `InventoryItem` (`onHand`/`reserved`/`available`, the last two always 0/onHand until a cart module exists to reserve against), append-only `StockMovement` audit trail — stock is never bare-`$set`, every change writes a movement, enforced in the service layer and tested. `GET /admin/inventory` (low/out-of-stock filters, search), `POST /admin/inventory/:variantId/adjust` (mandatory reason). Stock changes propagate to the parent product's denormalized `totalStock`/`inStock` via a targeted update.
+- **What's deliberately NOT here**: the Redis-locked cart-reservation flow from §8.4 — that's P2 scope, tied to a `cart` module that doesn't exist; building it against nothing would have been premature. No discount engine, so `effectivePriceFils` is just the base/variant price with no discount step applied (nothing to apply yet).
+- **Meilisearch sync**: `catalog.events.ts` publishes `product.published`/`product.updated`/`collection.launched`; a BullMQ job syncs to Meilisearch using the exact §7.14 index config (searchable/filterable/sortable attributes, ranking rules, synonyms — copied verbatim from the plan). `GET /search` falls back to a Mongo regex query if Meilisearch is unreachable, per §7.14's explicit "search must never 500" rule — both paths verified working live.
+- **Category-filtering nuance worth knowing**: `GET /products?category=` exact-matches one category id, but real nav links (`/shop/unstitched`, `/shop/formal-wedding`, ...) point at **parent** taxonomy nodes while products are tagged with **leaf** categories only. The storefront's PLP resolves this by expanding a requested category to its full descendant-id set before filtering (see `apps/web/lib/plp-data.ts`) — the API itself does the exact single-id match the DTO says it does; the expansion is a storefront-side concern. Worth knowing if a future admin feature or another consumer calls this endpoint directly with a parent category and gets zero results.
+
+### 4.5 Verified, not just written
+
+54 API tests (Vitest + Supertest + `mongodb-memory-server`): the 31 from §4.2 plus facet filtering, PDP availability, the stock-adjustment audit trail (including the negative-stock rejection case), and a mocked-Meilisearch sync test. Live-verified beyond the test suite, against this repo's actual Docker dev stack: seeding populated real Mongo, reindexing populated real Meilisearch (confirmed via direct query), and a live HTTP session exercised admin login, facet-filtered listing, PDP, live search, and a real stock adjustment with movement + `totalStock` propagation confirmed by direct query. Re-confirmed independently in a later session: `GET /brands`, `/products`, `/products/:slug`, `/search?q=` all checked live against the seeded data and rendering correctly end to end through the storefront.
 
 ---
 
 ## 5. Storefront — `apps/web` (plan.md §12–§16)
 
-Next.js 16.3 App Router. Route tree matches `plan.md` §12.1 closely (see the file list in §1 above for exact pages). All routes are **structural + placeholder-data-driven** — none of them call a real API.
+Next.js 16.3 App Router. Route tree matches `plan.md` §12.1 closely (see the file list in §1 above for exact pages). **PLP, PDP, Home's product rails, Brands, and Search now call the real catalog API** (`apps/web/lib/catalog-client.ts` + `api-client.ts`) — this is the main change since P0. Cart/checkout/account remain local-state-only (no backend for them yet).
 
 ### 5.1 What's genuinely built out
 
-- **Home** (`app/[locale]/page.tsx`): the fixed §15.2 section order — Hero, New arrivals rail, Shop by stitching (3 panels), Editorial split, Brand strip, Best sellers, Full-bleed break, Occasion tiles, USP bar, Newsletter — all present, all with real (non-lorem-ipsum) copy in the store's voice.
-- **PLP** (`shop/[...category]`): filter rail in the exact §15.3 facet order, 2-up/3-up grid, "Load more" pagination via `nuqs`.
-- **PDP** (`product/[slug]`): info-column order per §15.4 — stitching-type pill, colour/size selectors, delivery estimator copy, accordions.
-- **`ProductCard`** and **`PriceBlock`**: built to the exact §13.6/§8.2 spec (3:4 media, diagonal clip-path hover wipe, tabular price with garnet `-N%` badge shown only when `discountPercent >= 5`) — unit-tested (10 tests covering the rounding/threshold rules specifically).
+- **Home** (`app/[locale]/page.tsx`): the fixed §15.2 section order — Hero, New arrivals rail, Shop by stitching (3 panels), Editorial split, Brand strip, Best sellers, Full-bleed break, Occasion tiles, USP bar, Newsletter. New-arrivals and best-sellers rails now pull real products (`sort=newest`/`sort=bestselling`); the rest is static/editorial content, unchanged.
+- **PLP** (`shop/[...category]`): filter rail in the exact §15.3 facet order, wired to real facet data and counts, 2-up/3-up grid, "Load more" pagination via `nuqs`. Handles the parent/leaf category mismatch — see §4.4's note. Multi-select facet checkboxes exist in the UI but only the first selected value per facet is actually sent to the API (`ListProductsQuery` doesn't accept multi-value params) — a known, documented gap, not a bug.
+- **PDP** (`product/[slug]`): info-column order per §15.4, now rendering real per-variant availability ("In stock" / "Only N left" / "Sold out") from the API's live `VariantWithAvailability[]` instead of a static number. Colour options render as bordered name buttons rather than hex swatches — only a product's primary colourway has a real hex in the schema, a variant-level colour is just a string. 404s render a real not-found page for a bad slug.
+- **Brands** (`brands`, `brands/[slug]`) and **Search** (`search`): both wired to the real API; search's zero-result state suggests the three real nearest collections (not fabricated ones), per §15.3's requirement.
+- **`ProductCard`** and **`PriceBlock`**: built to the exact §13.6/§8.2 spec (3:4 media, diagonal clip-path hover wipe, tabular price with garnet `-N%` badge shown only when `discountPercent >= 5`) — unit-tested (10 tests covering the rounding/threshold rules specifically). Untouched by the API-wiring work; a thin mapper layer (`lib/product-mappers.ts`) adapts real API responses onto these components' existing prop shapes instead.
 - **Header**: real nav, real logo (see §7), scroll-hide behavior. **Not** transparent-over-hero (see §8.4 — this was attempted, found broken, and deliberately simplified to always-solid rather than fixed properly).
 - en/ar routing via `next-intl`, RTL logical properties, self-hosted fonts (Bodoni Moda / Archivo / Aref Ruqaa / IBM Plex Sans Arabic) via real Fontsource-sourced files, not placeholders.
+- **`app/[locale]/error.tsx` and `not-found.tsx`**: added alongside the real API wiring — a real fetch can fail or 404 now, where placeholder data never did.
 
 ### 5.2 Explicitly not built (stated in the original brief, still true)
 
-Mega-menu (four-column crossfading panel), mobile filter bottom-sheet, full brand-history CMS content, GSAP/Lenis/WebGL motion (all R2 per §3.1), real cart/checkout API wiring (UI exists, local component state only), search backed by Meilisearch (no sync job exists), full Arabic translation (representative message keys only).
+Mega-menu (four-column crossfading panel), mobile filter bottom-sheet, full brand-history CMS content, GSAP/Lenis/WebGL motion (all R2 per §3.1), real cart/checkout API wiring (UI exists, local component state only — no `cart`/`order` module exists in the API), full Arabic translation (representative message keys only), a working "Size guide" drawer (no per-brand measurement-chart content source exists yet).
 
 ### 5.3 Custom `next/image` loader gotcha
 
@@ -127,7 +143,7 @@ Mega-menu (four-column crossfading panel), mobile filter bottom-sheet, full bran
 
 ## 6. Admin console — `apps/admin` (plan.md §11)
 
-Next.js 16.3, client-rendered, `noindex`. All 10 §11.1 screens exist as real shells; only **Orders** has real depth.
+Next.js 16.3, client-rendered, `noindex`. All 10 §11.1 screens exist as real shells; **Orders**, **Products**, and **Inventory** have real depth — everything else is still a shell.
 
 ### 6.1 The one thing built to spec in full: order status (plan.md §8.7)
 
@@ -138,7 +154,16 @@ Next.js 16.3, client-rendered, `noindex`. All 10 §11.1 screens exist as real sh
 
 ### 6.2 Everything else
 
-Products, Inventory, Discounts, Customers, Content, Reports, Settings, Users: page shells exist (sidebar nav, page headers, a reusable `DataTable`), minimal-to-no real content. No RBAC UI beyond the login page's TOTP field (which doesn't verify against anything real).
+Discounts, Customers, Content, Reports, Settings, Users: page shells exist (sidebar nav, page headers, a reusable `DataTable`), minimal-to-no real content. The login page's TOTP field doesn't verify against anything real (no 2FA backend exists) — but login itself is now real, see §6.3.
+
+### 6.3 Products & Inventory — real CRUD against the real catalog API (plan.md §11.1)
+
+- **Products list** (`app/(dashboard)/products/page.tsx`): real `DataTable` against `GET /admin/products` — thumb, brand (joined from `GET /admin/brands`), article code, stitching type, price, stock, status.
+- **Product editor** (`products/new`, `products/[id]`), one shared component with all 7 §11.1 tabs: Basics, Attributes (the Pakistani-fashion fields — piece-count builder, per-piece editor, fabric/work/occasion/season/colour), Media (paste-a-URL, since no upload/S3 pipeline exists — confirmed, not silently under-built), Variants (size×colour matrix generator), Pricing, Inventory (mandatory-reason stock adjust), Publishing. Media/Variants/Inventory tabs are disabled until a product is saved once, since those endpoints nest under `/admin/products/:id/...`.
+- **Inventory** (`app/(dashboard)/inventory/`, list + `[variantId]` detail): real low/out-of-stock/search filters, mandatory-reason adjustment with client-side validation mirroring the API's Zod rules, per-variant movement history.
+- **A real bug found and fixed here**: `lib/api-client.ts` sent `credentials: 'include'` but never attached `Authorization: Bearer <token>` — every RBAC-gated admin call would 401 regardless of how correct the rest of the admin UI was. Fixed alongside a login-page/schema correction (the old version expected a placeholder response shape and a `totpCode` field the real `/auth/login` endpoint doesn't accept).
+- **What's read-only or absent, deliberately**: `lowStockThreshold`/`allowBackorder` show read-only in the Inventory tab (no update endpoint exists — those are set only at `InventoryItem` creation); no media delete/reorder (API only has `POST`, no `PATCH`/`DELETE`); no product-delete UI (soft-delete via `status: archived` is the intended path); no pricing/discount UI beyond the two real fields (no discount engine exists).
+- 13 new unit tests (`lib/product-editor.test.ts`, the variant-matrix/piece-builder pure logic) alongside the pre-existing 32 — 45 total in this app now.
 
 ---
 
@@ -186,16 +211,33 @@ Docker Mongo/Redis defaulted to the standard `27017`/`6379`, colliding with serv
 
 `src/shared/env.ts` validates strictly at boot (correct, per §25.3), but nothing loaded a `.env` file into `process.env` — `tsx` doesn't do this automatically, so `pnpm dev` always crashed locally on "missing" config that was sitting right there in `apps/api/.env`. Fixed with Node's native `--env-file-if-exists` flag (not plain `--env-file`, which would crash the *production* container — Docker Compose injects env vars directly, no `.env` file exists on disk there).
 
+### 8.8 `apps/web` had no `.env` at all — broke the production build, not just dev
+
+Nothing provided `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` locally for `apps/web` (Next.js only loads env files from the app's own directory, not the monorepo root). This wasn't just a dev inconvenience: `next build` prerenders ISR pages (e.g. `/brands`) at build time, so the production build failed outright — `TypeError: Failed to parse URL from /api/v1/brands` (empty base URL, `fetch()` can't resolve a relative path outside a browser). Separately, root `.env.example`'s `API_INTERNAL_URL=http://api:4000` is the Docker-network hostname, correct for production but unresolvable on the host in local dev — same bug class as §8.7. Added `apps/web/.env.example` (and a local `.env`) with the local-dev-correct values, documented why they differ from production's.
+
+### 8.9 Admin never attached the auth token to API requests
+
+`apps/admin/lib/api-client.ts` sent `credentials: 'include'` but never set `Authorization: Bearer <token>` — every RBAC-gated admin endpoint (all of Products/Inventory) would 401 regardless of how correct the calling code was, since the API's `requireAuth()` reads the bearer header, not a cookie (§10.1: the access token lives in memory/`Authorization` header, only the *refresh* token is a cookie). Found and fixed while wiring the admin product editor; the login page/schema also needed a matching fix — it expected a placeholder `{sessionId}` response shape and sent a `totpCode` field the real `/auth/login` endpoint doesn't accept.
+
+### 8.10 Meilisearch master key mismatch between root `.env` and `apps/api/.env`
+
+The running Meilisearch container reads its master key from the *root* `.env` (via `docker-compose.dev.yml`), but `apps/api/.env.example`'s documented value didn't match what was actually already running — `pnpm seed`'s reindex step failed with "The provided API key is invalid" even though Mongo seeding succeeded. Fixed by syncing `apps/api/.env`'s `MEILI_MASTER_KEY` to the value the container was actually started with. Worth checking `docker inspect <container> --format='{{range .Config.Env}}{{println .}}{{end}}'` against your own `.env` if this recurs — the container keeps whatever key it was *first* started with, so a later `.env.example` edit doesn't retroactively fix an already-running container.
+
+### 8.11 PLP category filters returned zero results for most real nav links
+
+`GET /products?category=` exact-matches one category id (correct, matches its own DTO), but the storefront's real nav links (`/shop/unstitched`, `/shop/formal-wedding`, ...) resolve to **parent** taxonomy nodes while every seeded product is tagged only with a **leaf** category — so the naive "resolve slug → pass its id" wiring returned zero products for almost every category page. Fixed storefront-side: expand the resolved category to its full descendant-id set before filtering (`apps/web/lib/plp-data.ts`). Not an API bug — a future direct consumer of `GET /products?category=` should know it wants a leaf id, not any node in the tree.
+
 ---
 
 ## 9. Placeholder content — what's real vs. not
 
-**This matters for anyone about to demo this or hand it to the client**: nothing customer-facing is real data yet.
+**This matters for anyone about to demo this or hand it to the client.** As of P1, the *catalog* is a real database, seeded with realistic-but-invented data — that's a meaningfully different situation from P0, where nothing was real. Still nothing here is licensed or client-approved.
 
-- **Catalogue** (`apps/web/lib/placeholder-data.ts`): 9 hand-written products using **real brand names** (Khaadi, Asim Jofa, Sana Safinaz, Maria B, Gul Ahmed, Elan) with invented article codes, prices, and descriptions. Shaped close to `@lulwah/contracts`' schemas so swapping in a real `apiFetch` later is mechanical, but this is not licensed or client-approved product data.
-- **Product/campaign imagery** (`apps/web/public/catalogue/`, `apps/web/public/campaigns/` — 11 + 11 files): royalty-free Unsplash-License fabric/textile macro photography, **deliberately not** scraped photos of the real brands' actual products (that would be unlicensed use of real companies' copyrighted photography) and **deliberately not** real bridal/editorial portraits (likeness concerns, even where the license technically permits reuse). Color-matched to the placeholder product names where sensible. All must be replaced with the client's real photography before launch — this is `plan.md` §29 risk #2, not a new risk.
-- **Admin data** (orders, dashboard stats): all hand-written placeholder arrays, no database round-trip.
-- **Secrets**: `.env` (root and `apps/api/`) contain dev-only dummy/generated values (random JWT secrets, `devpassword` for Redis). Never committed; never used outside this local machine.
+- **Catalogue — now REAL data in MongoDB**, not hand-written arrays: 33 products, 46 categories, 6 brands, 3 collections, all produced by `apps/api/scripts/seed.ts`. Brand names are real (Khaadi, Asim Jofa, Sana Safinaz, Maria B, Gul Ahmed, Elan); article codes, prices, descriptions, and the products themselves are invented. `apps/web/lib/placeholder-data.ts` (the old hand-written 9-product stand-in) still exists in the repo, untouched, but the storefront no longer reads from it for anything catalog-related — only cart/checkout still might, check before removing it.
+- **Product/campaign imagery** (`apps/web/public/catalogue/`, `apps/web/public/campaigns/` — 11 + 11 files): royalty-free Unsplash-License fabric/textile macro photography, **deliberately not** scraped photos of the real brands' actual products (that would be unlicensed use of real companies' copyrighted photography) and **deliberately not** real bridal/editorial portraits (likeness concerns, even where the license technically permits reuse). These are still keyed to the *old* placeholder product slugs/names, not the real seeded ones — the real seeded products (`seed.ts`) don't reference these image files at all yet, so real PDP/PLP pages currently render without product photography (or with whatever the placeholder-image mapping still coincidentally catches). All must be replaced with the client's real photography before launch regardless — this is `plan.md` §29 risk #2, not a new risk.
+- **Admin data**: Orders and dashboard stats are still hand-written placeholder arrays, no database round-trip (no `order` module exists in the API yet). **Products and Inventory are real** — the admin console now reads/writes the same MongoDB the storefront reads from.
+- **Cart/checkout** (storefront): still entirely client-local state (`useCartStore`), no backend — this is explicitly P2 scope (no `cart`/`order`/`payment` module exists).
+- **Secrets**: `.env` (root, `apps/api/`, `apps/web/`) contain dev-only dummy/generated values (random JWT secrets, `devpassword` for Redis, a shared Meilisearch dev key). Never committed; never used outside this local machine.
 
 ---
 
@@ -207,14 +249,20 @@ docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.dev.yml ps   # all three should show "healthy"
 
 # 2. Copy env templates if not already present
-cp .env.example .env                    # root — used by docker compose
-cp apps/api/.env.example apps/api/.env  # then set real JWT_ACCESS_SECRET/JWT_REFRESH_SECRET
+cp .env.example .env                      # root — used by docker compose
+cp apps/api/.env.example apps/api/.env    # then set real JWT_ACCESS_SECRET/JWT_REFRESH_SECRET;
+                                           # also check MEILI_MASTER_KEY matches the running
+                                           # container if you didn't just create it (§8.10)
+cp apps/web/.env.example apps/web/.env    # local-dev values already correct as shipped
 
 # 3. Install + build shared packages
 pnpm install
 pnpm turbo run build --filter=./packages/*
 
-# 4. Run each app (separate terminals)
+# 4. Seed the catalog (idempotent — safe to rerun)
+pnpm --filter @lulwah/api seed
+
+# 5. Run each app (separate terminals)
 pnpm --filter @lulwah/api dev      # http://localhost:4000
 pnpm --filter @lulwah/web dev      # http://localhost:3000
 pnpm --filter @lulwah/admin dev    # http://localhost:3001
@@ -223,16 +271,17 @@ pnpm --filter @lulwah/admin dev    # http://localhost:3001
 pnpm turbo run typecheck lint test build
 ```
 
-Mongo is on host port **27018** and Redis on **6380** (not the defaults) — see §8.6.
+Mongo is on host port **27018** and Redis on **6380** (not the defaults) — see §8.6. If `pnpm turbo run ... test` reports a failure, especially something like "failed to start forks worker" or "Instance failed to start within 10000ms," retry that one package's tests in isolation before assuming it's real — this repo's test suites (`mongodb-memory-server`, Vitest worker pools) are resource-hungry enough that running everything in parallel on one machine produces occasional transient failures that pass cleanly alone. This has happened repeatedly during this build and has never once been a real defect when retried.
 
 ---
 
 ## 11. Suggested next steps
 
-In `plan.md` §28's own order, the next phase is **P1 — Catalogue**: build the `catalog` and `inventory` modules in `apps/api`, wire real product/collection/search endpoints, and swap `apps/web/lib/placeholder-data.ts` for real `apiFetch` calls. Concretely, in priority order:
+In `plan.md` §28's own order, the next phase is **P2 — Commerce**: cart, discount engine, checkout, Stripe, COD + OTP, order module, order confirmation, emails/SMS. This is a bigger phase than P1 — it's where real money starts moving, so get the discount-engine and price-resolution logic (`plan.md` §8.2/§8.3) right before wiring payments on top of it. Concretely, in priority order:
 
-1. **`catalog` module** (Product/Variant/Category/Brand/Collection Mongoose models + CRUD, per §5.3's layering) — nothing here exists yet; it's the dependency for almost everything else.
-2. **Meilisearch sync** — the index config is fully specified in `plan.md` §7.14 and unbuilt.
-3. **Admin product editor** — currently just a table shell; §11.1 specs a multi-tab editor that doesn't exist.
-4. **Fix the header transparency properly** (§8.4) — low-risk once there's real bandwidth for a layout pass, since the always-solid fallback works fine in the meantime.
-5. **A real `pnpm seed` script** — every other phase gets easier with real-shaped seed data instead of hand-written placeholder arrays.
+1. **`cart` module** (`apps/api`) — Cart/CartItem per §7.10, server-side price recalculation on every mutation (§8.5's rules — never trust client-sent totals), the Redis-locked stock-reservation flow from §8.4 that P1 deliberately deferred (now `inventory` exists to reserve against). This unblocks the storefront's cart page moving off local-only state.
+2. **`pricing`/discount engine** — §8.3's `applyDiscounts()` pure function, coupon codes, automatic discounts. `effectivePriceFils` on Product currently has nothing to compute against; this is what makes that field mean something.
+3. **`checkout` + `order` modules** — checkout session, address validation, the full §8.7 order-status state machine on the backend (the admin UI for it already exists and is fully tested per §6.1 — it just has nothing real to drive yet), Stripe integration, COD + OTP.
+4. **Real product photography mapping** — the seeded catalog (P1) and the placeholder imagery (P0) don't reference each other; either re-key the placeholder images to the real seeded slugs, or treat this as blocked on the client's real photography per `plan.md` §29 risk #2.
+5. **Fix the header transparency properly** (§8.4) — low-risk once there's real bandwidth for a layout pass, since the always-solid fallback works fine in the meantime.
+6. **The full §10.2 RBAC permission matrix** — only a representative subset of permissions exists (§4.1); P2's order/payment/refund endpoints will want the real matrix, not more one-off permission strings.
