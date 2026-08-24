@@ -1,4 +1,4 @@
-import { apiEnvelope, type ErrorCode } from '@lulwah/contracts';
+import { apiEnvelope, type ErrorCode, type ResponseMeta } from '@lulwah/contracts';
 import type { z } from 'zod';
 
 /**
@@ -30,6 +30,16 @@ export class ApiError extends Error {
 }
 
 /**
+ * Every route the API exposes is mounted under this prefix (`apps/api/src/
+ * config/constants.ts`'s `API_PREFIX`, applied uniformly to every module —
+ * `app.use(API_PREFIX, createIdentityRouter(...))`, `createCatalogRouter()`,
+ * `createInventoryRouter()`, ...) — `apiFetch` callers pass origin-relative
+ * paths like `/products`, not `/api/v1/products`, so it's applied once here
+ * rather than duplicated at every call site.
+ */
+const API_PREFIX = '/api/v1';
+
+/**
  * Resolves the base URL for the environment the code is running in.
  * `typeof window === 'undefined'` is the standard Next.js signal for
  * "this is executing on the server" (a Server Component, Route Handler or
@@ -38,23 +48,22 @@ export class ApiError extends Error {
  */
 function resolveBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+    return (process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '') + API_PREFIX;
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? '';
+  return (process.env.NEXT_PUBLIC_API_URL ?? '') + API_PREFIX;
 }
 
 export interface ApiFetchInit extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
 
-/**
- * Fetches `path` from the API, validates the envelope, and returns the
- * typed `data` payload. `dataSchema` is one of the shared Zod schemas from
- * `@lulwah/contracts` (e.g. `Product`, `Cart`) — the same schema the API
- * validates its own response against, so the storefront and API can never
- * silently drift out of sync (plan.md §6.1).
- */
-export async function apiFetch<T>(path: string, dataSchema: z.ZodType<T>, init: ApiFetchInit = {}): Promise<T> {
+interface FetchedEnvelope<T> {
+  data: T;
+  meta: ResponseMeta | undefined;
+}
+
+/** Shared by `apiFetch` and `apiFetchWithMeta` — one request/parse path, two return shapes. */
+async function fetchEnvelope<T>(path: string, dataSchema: z.ZodType<T>, init: ApiFetchInit): Promise<FetchedEnvelope<T>> {
   const baseUrl = resolveBaseUrl();
   const { body, headers, ...rest } = init;
 
@@ -74,5 +83,34 @@ export async function apiFetch<T>(path: string, dataSchema: z.ZodType<T>, init: 
   if (!parsed.data.success) {
     throw new ApiError(parsed.data.error.code, parsed.data.error.message, response.status);
   }
-  return parsed.data.data;
+  return { data: parsed.data.data, meta: parsed.data.meta };
+}
+
+/**
+ * Fetches `path` from the API, validates the envelope, and returns the
+ * typed `data` payload. `dataSchema` is one of the shared Zod schemas from
+ * `@lulwah/contracts` (e.g. `Product`, `Cart`) — the same schema the API
+ * validates its own response against, so the storefront and API can never
+ * silently drift out of sync (plan.md §6.1).
+ */
+export async function apiFetch<T>(path: string, dataSchema: z.ZodType<T>, init: ApiFetchInit = {}): Promise<T> {
+  const { data } = await fetchEnvelope(path, dataSchema, init);
+  return data;
+}
+
+/**
+ * Same as `apiFetch`, but also returns the envelope's `meta` — the §9.1
+ * pagination block (`page`/`limit`/`total`/`hasMore`) that list endpoints
+ * (`GET /products`, `GET /brands`, ...) send alongside `data`. Plain
+ * `apiFetch` deliberately drops it: most callers (a PDP, a single brand)
+ * have no use for it, but the PLP's "Load more" / result-count UI needs the
+ * real `total`, which isn't derivable from `data.products.length` alone
+ * once the API paginates.
+ */
+export async function apiFetchWithMeta<T>(
+  path: string,
+  dataSchema: z.ZodType<T>,
+  init: ApiFetchInit = {},
+): Promise<FetchedEnvelope<T>> {
+  return fetchEnvelope(path, dataSchema, init);
 }

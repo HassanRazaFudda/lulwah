@@ -4,46 +4,26 @@ import { FilterRail, type FilterGroupView, type FilterOptionView } from '@/compo
 import { LoadMoreButton } from '@/components/commerce/LoadMoreButton';
 import type { AppLocale } from '@/i18n/routing';
 import { buildFacetGroups, getPriceRange, humanize } from '@/lib/facets';
-import { PRODUCTS, toProductCardProps, type PlaceholderProduct } from '@/lib/placeholder-data';
+import { listBrands, type ProductSort } from '@/lib/catalog-client';
+import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
+import { loadPlpData, type PlpFacetSelections } from '@/lib/plp-data';
+import { resolveShopSegments } from '@/lib/shop-segment';
+import type { ColorFamily, Fabric, Occasion, Size, StitchingType, Work } from '@lulwah/contracts';
 
 /**
  * PLP — plan.md §15.3. `[...category]` is a real Next.js catch-all, so
  * every category path in the site (`/shop/unstitched`, `/shop/sale`,
- * `/shop/eid`, ...) resolves through this one route, exactly like §12.1's
- * route map. `matchesCategorySegments` stands in for the real
- * Meilisearch-backed category/facet resolution (§7.14) against the
- * placeholder catalogue.
+ * `/shop/eid`, `/shop/{collection-slug}`, ...) resolves through this one
+ * route. `resolveShopSegments` (`lib/shop-segment.ts`) maps that path to a
+ * real category/collection/occasion/sort scope against `GET /products`,
+ * replacing the placeholder version's hand-rolled `matchesCategorySegments`
+ * switch. State management is unchanged from the placeholder version: a
+ * plain Server Component reading `searchParams` and building each facet
+ * toggle's `href` server-side (`nuqs` is only used by the two genuinely
+ * client-interactive controls, `PriceRangeFilter`/`LoadMoreButton`) — only
+ * *where the data comes from* changed.
  */
-const PAGE_SIZE = 6;
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
-
-function matchesCategorySegments(product: PlaceholderProduct, segments: string[]): boolean {
-  return segments.every((segment) => {
-    switch (segment) {
-      case 'unstitched':
-      case 'pret':
-      case 'semi-stitched':
-      case 'custom-stitchable':
-        return product.stitchingType === segment.replace('-', '_');
-      case 'formal-wedding':
-        return product.occasion.some((o) => ['barat', 'walima', 'nikkah', 'mehndi', 'bridal'].includes(o));
-      case 'sale':
-        return product.compareAtPriceFils != null && product.compareAtPriceFils > product.priceFils;
-      case 'new-in':
-        return product.badges.includes('new');
-      case 'best-sellers':
-        return product.badges.includes('bestseller');
-      case 'everyday':
-      case 'eid':
-      case 'mehndi':
-      case 'barat':
-      case 'walima':
-        return product.occasion.includes(segment);
-      default:
-        return product.brandSlug === segment;
-    }
-  });
-}
 
 function getSelected(searchParams: SearchParamsRecord, key: string): string[] {
   const raw = searchParams[key];
@@ -66,12 +46,11 @@ function buildFacetHref(basePath: string, searchParams: SearchParamsRecord, key:
 }
 
 function buildFacetGroupViews(
-  products: PlaceholderProduct[],
+  groups: ReturnType<typeof buildFacetGroups>,
   basePath: string,
   searchParams: SearchParamsRecord,
 ): FilterGroupView[] {
-  const rawGroups = buildFacetGroups(products);
-  return rawGroups.map((group) => {
+  return groups.map((group) => {
     const key = group.key;
     const selected = key === 'sale' ? (searchParams.sale === '1' ? ['1'] : []) : getSelected(searchParams, key);
     const options: FilterOptionView[] = group.options.map((option) => ({
@@ -104,11 +83,27 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
   const { locale, category = [] } = await params;
   const search = await searchParams;
   const basePath = `/shop/${category.join('/')}`;
+  const heading = category.length > 0 ? category.map(humanize).join(' — ') : 'Shop All';
 
-  const categoryScoped = PRODUCTS.filter((product) => matchesCategorySegments(product, category));
+  const scope = await resolveShopSegments(category);
+
+  if (!scope.resolved) {
+    return (
+      <div className="flex flex-col gap-32 px-24 py-32 lg:px-[clamp(24px,5vw,88px)]">
+        <header className="flex flex-col gap-8 border-b border-line pb-24">
+          <h1 className="font-display text-heading-1 tracking-display text-ink">{heading}</h1>
+        </header>
+        <div className="flex flex-col items-center gap-8 py-64 text-center">
+          <p className="font-body text-body text-ink">Nothing here.</p>
+          <p className="font-body text-body-sm text-mukaish">
+            This category doesn&apos;t exist. Try Unstitched, Ready to Wear or Formal &amp; Wedding from the menu.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const selectedStitching = getSelected(search, 'stitching');
-  const selectedPieces = getSelected(search, 'pieces');
   const selectedBrand = getSelected(search, 'brand');
   const selectedFabric = getSelected(search, 'fabric');
   const selectedOccasion = getSelected(search, 'occasion');
@@ -117,30 +112,12 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
   const selectedSize = getSelected(search, 'size');
   const selectedAvailability = getSelected(search, 'availability');
   const isSaleOnly = search.sale === '1';
-  const priceMin = search.priceMin ? Number(search.priceMin) * 100 : null;
-  const priceMax = search.priceMax ? Number(search.priceMax) * 100 : null;
-
-  let filtered = categoryScoped;
-  if (selectedStitching.length) filtered = filtered.filter((p) => selectedStitching.includes(p.stitchingType));
-  if (selectedPieces.length) filtered = filtered.filter((p) => p.pieceCount != null && selectedPieces.includes(String(p.pieceCount)));
-  if (selectedBrand.length) filtered = filtered.filter((p) => selectedBrand.includes(p.brandSlug));
-  if (selectedFabric.length) filtered = filtered.filter((p) => selectedFabric.includes(p.fabric));
-  if (selectedOccasion.length) filtered = filtered.filter((p) => p.occasion.some((o) => selectedOccasion.includes(o)));
-  if (selectedWork.length) filtered = filtered.filter((p) => p.work.some((w) => selectedWork.includes(w)));
-  if (selectedColor.length) filtered = filtered.filter((p) => selectedColor.includes(p.colorFamily));
-  if (selectedSize.length) filtered = filtered.filter((p) => p.sizes.some((s) => selectedSize.includes(s)));
-  if (selectedAvailability.includes('in-stock')) filtered = filtered.filter((p) => p.totalStock > 0);
-  if (isSaleOnly) filtered = filtered.filter((p) => p.compareAtPriceFils != null && p.compareAtPriceFils > p.priceFils);
-  if (priceMin != null) filtered = filtered.filter((p) => p.priceFils >= priceMin);
-  if (priceMax != null) filtered = filtered.filter((p) => p.priceFils <= priceMax);
-
+  const priceMinAed = search.priceMin ? Number(search.priceMin) : null;
+  const priceMaxAed = search.priceMax ? Number(search.priceMax) : null;
   const page = Math.max(1, Number(search.page) || 1);
-  const visible = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = visible.length < filtered.length;
 
   const hasActiveFilters =
     selectedStitching.length > 0 ||
-    selectedPieces.length > 0 ||
     selectedBrand.length > 0 ||
     selectedFabric.length > 0 ||
     selectedOccasion.length > 0 ||
@@ -149,24 +126,49 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
     selectedSize.length > 0 ||
     selectedAvailability.length > 0 ||
     isSaleOnly ||
-    priceMin != null ||
-    priceMax != null;
+    priceMinAed != null ||
+    priceMaxAed != null;
 
-  const heading = category.length > 0 ? category.map(humanize).join(' — ') : 'Shop All';
+  // The real `ListProductsQuery` accepts exactly one value per
+  // stitchingType/fabric/work/occasion/colorFamily/size (a single optional
+  // enum, not a list) — the checkbox UI stays multi-select in the URL
+  // (unchanged from the placeholder version), but only the first selected
+  // value per facet is actually sent to the API. See `lib/catalog-client.ts`.
+  const selections: PlpFacetSelections = {
+    ...(selectedStitching[0] ? { stitchingType: selectedStitching[0] as StitchingType } : {}),
+    ...(selectedBrand[0] ? { brand: selectedBrand[0] } : {}),
+    ...(selectedFabric[0] ? { fabric: selectedFabric[0] as Fabric } : {}),
+    ...(selectedOccasion[0] ? { occasion: selectedOccasion[0] as Occasion } : {}),
+    ...(selectedWork[0] ? { work: selectedWork[0] as Work } : {}),
+    ...(selectedColor[0] ? { colorFamily: selectedColor[0] as ColorFamily } : {}),
+    ...(selectedSize[0] ? { size: selectedSize[0] as Size } : {}),
+    ...(priceMinAed != null ? { minPriceFils: priceMinAed * 100 } : {}),
+    ...(priceMaxAed != null ? { maxPriceFils: priceMaxAed * 100 } : {}),
+    ...(selectedAvailability.includes('in-stock') ? { inStock: true } : {}),
+    ...(isSaleOnly ? { onSale: true } : {}),
+    ...(search.sort ? { sort: search.sort as ProductSort } : {}),
+  };
+
+  const [plpData, brands] = await Promise.all([loadPlpData(scope, selections, page), listBrands()]);
+
+  const brandNameById = buildBrandNameById(brands);
+  const visible = plpData.displayProducts.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale));
+  const hasMore = plpData.hasMore;
+  const remainingCount = Math.max(plpData.total - plpData.displayProducts.length, 0);
 
   return (
     <div className="flex flex-col gap-32 px-24 py-32 lg:px-[clamp(24px,5vw,88px)]">
       <header className="flex flex-col gap-8 border-b border-line pb-24">
         <h1 className="font-display text-heading-1 tracking-display text-ink">{heading}</h1>
         <p className="font-body text-body-sm text-mukaish">
-          {filtered.length} {filtered.length === 1 ? 'result' : 'results'}
+          {plpData.total} {plpData.total === 1 ? 'result' : 'results'}
         </p>
       </header>
 
       <div className="flex flex-col gap-32 lg:flex-row lg:items-start lg:gap-48">
         <FilterRail
-          groups={buildFacetGroupViews(categoryScoped, basePath, search)}
-          priceRangeFils={getPriceRange(categoryScoped)}
+          groups={buildFacetGroupViews(buildFacetGroups(plpData.scopeProducts, brands), basePath, search)}
+          priceRangeFils={getPriceRange(plpData.scopeProducts)}
           clearHref={basePath}
           hasActiveFilters={hasActiveFilters}
         />
@@ -176,17 +178,17 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
             <div className="flex flex-col items-center gap-8 py-64 text-center">
               <p className="font-body text-body text-ink">No results for these filters.</p>
               <p className="font-body text-body-sm text-mukaish">
-                Try clearing a filter, or browse Unstitched, Ready to Wear and Formal & Wedding from the menu.
+                Try clearing a filter, or browse Unstitched, Ready to Wear and Formal &amp; Wedding from the menu.
               </p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-16 lg:grid-cols-3 lg:gap-24">
                 {visible.map((product) => (
-                  <ProductCard key={product.slug} {...toProductCardProps(product, locale)} />
+                  <ProductCard key={product.slug} {...product} />
                 ))}
               </div>
-              {hasMore ? <LoadMoreButton remainingCount={filtered.length - visible.length} /> : null}
+              {hasMore ? <LoadMoreButton remainingCount={remainingCount} /> : null}
             </>
           )}
         </div>
