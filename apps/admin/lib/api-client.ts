@@ -1,13 +1,12 @@
 import { z } from 'zod';
 import { ErrorEnvelope, ResponseMeta } from '@lulwah/contracts';
+import { getAccessToken } from './auth-session';
 
 /**
  * plan.md §25.3 "apps/admin" — the only API-reachability env var this app
- * needs. `apps/api` is a separate, parallel workstream and doesn't exist in
- * this worktree yet, so every call through this client currently resolves
- * against a placeholder base URL and will fail with a network error until
- * that app ships — the point of this file is that the shape it speaks
- * (§9.1's envelope, §33's closed error-code enum) is already correct.
+ * needs. `apps/api` shipped its catalog/inventory modules in this phase
+ * (plan.md §28 P1) — this client now talks to a real, running API, not a
+ * placeholder base URL.
  */
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
@@ -60,9 +59,17 @@ export async function apiRequest<T>(
     // `undefined` — `exactOptionalPropertyTypes` (plan.md §27.1) means
     // `RequestInit`'s optional fields reject an explicit `undefined`, so
     // absent values must be omitted from the object entirely.
+    // `requireAuth()` (apps/api's identity.policy.ts) only recognises an
+    // `Authorization: Bearer <token>` header — the `credentials: 'include'`
+    // cookie below carries the httpOnly refresh token, not the access
+    // token, so RBAC-gated `/admin/*` routes need this attached explicitly.
+    const accessToken = getAccessToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+
     const init: RequestInit = {
       method: options.method ?? 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
     };
     if (options.body !== undefined) init.body = JSON.stringify(options.body);

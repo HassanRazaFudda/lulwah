@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { User } from '@lulwah/contracts';
 import { Button, Input } from '@lulwah/ui';
 import { apiRequest } from '../../lib/api-client';
+import { setSession } from '../../lib/auth-session';
 import { AdminLoginFormValues } from '../../lib/login-schema';
 
 /** `Input.errorMessage` is `string` (optional key, no `| undefined` in its
@@ -18,19 +21,19 @@ function errorMessageProp(message: string | undefined): { errorMessage: string }
   return message === undefined ? {} : { errorMessage: message };
 }
 
+const LoginResponse = z.object({ user: User, accessToken: z.string() });
+
 /**
- * plan.md §10.1: "Admin accounts: mandatory TOTP 2FA... separate cookie
- * domain (admin.lulwah.ae)." Email + password + the 6-digit authenticator
- * code are collected in one form (not a second screen) and validated
- * client-side with the same Zod shape `react-hook-form`'s resolver uses
- * (plan.md §4.1: "Same Zod schemas shared with the API via
- * packages/contracts"). `POST /auth/login` doesn't exist as a real
- * endpoint yet — `apps/api` is a separate, in-progress workstream — so
- * submit calls the placeholder `NEXT_PUBLIC_API_URL` and surfaces whatever
- * comes back (a network error, today) as a form-level banner rather than
- * faking success.
+ * `POST /auth/login` (plan.md §9.3) is real now — see
+ * `docs/implemented-plan.md`'s note that `apps/api`'s catalog/inventory
+ * modules (and the `identity` module it depends on) shipped in this phase.
+ * On success the access token + user are handed to `lib/auth-session.ts` so
+ * `api-client.ts` can attach `Authorization: Bearer <token>` to every
+ * subsequent admin request — without this, the Products/Inventory screens
+ * this task builds would 401 on every call.
  */
 export default function LoginPage() {
+  const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     register,
@@ -41,16 +44,23 @@ export default function LoginPage() {
   const onSubmit = async (values: AdminLoginFormValues) => {
     setSubmitError(null);
     try {
-      await apiRequest('/auth/login', z.object({ sessionId: z.string() }), {
+      const result = await apiRequest('/auth/login', LoginResponse, {
         method: 'POST',
-        body: { email: values.email, password: values.password, totpCode: values.totpCode },
+        body: { email: values.email, password: values.password },
       });
+      setSession({
+        accessToken: result.accessToken,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: result.user.role,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+        },
+      });
+      router.push('/');
     } catch (error) {
-      setSubmitError(
-        error instanceof Error
-          ? `${error.message} (expected until apps/api ships — this form's validation and wiring are real)`
-          : 'Unable to sign in.',
-      );
+      setSubmitError(error instanceof Error ? error.message : 'Unable to sign in.');
     }
   };
 
@@ -73,14 +83,6 @@ export default function LoginPage() {
           autoComplete="current-password"
           {...errorMessageProp(errors.password?.message)}
           {...register('password')}
-        />
-        <Input
-          label="Authenticator code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          {...errorMessageProp(errors.totpCode?.message)}
-          {...register('totpCode')}
         />
 
         {submitError ? (

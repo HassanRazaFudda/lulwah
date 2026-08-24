@@ -1,22 +1,16 @@
-import { z } from 'zod';
+import { LoginInput } from '@lulwah/contracts';
 
 /**
- * Admin login form — plan.md §10.1: "Admin accounts: mandatory TOTP 2FA,
- * 8-hour session, separate cookie domain (admin.lulwah.ae), IP-change
- * re-auth." The form collects the 6-digit authenticator code in the same
- * step as email/password rather than a second screen.
- *
- * This is client-side validation shape only. The real request/response
- * contracts for `POST /auth/login` and the 2FA verify step belong in
- * `packages/contracts` once `apps/api` defines them (a separate,
- * in-progress workstream) — out of scope here per the task brief.
+ * Admin login form — reuses `@lulwah/contracts`' `LoginInput` (`email` +
+ * `password`) directly rather than a hand-rolled duplicate, now that
+ * `apps/api`'s real `POST /auth/login` (plan.md §9.3) exists and defines
+ * that shape. The original version of this file collected a mandatory
+ * `totpCode` per plan.md §10.1's "mandatory TOTP 2FA" spec, but the shipped
+ * `identity` module (see `docs/implemented-plan.md` §4.1) has no TOTP
+ * verification at all — `LoginInput` never had a `totpCode` field, and
+ * sending one would just be silently ignored. Collecting a field the API
+ * can't check would be worse than not collecting it (a false sense of
+ * security), so it's dropped until TOTP is actually built.
  */
-export const AdminLoginFormValues = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-  totpCode: z
-    .string()
-    .min(1, 'Enter your 6-digit authenticator code')
-    .regex(/^\d{6}$/, 'Code must be exactly 6 digits'),
-});
-export type AdminLoginFormValues = z.infer<typeof AdminLoginFormValues>;
+export const AdminLoginFormValues = LoginInput;
+export type AdminLoginFormValues = LoginInput;
