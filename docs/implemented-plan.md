@@ -6,8 +6,8 @@
 |---|---|
 | Document | `implemented-plan.md` — records what has actually been built, where, how, and why it may differ from `plan.md` |
 | Companion to | [`plan.md`](./plan.md) — the target architecture/spec. This document never restates decisions `plan.md` already covers; it only records implementation reality and deltas. |
-| Status | Phase **P0 (Foundation)**, **P1 (Catalogue)**, and **P2 (Commerce)** complete, per `plan.md` §28's delivery plan. P2's first half (cart, pricing/discount engine, address) landed on `master` as commit `abe5075`; this update covers P2's second half — `checkout`, `order`, `payment` (COD real, Stripe code-complete-but-unverified). |
-| As of | 2026-08-25, commit `abe5075` (this document's own commit follows the P2-second-half work) |
+| Status | Phase **P0 (Foundation)**, **P1 (Catalogue)**, and **P2 (Commerce)** complete, per `plan.md` §28's delivery plan — API *and* both frontends now consume it. |
+| As of | 2026-08-25, commit `ce49319` |
 | Audience | Whoever picks this up next — a future session, a human developer, or the client — needing full context without re-reading the build transcript |
 
 ### 0.1 How to read this document
@@ -24,13 +24,13 @@
 |---|---|
 | **P0 — Foundation** (monorepo, CI, envs, Docker, design tokens, primitives, API skeleton, auth module, seed script) | **Done**, with real bug fixes beyond scaffolding (§8) |
 | **P1 — Catalogue** (catalog + inventory modules, admin product editor, media, taxonomy seed, PLP + facets + search, PDP) | **Done** — real `catalog`/`inventory` API modules, storefront and admin both wired to them, real seed data (§4.4, §5, §6) |
-| **P2 — Commerce** (cart, checkout, discount engine, payments, orders) | **Done**, API-side. `cart`/`pricing`/`address` (first half, commit `abe5075`) plus `checkout`/`order`/`payment` (this update, §4.6): the full §8.7 status state machine, guest + card + COD checkout, Stripe code-complete but never called against a real account, idempotent order placement, live-verified end to end for the COD path. `apps/web`/`apps/admin` are **not** wired to any of this yet — see §4.6's own scope note and §11. |
-| P3 — Operations (full admin, RBAC enforcement beyond identity, CMS) | Not started, except the order-status state machine (§6.1, and now real on the API side per §4.6) and the now-real Products/Inventory screens (§6.3) |
+| **P2 — Commerce** (cart, checkout, discount engine, payments, orders) | **Done, API and both frontends.** `cart`/`pricing`/`address` (commit `abe5075`) plus `checkout`/`order`/`payment` (commit `61119c5`, §4.6): the full §8.7 status state machine, guest + card + COD checkout, Stripe code-complete but never called against a real account, idempotent order placement. `apps/web`'s cart/checkout is now a real TanStack-Query client over this API (commit `8cc9ab2`, §5.4) and `apps/admin`'s Orders screen is real CRUD against it (commit `38d167b`, §6.4). A real cross-app contract bug (`OrderShippingMethod.id`) found during that wiring was fixed at the source (commit `ce49319`, §8.12). |
+| P3 — Operations (full admin, RBAC enforcement beyond identity, CMS) | Not started, except the order-status state machine (§6.1, real end to end per §4.6/§6.4) and the now-real Products/Inventory (§6.3) and Orders (§6.4) screens |
 | P4 — Experience (GSAP/WebGL, Arabic content, reviews) | Not started |
 | P5 — Depth (custom stitching, returns, Aramex, BNPL) | Not started |
 | P6 — Hardening | Not started |
 
-**What actually runs today:** `pnpm install && pnpm dev` per app boots a real Express API — auth (P0), a real product/brand/category/collection/inventory catalog (P1), and now cart/discounts/checkout/orders/payments (P2, §4.6) — against real MongoDB/Redis/Meilisearch (in Docker), a storefront rendering real seeded products end to end (home → PLP with working facets → PDP with live stock → search), and an admin console where the Products and Inventory screens are real CRUD against that same API. The full commerce API — guest cart → checkout (address/shipping/COD-OTP/card) → order, with the §8.7 status state machine enforced server-side — is real and live-verified for its COD path (§4.6.5); **`apps/web`'s cart/checkout UI and `apps/admin`'s Orders screen are still local-state/placeholder, not wired to any of it** — that wiring is the next stage, not part of this update. See §10 for exact steps.
+**What actually runs today:** `pnpm install && pnpm dev` per app boots a real Express API — auth (P0), a full product/brand/category/collection/inventory catalog (P1), and the full commerce path (P2): cart → checkout (address/shipping/COD-OTP/card) → order, with the §8.7 status state machine enforced server-side. Both frontends are real clients of all of it: the **storefront** renders real seeded products end to end (home → PLP with working facets → PDP with live stock → search) and a customer can actually add to cart, check out, verify a COD OTP, and place a real order (§5.4's live-verification list includes a full guest order, replayed for idempotency). The **admin console**'s Products, Inventory, and Orders screens are real CRUD/status-transition UIs against that same API (§6.3, §6.4) — a manager can find an order, move it through its real status history, and add a note, live. Card payments cleanly report "unavailable" rather than pretending to charge anything (no live Stripe account exists for this project). See §10 for exact steps.
 
 ---
 
@@ -194,11 +194,25 @@ Next.js 16.3 App Router. Route tree matches `plan.md` §12.1 closely (see the fi
 
 ### 5.2 Explicitly not built (stated in the original brief, still true)
 
-Mega-menu (four-column crossfading panel), mobile filter bottom-sheet, full brand-history CMS content, GSAP/Lenis/WebGL motion (all R2 per §3.1), real cart/checkout API wiring (UI exists, local component state only — no `cart`/`order` module exists in the API), full Arabic translation (representative message keys only), a working "Size guide" drawer (no per-brand measurement-chart content source exists yet).
+Mega-menu (four-column crossfading panel), mobile filter bottom-sheet, full brand-history CMS content, GSAP/Lenis/WebGL motion (all R2 per §3.1), full Arabic translation (representative message keys only), a working "Size guide" drawer (no per-brand measurement-chart content source exists yet), real card payment (see §5.4 — Stripe has no live account for this project). Cart/checkout API wiring is **done** — see §5.4, this is no longer a gap.
 
 ### 5.3 Custom `next/image` loader gotcha
 
 `lib/image-loader.ts` implements the §4.1 imgproxy-loader pattern, but **no imgproxy container exists in local dev** (`docker-compose.dev.yml` intentionally only runs mongo/redis/meilisearch, per §25.1). The loader now falls back to serving local assets directly when `NEXT_PUBLIC_IMGPROXY_URL` is unset (see §8.3) — this is what makes local image preview possible at all right now.
+
+### 5.4 Cart & checkout — real API client (plan.md §7.10, §9.5, §15.6)
+
+`stores/cart-store.ts` (local-only Zustand) is gone, replaced by TanStack Query over the real `cart`/`checkout`/`order`/`payment` API (`lib/cart-client.ts`, `checkout-client.ts`, `order-client.ts` + matching `*-schemas.ts`, `hooks/use-cart.ts`). The `lulwah_cart` cookie the API sets on `POST /cart` **is** the cart id — no separate client-side id state.
+
+- **Cart**: `AddToBagForm` and the cart page call the real add/update/remove/coupon endpoints; quantity/removal are genuinely optimistic-with-rollback, add/coupon reconcile from the server response (server-computed totals, never recomputed client-side, per §8.5).
+- **Checkout**: the real 3-step flow — session created on leaving Contact (guest email required, per plan.md §15.6 "no forced account creation"), address + shipping on leaving Delivery (real flat-rate quote rendered, not recomputed), payment-intent/COD-OTP/`place` on Payment. `place` sends a real `Idempotency-Key`, generated once per page load and reused on retry.
+- **Card payment is honestly gated, not faked**: `payment-intent {method:"card"}` cleanly `503`s in this environment (no live Stripe account — see §4.6.4). Selecting card shows a real "temporarily unavailable, use Cash on Delivery" state rather than a Stripe Elements form that could never actually charge anything here.
+- **Order confirmation** (`checkout/confirmation/[order]/page.tsx`, new) and **guest order tracking** (`account/orders/page.tsx`, now real — there is no login UI anywhere in the storefront, so this uses `GET /orders/track`, not the auth-gated `/me/orders`) both render real order data.
+- **`CartItem` has no title/brand/image** in the API contract (by design — it only snapshots enough for pricing) — `lib/cart-display-cache.ts` is a small local-only cache of display data keyed by variant id, cosmetic only, never consulted for price/quantity/totals.
+- **A real UX bug found and fixed**: the pre-checked "Cash on Delivery" radio never fired a change event, so the OTP flow never auto-started on entering the payment step — now triggered explicitly.
+- **A real cross-app contract bug found and fixed at the source** (not just worked around): see §8.12.
+
+Live-verified against the real Docker stack, start to finish: a real product added to cart, quantity updated, a coupon rejected with the API's actual human-readable reason, a checkout session through address/shipping, the card-`503` state confirmed, a COD OTP read from the server's own log and verified, `place` with a real `Idempotency-Key` — replayed and confirmed idempotent (same order, no duplicate) — and `GET /orders/track` confirmed the reduced guest view. Not verified: interactive click-through in an actual rendered browser (no browser-automation tool was available to that workstream) — the state-transition logic is proven by the API-contract-level verification above and code review, not a screenshot.
 
 ---
 
@@ -225,6 +239,19 @@ Discounts, Customers, Content, Reports, Settings, Users: page shells exist (side
 - **A real bug found and fixed here**: `lib/api-client.ts` sent `credentials: 'include'` but never attached `Authorization: Bearer <token>` — every RBAC-gated admin call would 401 regardless of how correct the rest of the admin UI was. Fixed alongside a login-page/schema correction (the old version expected a placeholder response shape and a `totpCode` field the real `/auth/login` endpoint doesn't accept).
 - **What's read-only or absent, deliberately**: `lowStockThreshold`/`allowBackorder` show read-only in the Inventory tab (no update endpoint exists — those are set only at `InventoryItem` creation); no media delete/reorder (API only has `POST`, no `PATCH`/`DELETE`); no product-delete UI (soft-delete via `status: archived` is the intended path); no pricing/discount UI beyond the two real fields (no discount engine exists).
 - 13 new unit tests (`lib/product-editor.test.ts`, the variant-matrix/piece-builder pure logic) alongside the pre-existing 32 — 45 total in this app now.
+
+### 6.4 Orders — real data under the already-correct state-machine UI (plan.md §8.7, §9.7, §11.1)
+
+§6.1's `getValidNextStatuses`/`StatusTransitionDropdown`/`StatusFlagPill` were **not touched** — they were already correct, tested against the exact table the API now also implements (§4.6.1). Only the data source changed: `lib/queries/orders.ts` (new) replaces `lib/queries.ts`'s placeholder `fetchOrders`/`fetchOrderById`/status-mutation functions with real calls to `GET/PATCH /admin/orders*` and `POST /admin/orders/:id/notes`, same TanStack Query optimistic-update-with-rollback pattern the app already used for Products/Inventory.
+
+- **Orders list** (`app/(dashboard)/orders/page.tsx`): server-side `status`/`paymentStatus`/`search` filters (confirmed these are the only three real query params `AdminListOrdersQuery` supports — `dateFrom`/`dateTo`/`emirate`/`sort` aren't, so sort stays client-side over the fetched page, not faked as a server capability).
+- **Order detail** (`orders/[id]/page.tsx`): real items/money-breakdown/address/status-history; the status mutation now sends `trackingNumber`/`carrier` as their own fields on entering `shipped`.
+- **A real bug found and fixed here**: the old placeholder version smuggled `trackingNumber`/`carrier` into the status-change *note* as a concatenated string instead of sending them as the real fields the API expects — fixed, confirmed live that a genuine `shipments[]` entry is created now, not a note.
+- **A real, narrower gap surfaced (not fixed, documented instead)**: `order.mapper.ts` never puts `internalNotes` on the wire and there's no `GET` for notes — a `POST /admin/orders/:id/notes` persists (confirmed live) but can't be read back through any endpoint yet. The notes panel keeps a session-local list and says so in its own UI rather than pretending to round-trip.
+- Dashboard's "orders needing action" and "low stock" tiles now read real data too; the four top summary stat tiles stay placeholder (no reports/analytics API module exists).
+- Super_admin's force-any-transition escape hatch (mandatory reason) is left API-only for now, per that workstream's own scope call.
+
+Live-verified against the real Docker stack: logged in as the seeded `super_admin`, exercised server-side filters, detail fetch, a real `stitching → ready_to_ship → shipped` transition carrying real tracking data, and a note POST. No browser-automation tool was available, so this was request/response-level verification plus confirming the page shells serve 200 with no server errors — not an interactive click-through.
 
 ---
 
@@ -288,6 +315,12 @@ The running Meilisearch container reads its master key from the *root* `.env` (v
 
 `GET /products?category=` exact-matches one category id (correct, matches its own DTO), but the storefront's real nav links (`/shop/unstitched`, `/shop/formal-wedding`, ...) resolve to **parent** taxonomy nodes while every seeded product is tagged only with a **leaf** category — so the naive "resolve slug → pass its id" wiring returned zero products for almost every category page. Fixed storefront-side: expand the resolved category to its full descendant-id set before filtering (`apps/web/lib/plp-data.ts`). Not an API bug — a future direct consumer of `GET /products?category=` should know it wants a leaf id, not any node in the tree.
 
+### 8.12 `OrderShippingMethod.id` typed as an ObjectId in the shared contract, but never one in practice
+
+`packages/contracts/src/order.ts` typed `OrderShippingMethod.id` as a strict Mongo `objectId`. Plan.md §21 ships R1 shipping as a flat per-emirate rate table (`checkout/shipping-rates.ts`), not a `shipping_zones` collection — the real value is always a stable string like `'standard'`, never an ObjectId — so **every real placed order failed strict schema validation** on any client that actually parsed the response against the shared contract (`Order.mongoose model` already correctly typed the field as plain `String`; only the Zod contract disagreed with its own database).
+
+Found by the storefront-wiring agent, who went further than eyeballing raw JSON and ran the actual Zod schema files against live API responses — this is exactly the kind of bug that "the build compiles and the happy-path test passes" never catches, since `mongodb-memory-server` integration tests construct their own fixtures and never hit this specific real-data shape. The storefront agent worked around it with a locally-widened schema in `apps/web` (touching `packages/contracts` was out of that task's scope) — but `apps/admin`'s order queries import `@lulwah/contracts`' `Order` directly and would have hit the identical failure on any real order with this shipping method. Fixed at the source instead of leaving two apps carrying two different local patches for one shared bug: `id: objectId` → `id: z.string()`, verified every consumer (`api`/`admin`/`web`) still typechecks clean.
+
 ---
 
 ## 9. Placeholder content — what's real vs. not
@@ -338,12 +371,12 @@ Mongo is on host port **27018** and Redis on **6380** (not the defaults) — see
 
 ## 11. Suggested next steps
 
-`plan.md` §28's **P2 — Commerce** is now done on the API side (§4.6): cart, discount engine, checkout, order, COD end-to-end, Stripe code-complete-but-unverified. Nothing in P2 touched `apps/web`/`apps/admin` — that consumption gap is now the most valuable next work, ahead of moving on to P3. In priority order:
+`plan.md` §28's **P2 — Commerce** is now fully done: API (§4.6), storefront consumption (§5.4), and admin consumption (§6.4). Per §28's own order, the next phase is **P3 — Operations**: full admin console, RBAC enforcement beyond identity, CMS/homepage builder, reports, audit log. In priority order:
 
-1. **Wire `apps/web`'s cart/checkout UI to the real API.** `useCartStore`'s local state needs to become a thin client over `POST /cart`, `/cart/:id/items`, `/checkout/session*`, `/checkout/cod/verify-otp`, `/checkout/session/:id/place`. This is the single highest-value next step — every commerce module built in this update is real and tested but has no UI consumer yet.
-2. **Wire `apps/admin`'s Orders screen to the real API.** The state-machine UI (`StatusTransitionDropdown`, `getValidNextStatuses` — §6.1) already exists and is exactly what the new `PATCH /admin/orders/:id/status` endpoint expects; today it still renders hand-written placeholder order data instead of `GET /admin/orders`. Swapping the data source is comparatively little work for a lot of realism.
-3. **A real Stripe test-mode account**, whenever one becomes available — `StripeGateway` (§4.6.4) is unit-tested against a mock but has never called Stripe's actual API. Getting a test key would let the card checkout path, the webhook handler, and `payment_intent.succeeded`/`payment_intent.payment_failed` handling all move from "code-complete" to "actually verified."
-4. **Real product photography mapping** — unchanged from the previous edition of this section: the seeded catalog (P1) and the placeholder imagery (P0) don't reference each other. This update's live checkout pass surfaced a concrete consequence of the gap (§4.6.6's `imageSnapshot` bug) — a real fix here removes a whole class of empty-image edge cases downstream, not just a cosmetic one.
+1. **A real Stripe test-mode account**, whenever one becomes available — `StripeGateway` (§4.6.4) is unit-tested against a mock but has never called Stripe's actual API. Getting a test key would let the card checkout path (already has real UI, gated on a real `503` today), the webhook handler, and `payment_intent.succeeded`/`payment_intent.payment_failed` handling all move from "code-complete" to "actually verified." This is the single biggest remaining "unverified, not unbuilt" gap in the whole commerce path.
+2. **Discounts, Customers, Content, Reports, Settings, Users** (`apps/admin`) — still page shells with no real backend or wiring, per §6.2. Content (homepage builder, banners, pages, menus) is the highest-value one: right now Home's editorial sections (Hero, Editorial split, Brand strip, Occasion tiles) are hardcoded, not CMS-driven, and there's no `content` API module at all yet.
+3. **The `internalNotes` read gap** (§6.4) — notes POST but don't come back on any `GET`; a small, contained fix to `order.mapper.ts`.
+4. **Real product photography mapping** — unchanged: the seeded catalog (P1) and the placeholder imagery (P0) don't reference each other. §4.6.6's `imageSnapshot` bug and §5.4's cart-display-cache workaround are both downstream symptoms of this same gap.
 5. **Fix the header transparency properly** (§8.4) — unchanged, still low-risk/deferred.
-6. **The full §10.2 RBAC permission matrix** — unchanged; `orders.read`/`orders.status.update` were already declared ahead of time and slotted straight into `order`'s routes with no identity-module changes needed, which is a small proof the matrix-first approach was worth it — worth finishing for the same reason.
-7. **P5 returns/RMA workflow** — `Order.items[].returnedQty`/`refundedFils`, `ReturnStatus`, and the `'return'` `StockMovementType` all already exist in the shape the schema anticipated; this update deliberately built the model support only, not the workflow (endpoints, admin RMA screen, refund-to-gateway calls), per its own brief's scope boundary.
+6. **The full §10.2 RBAC permission matrix** — unchanged; `orders.read`/`orders.status.update` were already declared ahead of time and slotted straight into `order`'s routes with no identity-module changes needed, a small proof the matrix-first approach was worth it — worth finishing for the same reason, especially now that P3 is admin-heavy.
+7. **P5 returns/RMA workflow** — `Order.items[].returnedQty`/`refundedFils`, `ReturnStatus`, and the `'return'` `StockMovementType` all already exist in the shape the schema anticipated; P2 deliberately built the model support only, not the workflow (endpoints, admin RMA screen, refund-to-gateway calls), per its own brief's scope boundary.
