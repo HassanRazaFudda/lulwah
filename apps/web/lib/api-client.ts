@@ -68,6 +68,13 @@ async function fetchEnvelope<T>(path: string, dataSchema: z.ZodType<T>, init: Ap
   const { body, headers, ...rest } = init;
 
   const response = await fetch(`${baseUrl}${path}`, {
+    // Cart/checkout rely on the non-httpOnly `lulwah_cart` cookie the API
+    // sets on `POST /cart` (plan.md §8.5) round-tripping automatically —
+    // `credentials: 'include'` is required for that on cross-origin
+    // requests (web:3000 -> api:4000 in local dev). Harmless for the
+    // public catalog reads that don't need it; `rest.credentials` (rare)
+    // still wins if a caller explicitly overrides it.
+    credentials: 'include',
     ...rest,
     headers: { 'Content-Type': 'application/json', ...headers },
     // `body` is only spread in when present — under `exactOptionalPropertyTypes`, `RequestInit.body` can't be assigned an explicit `undefined`.

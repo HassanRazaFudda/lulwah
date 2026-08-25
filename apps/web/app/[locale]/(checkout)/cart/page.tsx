@@ -1,36 +1,55 @@
 'use client';
 
+import { useState } from 'react';
 import { formatMoney } from '@lulwah/utils';
 import { Button } from '@lulwah/ui';
 import { useLocale } from 'next-intl';
 import Image from 'next/image';
 import { QuantityStepper } from '@/components/commerce/QuantityStepper';
+import { useApplyCoupon, useCart, useRemoveCartItem, useRemoveCoupon, useUpdateCartItemQuantity } from '@/hooks/use-cart';
 import { Link } from '@/i18n/navigation';
-import { computeCartTotals } from '@/lib/cart-totals';
-import { FREE_SHIPPING_THRESHOLD_FILS, STANDARD_SHIPPING_FILS } from '@/lib/commerce-constants';
+import { ApiError } from '@/lib/api-client';
+import { getCartLineDisplay } from '@/lib/cart-display-cache';
+import type { CartItemView } from '@/lib/cart-schemas';
 import { humanize } from '@/lib/facets';
-import { useCartStore, type CartLineItem } from '@/stores/cart-store';
 
 /**
- * Cart — plan.md §15.5. `apps/api`'s cart module isn't wired up (Out of
- * scope note: "cart/checkout can use local component state / placeholder
- * data"), so this reads `useCartStore` directly rather than TanStack Query
- * — §12.3's "Cart / Checkout / Account | Client, auth-guarded, no-store"
- * rendering strategy already calls for CSR here, so a client component
- * with no server round trip is the correct shape even before the real
- * cart API exists.
+ * Cart — plan.md §15.5. Now wired to the real `cart` module (`useCart` +
+ * mutations, `hooks/use-cart.ts`) instead of `useCartStore`'s local state.
+ * Totals shown here are exactly `CartResponse.totals` — plan.md §8.5: "the
+ * client never sends or trusts a total" — nothing here is recomputed;
+ * `subtotal`/`discount`/`shipping`/`tax`/`grand total` are rendered
+ * verbatim from the server. Coupon rejection reasons are the API's own
+ * `error.message` (plan.md §8.3: "a specific human reason"), not a
+ * generic string.
  */
 export default function CartPage() {
   const locale = useLocale() as 'en' | 'ar';
-  const items = useCartStore((state) => state.items);
-  const updateQuantity = useCartStore((state) => state.updateQuantity);
-  const removeItem = useCartStore((state) => state.removeItem);
+  const { data: cart, isPending, isError, error, refetch } = useCart();
 
-  const totals = computeCartTotals(items);
-  const freeShippingProgress =
-    totals.freeShippingRemainderFils === 0 ? 1 : 1 - totals.freeShippingRemainderFils / FREE_SHIPPING_THRESHOLD_FILS;
+  if (isPending) {
+    return (
+      <div className="flex flex-col items-center gap-16 px-24 py-96 text-center">
+        <p className="font-body text-body text-ink-70">Loading your bag…</p>
+      </div>
+    );
+  }
 
-  if (items.length === 0) {
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center gap-16 px-24 py-96 text-center">
+        <h1 className="font-display text-heading-1 tracking-display text-ink">Your bag</h1>
+        <p className="font-body text-body text-ink-70">
+          {error instanceof ApiError ? error.message : "We couldn't load your bag. Please try again."}
+        </p>
+        <Button variant="secondary" onClick={() => void refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (cart.items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-24 px-24 py-96 text-center">
         <h1 className="font-display text-heading-1 tracking-display text-ink">Your bag is empty</h1>
@@ -58,39 +77,36 @@ export default function CartPage() {
     );
   }
 
+  const { totals } = cart;
+
   return (
     <div className="flex flex-col gap-32 px-24 py-32 lg:px-[clamp(24px,5vw,88px)]">
       <h1 className="font-display text-heading-1 tracking-display text-ink">Your bag</h1>
 
       <div className="flex flex-col gap-32 lg:flex-row lg:items-start lg:gap-48">
         <ul className="flex flex-1 flex-col divide-y divide-line border-y border-line">
-          {items.map((item) => (
-            <CartLine key={item.id} item={item} locale={locale} onQuantityChange={updateQuantity} onRemove={removeItem} />
+          {cart.items.map((item) => (
+            <CartLine key={item.id} item={item} locale={locale} />
           ))}
         </ul>
 
         <div className="flex w-full flex-col gap-24 lg:w-[360px] lg:shrink-0">
-          <div className="flex flex-col gap-8">
-            <p className="font-body text-body-sm text-ink-70">
-              {totals.freeShippingRemainderFils > 0
-                ? `${formatMoney(totals.freeShippingRemainderFils, locale)} away from free delivery.`
-                : "You've unlocked free delivery."}
-            </p>
-            <div className="h-px w-full bg-line" aria-hidden="true">
-              <div
-                className="h-px bg-gold-dark transition-[width] duration-base ease-out"
-                style={{ width: `${Math.min(freeShippingProgress, 1) * 100}%` }}
-              />
-            </div>
-          </div>
+          <p className="font-body text-body-sm text-ink-70">
+            {totals.shippingFils === 0
+              ? "You've unlocked free delivery."
+              : 'Free delivery unlocks above a minimum order value.'}
+          </p>
+
+          <CouponForm appliedCoupon={cart.appliedCoupons[0]} />
 
           <dl className="flex flex-col gap-12 border-y border-line py-24">
             <SummaryRow label="Subtotal" valueFils={totals.subtotalFils} locale={locale} />
+            {totals.discountFils > 0 ? (
+              <SummaryRow label="Discount" valueFils={-totals.discountFils} locale={locale} muted />
+            ) : null}
             <SummaryRow
               label="Shipping"
-              valueLabel={
-                totals.shippingFils === 0 ? `Free — you saved ${formatMoney(STANDARD_SHIPPING_FILS, locale)}` : undefined
-              }
+              valueLabel={totals.shippingFils === 0 ? 'Free' : undefined}
               valueFils={totals.shippingFils === 0 ? undefined : totals.shippingFils}
               locale={locale}
             />
@@ -108,6 +124,60 @@ export default function CartPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function CouponForm({ appliedCoupon }: { appliedCoupon?: { code: string; amountFils: number } | undefined }) {
+  const [code, setCode] = useState('');
+  const applyCoupon = useApplyCoupon();
+  const removeCoupon = useRemoveCoupon();
+
+  if (appliedCoupon) {
+    return (
+      <div className="flex items-center justify-between gap-16 border border-zamurrad bg-zamurrad/5 px-16 py-12">
+        <span className="font-body text-body-sm font-medium text-ink">
+          Code <span className="uppercase">{appliedCoupon.code}</span> applied
+        </span>
+        <button
+          type="button"
+          onClick={() => removeCoupon.mutate()}
+          disabled={removeCoupon.isPending}
+          className="font-body text-body-sm text-mukaish underline decoration-1 underline-offset-4 hover:text-ink"
+        >
+          {removeCoupon.isPending ? 'Removing…' : 'Remove'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!code.trim()) return;
+        applyCoupon.mutate(code.trim(), { onSuccess: () => setCode('') });
+      }}
+      className="flex flex-col gap-8"
+    >
+      <div className="flex gap-8">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Discount code"
+          aria-label="Discount code"
+          className="h-[48px] flex-1 border-0 border-b border-ink-20 bg-nacre px-16 font-body text-body text-ink outline-none focus:border-b-2 focus:border-zamurrad"
+        />
+        <Button type="submit" variant="secondary" disabled={applyCoupon.isPending || !code.trim()}>
+          {applyCoupon.isPending ? 'Applying…' : 'Apply'}
+        </Button>
+      </div>
+      {applyCoupon.isError ? (
+        <p role="alert" className="font-body text-body-sm text-danger">
+          {applyCoupon.error instanceof ApiError ? applyCoupon.error.message : 'That code could not be applied.'}
+        </p>
+      ) : null}
+    </form>
   );
 }
 
@@ -132,34 +202,43 @@ function SummaryRow({
   );
 }
 
-function CartLine({
-  item,
-  locale,
-  onQuantityChange,
-  onRemove,
-}: {
-  item: CartLineItem;
-  locale: 'en' | 'ar';
-  onQuantityChange: (id: string, quantity: number) => void;
-  onRemove: (id: string) => void;
-}) {
+function CartLine({ item, locale }: { item: CartItemView; locale: 'en' | 'ar' }) {
+  const display = getCartLineDisplay(item.variantId);
+  const updateQuantity = useUpdateCartItemQuantity();
+  const removeItem = useRemoveCartItem();
+  const isOverStock = item.availableStock < item.quantity;
+
+  const title = display?.title ?? 'Item';
+  const image = display?.image ?? { src: '/catalogue/placeholder.svg', alt: title };
+  const href = display?.productSlug ? `/product/${display.productSlug}` : '/shop/new-in';
+
   return (
     <li className="flex gap-16 py-24">
-      <Link href={`/product/${item.productSlug}`} className="relative aspect-[3/4] w-96 shrink-0 overflow-hidden bg-pearl">
-        <Image src={item.image.src} alt={item.image.alt} fill sizes="96px" className="object-cover" />
+      <Link href={href} className="relative aspect-[3/4] w-96 shrink-0 overflow-hidden bg-pearl">
+        <Image src={image.src} alt={image.alt} fill sizes="96px" className="object-cover" />
       </Link>
       <div className="flex flex-1 flex-col gap-8">
         <div className="flex items-start justify-between gap-16">
           <div className="flex flex-col gap-4">
-            <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
-              {item.brandName}
-            </span>
-            <Link href={`/product/${item.productSlug}`} className="font-body text-body font-medium text-ink">
-              {item.title}
+            {display?.brandName ? (
+              <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
+                {display.brandName}
+              </span>
+            ) : null}
+            <Link href={href} className="font-body text-body font-medium text-ink">
+              {title}
             </Link>
             <span className="font-body text-body-sm text-mukaish">
-              {[humanize(item.stitchingType), item.colorName, item.size].filter(Boolean).join(' · ')}
+              {[display?.stitchingType ? humanize(display.stitchingType) : null, display?.colorName, display?.size]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
+            {item.priceChanged ? <span className="font-body text-body-sm text-garnet">Price updated since you added this.</span> : null}
+            {isOverStock ? (
+              <span className="font-body text-body-sm text-garnet">
+                {item.availableStock === 0 ? 'No longer in stock.' : `Only ${item.availableStock} left — update quantity.`}
+              </span>
+            ) : null}
           </div>
           <span className="whitespace-nowrap font-body text-price font-semibold tabular-nums text-ink">
             {formatMoney(item.unitPriceFils * item.quantity, locale)}
@@ -167,18 +246,25 @@ function CartLine({
         </div>
         <div className="flex items-center justify-between gap-16">
           <QuantityStepper
-            label={`Quantity for ${item.title}`}
+            label={`Quantity for ${title}`}
             quantity={item.quantity}
-            onChange={(quantity) => onQuantityChange(item.id, quantity)}
+            onChange={(quantity) => updateQuantity.mutate({ itemId: item.id, quantity })}
+            max={Math.max(item.quantity, item.availableStock, 1)}
           />
           <button
             type="button"
-            onClick={() => onRemove(item.id)}
+            onClick={() => removeItem.mutate(item.id)}
+            disabled={removeItem.isPending}
             className="font-body text-body-sm text-mukaish underline decoration-1 underline-offset-4 hover:text-ink"
           >
-            Remove
+            {removeItem.isPending ? 'Removing…' : 'Remove'}
           </button>
         </div>
+        {updateQuantity.isError ? (
+          <p role="alert" className="font-body text-body-sm text-danger">
+            {updateQuantity.error instanceof ApiError ? updateQuantity.error.message : 'Could not update quantity.'}
+          </p>
+        ) : null}
       </div>
     </li>
   );

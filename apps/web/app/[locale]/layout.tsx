@@ -9,6 +9,7 @@ import { cx } from '@lulwah/ui';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 import { routing } from '@/i18n/routing';
 import '@/styles/globals.css';
 
@@ -112,16 +113,18 @@ export default async function LocaleLayout({
       <body className={cx('bg-paper text-ink', isArabic ? 'font-body-ar' : 'font-body')}>
         <NuqsAdapter>
           <NextIntlClientProvider messages={messages}>
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:fixed focus:start-16 focus:top-16 focus:z-50 focus:bg-paper focus:px-16 focus:py-8 focus:text-ink"
-            >
-              Skip to content
-            </a>
-            <AnnouncementBar />
-            <Header />
-            <main id="main-content">{children}</main>
-            <Footer />
+            <QueryProvider>
+              <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:fixed focus:start-16 focus:top-16 focus:z-50 focus:bg-paper focus:px-16 focus:py-8 focus:text-ink"
+              >
+                Skip to content
+              </a>
+              <AnnouncementBar />
+              <Header />
+              <main id="main-content">{children}</main>
+              <Footer />
+            </QueryProvider>
           </NextIntlClientProvider>
         </NuqsAdapter>
       </body>

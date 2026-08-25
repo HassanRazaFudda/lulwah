@@ -2,36 +2,46 @@
 
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Emirate } from '@lulwah/contracts';
 import { Button, Input } from '@lulwah/ui';
 import { useLocale } from 'next-intl';
 import { useForm } from 'react-hook-form';
-import type { UseFormRegisterReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { CheckoutStep } from '@/components/checkout/CheckoutStep';
 import { LabeledSelect } from '@/components/checkout/LabeledSelect';
 import { OrderSummary } from '@/components/checkout/OrderSummary';
-import { Link } from '@/i18n/navigation';
-import { COD_FEE_FILS, COD_MAX_ORDER_FILS } from '@/lib/commerce-constants';
+import { CART_QUERY_KEY, useCart } from '@/hooks/use-cart';
+import { Link, useRouter } from '@/i18n/navigation';
+import { ApiError } from '@/lib/api-client';
+import { clearCartCookie } from '@/lib/cart-client';
+import * as checkoutClient from '@/lib/checkout-client';
+import type { InlineAddressInput } from '@/lib/checkout-client';
+import type { CheckoutSessionResponse } from '@/lib/checkout-schemas';
 import { humanize } from '@/lib/facets';
 import { errorMessageProp } from '@/lib/form-error';
-import { useCartStore } from '@/stores/cart-store';
 
 /**
- * Checkout — plan.md §15.6. Delivery fields follow §7.2's UAE addressing
- * note exactly: emirate select, area autocomplete, building/apartment/
- * street, landmark, optional Makani — **no postcode/ZIP field**, which is
- * a documented requirement (§7.2: "there are no postcodes and street
- * numbers are unreliable"), not an oversight.
+ * Checkout — plan.md §15.6. Now wired to the real `checkout` module
+ * (`apps/api/src/modules/checkout/checkout.routes.ts`) instead of a
+ * simulated round trip: session creation on leaving Contact (a guest email
+ * is required at session creation and can't be changed afterwards — see
+ * `checkout.service.ts#createSession`), address + shipping on leaving
+ * Delivery, payment-intent/OTP/place on Payment. Every render of the order
+ * summary is `session.totals` — the API's own numbers, never recomputed
+ * here (plan.md §8.5).
  *
- * Deviations: "area" is a plain text field, not the real ~400-UAE-area
- * autocomplete dataset (§7.2) — no such dataset exists in this
- * workstream. Card/Apple Pay/Google Pay/Tabby are UI-only per the task's
- * explicit "real payment integration" out-of-scope note; only Card and
- * Cash on Delivery are selectable. There is no `apps/api` to place a real
- * order against, so "Place order" simulates the round trip and shows an
- * inline confirmation panel rather than navigating to
- * `/checkout/confirmation/[order]` (not in this workstream's route list).
+ * Deviations from the original placeholder UI, both forced by the real
+ * API surface:
+ * - No separate "City" field — `InlineAddressInput.city` is required but
+ *   UAE storefronts don't distinguish it from the emirate in practice
+ *   (§7.2's own field list — emirate/area/building/landmark — has no city
+ *   either); it's derived from the selected emirate's label.
+ * - Card is real-UI but honestly gated: `payment-intent {method:"card"}`
+ *   cleanly `503`s in this environment (no Stripe account configured, see
+ *   `docs/implemented-plan.md` §4.6.4/§4.6.5) — selecting it shows that
+ *   real unavailable state and nudges to Cash on Delivery, rather than a
+ *   Stripe Elements form that could never actually charge anything here.
  */
 const EMIRATE_OPTIONS = Emirate.options.map((value) => ({ value, label: humanize(value) }));
 
@@ -47,7 +57,6 @@ const CheckoutSchema = z.object({
   street: z.string().optional(),
   landmark: z.string().min(1, 'A landmark helps our courier find you.'),
   makani: z.string().optional(),
-  paymentMethod: z.enum(['card', 'cod']),
 });
 type CheckoutValues = z.infer<typeof CheckoutSchema>;
 
@@ -55,79 +64,139 @@ const CONTACT_FIELDS = ['email', 'phone'] as const;
 const DELIVERY_FIELDS = ['firstName', 'lastName', 'emirate', 'area', 'buildingName', 'landmark'] as const;
 
 type Step = 'contact' | 'delivery' | 'payment';
+type PaymentChoice = 'cod' | 'card';
 
 export default function CheckoutPage() {
   const locale = useLocale() as 'en' | 'ar';
-  const items = useCartStore((state) => state.items);
-  const clearCart = useCartStore((state) => state.clear);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: cart, isPending: isCartPending } = useCart();
 
   const [activeStep, setActiveStep] = useState<Step>('contact');
   const [completedSteps, setCompletedSteps] = useState<Set<Step>>(new Set());
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  // A fresh idempotency key per mount — plan.md §15.6: "the request carries an idempotency key" — reused across retries of the same attempt, regenerated only if the cart itself changes.
+  const [session, setSession] = useState<CheckoutSessionResponse | null>(null);
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('cod');
+  const [otpCode, setOtpCode] = useState('');
+  const [codOtpVerified, setCodOtpVerified] = useState(false);
+
+  // A fresh idempotency key per mount (plan.md §9.5) — reused across
+  // retries of the same `place` attempt, regenerated only by a full page
+  // reload (a genuinely new checkout attempt).
   const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
 
   const {
     register,
     handleSubmit,
     trigger,
+    getValues,
     watch,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<CheckoutValues>({
     resolver: zodResolver(CheckoutSchema),
     mode: 'onBlur',
-    defaultValues: { paymentMethod: 'card' },
   });
 
-  const paymentMethod = watch('paymentMethod');
-  const subtotalFils = items.reduce((sum, item) => sum + item.unitPriceFils * item.quantity, 0);
-  const isCodAllowed = subtotalFils <= COD_MAX_ORDER_FILS;
+  const createSessionMutation = useMutation({
+    mutationFn: (input: { cartId: string; guestEmail: string }) => checkoutClient.createCheckoutSession(input),
+  });
 
-  async function advanceFrom(step: Step, fields: readonly (keyof CheckoutValues)[], next: Step) {
-    const isValid = await trigger(fields);
-    if (!isValid) return;
-    setCompletedSteps((prev) => new Set(prev).add(step));
-    setActiveStep(next);
+  const deliveryMutation = useMutation({
+    mutationFn: async ({ sessionId, inline }: { sessionId: string; inline: InlineAddressInput }) => {
+      const withAddress = await checkoutClient.setCheckoutAddress(sessionId, inline);
+      return checkoutClient.setCheckoutShipping(withAddress.sessionId);
+    },
+  });
+
+  const intentMutation = useMutation({
+    mutationFn: ({ sessionId, method }: { sessionId: string; method: PaymentChoice }) => checkoutClient.createPaymentIntent(sessionId, method),
+    onSuccess: () => setCodOtpVerified(false),
+  });
+
+  const otpMutation = useMutation({
+    mutationFn: ({ sessionId, code }: { sessionId: string; code: string }) => checkoutClient.verifyCodOtp(sessionId, code),
+    onSuccess: (updatedSession) => {
+      setSession(updatedSession);
+      setCodOtpVerified(true);
+    },
+  });
+
+  const placeMutation = useMutation({
+    mutationFn: (sessionId: string) => checkoutClient.placeOrder(sessionId, idempotencyKey),
+    onSuccess: ({ order }) => {
+      queryClient.setQueryData(['order', order.orderNumber], order);
+      clearCartCookie();
+      queryClient.removeQueries({ queryKey: CART_QUERY_KEY });
+      router.push(`/checkout/confirmation/${order.orderNumber}`);
+    },
+  });
+
+  async function handleContinueFromContact() {
+    const isValid = await trigger(CONTACT_FIELDS);
+    if (!isValid || !cart) return;
+    const created = await createSessionMutation.mutateAsync({ cartId: cart.cartId, guestEmail: getValues('email') });
+    setSession(created);
+    setCompletedSteps((prev) => new Set(prev).add('contact'));
+    setActiveStep('delivery');
   }
 
-  async function onSubmit() {
-    setIsPlacingOrder(true);
-    // No `apps/api` order endpoint wired up — simulate the round trip
-    // (idempotencyKey would be sent as a header on the real POST /orders call).
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    void idempotencyKey;
-    setOrderNumber(`LF-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(items.length).padStart(4, '0')}`);
-    clearCart();
-    setIsPlacingOrder(false);
+  async function handleContinueFromDelivery() {
+    const isValid = await trigger(DELIVERY_FIELDS);
+    const currentSession = session;
+    if (!isValid || !currentSession) return;
+    const values = getValues();
+    const inline: InlineAddressInput = {
+      firstName: values.firstName,
+      lastName: values.lastName,
+      phone: { countryCode: '+971', number: values.phone },
+      emirate: values.emirate,
+      city: humanize(values.emirate),
+      area: values.area,
+      buildingName: values.buildingName,
+      ...(values.apartment ? { apartment: values.apartment } : {}),
+      ...(values.street ? { street: values.street } : {}),
+      landmark: values.landmark,
+      makani: values.makani || null,
+    };
+    const updated = await deliveryMutation.mutateAsync({ sessionId: currentSession.sessionId, inline });
+    setSession(updated);
+    setCompletedSteps((prev) => new Set(prev).add('delivery'));
+    setActiveStep('payment');
+    // `paymentMethod` already defaults to 'cod', but a pre-checked radio
+    // never fires its own `onChange` — kick off the intent request for the
+    // default method explicitly rather than waiting on a click that may
+    // never come (the user only *changes* the radio if they want card).
+    handleChoosePaymentMethod(paymentMethod, updated.sessionId);
   }
 
-  if (items.length === 0 && !orderNumber) {
+  function handleChoosePaymentMethod(method: PaymentChoice, sessionIdOverride?: string) {
+    const sessionId = sessionIdOverride ?? session?.sessionId;
+    if (!sessionId) return;
+    setPaymentMethod(method);
+    setOtpCode('');
+    setCodOtpVerified(false);
+    intentMutation.reset();
+    otpMutation.reset();
+    intentMutation.mutate({ sessionId, method });
+  }
+
+  const canPlaceOrder = paymentMethod === 'cod' && codOtpVerified;
+
+  if (isCartPending) {
+    return (
+      <div className="flex flex-col items-center gap-16 px-24 py-96 text-center">
+        <p className="font-body text-body text-ink-70">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!cart || cart.items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-16 px-24 py-96 text-center">
         <h1 className="font-display text-heading-1 tracking-display text-ink">Your bag is empty</h1>
         <Link href="/shop/new-in" className="font-body text-body text-ink underline decoration-1 underline-offset-4">
           Start shopping
         </Link>
-      </div>
-    );
-  }
-
-  if (orderNumber) {
-    return (
-      <div className="mx-auto flex max-w-[560px] flex-col items-center gap-16 px-24 py-96 text-center">
-        <h1 className="font-display text-heading-1 tracking-display text-ink">Thank you — order placed</h1>
-        <p className="font-body text-body text-ink-70">
-          Order <span className="font-medium text-ink tabular-nums">{orderNumber}</span>. A confirmation is on its way to
-          your email.
-        </p>
-        <p className="max-w-[46ch] font-body text-body-sm text-mukaish">
-          We pack within 24 hours, hand off to courier, and deliver in 2–4 days across the UAE. Track anytime with your
-          order number and email.
-        </p>
-        <Button asChild variant="secondary" className="mt-8">
-          <Link href="/">Continue shopping</Link>
-        </Button>
       </div>
     );
   }
@@ -141,7 +210,14 @@ export default function CheckoutPage() {
         <p className="font-body text-body-sm text-mukaish">Secure checkout</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-32 lg:flex-row lg:items-start lg:gap-48">
+      <form
+        onSubmit={handleSubmit(() => {
+          if (!session) return;
+          placeMutation.mutate(session.sessionId);
+        })}
+        noValidate
+        className="flex flex-col gap-32 lg:flex-row lg:items-start lg:gap-48"
+      >
         <div className="flex flex-1 flex-col gap-16">
           <CheckoutStep
             index={1}
@@ -171,13 +247,21 @@ export default function CheckoutPage() {
                 className="flex-1"
               />
             </div>
+            {createSessionMutation.isError ? (
+              <p role="alert" className="mt-8 font-body text-body-sm text-danger">
+                {createSessionMutation.error instanceof ApiError
+                  ? createSessionMutation.error.message
+                  : 'Could not start checkout. Please try again.'}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="primary"
               className="mt-16"
-              onClick={() => void advanceFrom('contact', CONTACT_FIELDS, 'delivery')}
+              disabled={createSessionMutation.isPending}
+              onClick={() => void handleContinueFromContact()}
             >
-              Continue to delivery
+              {createSessionMutation.isPending ? 'Starting checkout…' : 'Continue to delivery'}
             </Button>
           </CheckoutStep>
 
@@ -212,13 +296,19 @@ export default function CheckoutPage() {
               <Input {...register('makani')} label="Makani number (optional)" />
               {/* No postcode/ZIP field — plan.md §7.2: UAE addressing has none. */}
             </div>
+            {deliveryMutation.isError ? (
+              <p role="alert" className="mt-8 font-body text-body-sm text-danger">
+                {deliveryMutation.error instanceof ApiError ? deliveryMutation.error.message : 'Could not save your address. Please try again.'}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="primary"
               className="mt-16"
-              onClick={() => void advanceFrom('delivery', DELIVERY_FIELDS, 'payment')}
+              disabled={deliveryMutation.isPending}
+              onClick={() => void handleContinueFromDelivery()}
             >
-              Continue to payment
+              {deliveryMutation.isPending ? 'Saving…' : 'Continue to payment'}
             </Button>
           </CheckoutStep>
 
@@ -233,33 +323,98 @@ export default function CheckoutPage() {
             <fieldset className="flex flex-col gap-12">
               <legend className="sr-only">Payment method</legend>
               <PaymentOption
+                value="cod"
+                label="Cash on delivery"
+                description="We'll text an OTP to confirm before the order is placed."
+                checked={paymentMethod === 'cod'}
+                onSelect={() => handleChoosePaymentMethod('cod')}
+              />
+              <PaymentOption
                 value="card"
                 label="Card"
                 description="Visa, Mastercard — 3D Secure"
-                registerProps={register('paymentMethod')}
                 checked={paymentMethod === 'card'}
-              />
-              <PaymentOption
-                value="cod"
-                label="Cash on delivery"
-                description={
-                  isCodAllowed
-                    ? `AED ${(COD_FEE_FILS / 100).toFixed(0)} handling fee. We'll text an OTP to confirm before the order is placed.`
-                    : `Not available above AED ${(COD_MAX_ORDER_FILS / 100).toFixed(0)}.`
-                }
-                registerProps={register('paymentMethod')}
-                checked={paymentMethod === 'cod'}
-                disabled={!isCodAllowed}
+                onSelect={() => handleChoosePaymentMethod('card')}
               />
             </fieldset>
-            <Button type="submit" variant="primary" className="mt-16 w-full" disabled={isSubmitting || isPlacingOrder}>
-              {isSubmitting || isPlacingOrder ? 'Placing order…' : 'Place order'}
+
+            {intentMutation.isPending ? (
+              <p className="mt-16 font-body text-body-sm text-mukaish">
+                {paymentMethod === 'cod' ? 'Sending your verification code…' : 'Contacting the card processor…'}
+              </p>
+            ) : null}
+
+            {intentMutation.isError && paymentMethod === 'card' ? (
+              <div className="mt-16 flex flex-col gap-8 border border-garnet/40 bg-garnet/5 p-16">
+                <p className="font-body text-body-sm font-medium text-ink">Card payments are temporarily unavailable</p>
+                <p className="font-body text-body-sm text-mukaish">
+                  {intentMutation.error instanceof ApiError
+                    ? intentMutation.error.message
+                    : 'Card payments are not available right now.'}{' '}
+                  Please use Cash on Delivery instead.
+                </p>
+                <Button type="button" variant="secondary" onClick={() => handleChoosePaymentMethod('cod')}>
+                  Switch to Cash on Delivery
+                </Button>
+              </div>
+            ) : null}
+
+            {intentMutation.isError && paymentMethod === 'cod' ? (
+              <p role="alert" className="mt-16 font-body text-body-sm text-danger">
+                {intentMutation.error instanceof ApiError ? intentMutation.error.message : 'Could not start cash on delivery. Please try again.'}
+              </p>
+            ) : null}
+
+            {paymentMethod === 'cod' && intentMutation.data?.otpRequired && !codOtpVerified ? (
+              <div className="mt-16 flex flex-col gap-8">
+                <label htmlFor="cod-otp" className="font-body text-label font-semibold tracking-label text-ink-70 uppercase">
+                  Enter the 6-digit code sent to your phone
+                </label>
+                <div className="flex gap-8">
+                  <input
+                    id="cod-otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    className="h-[52px] w-[160px] border-0 border-b border-ink-20 bg-nacre px-16 font-body text-body tabular-nums text-ink outline-none focus:border-b-2 focus:border-zamurrad"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={otpCode.length !== 6 || otpMutation.isPending}
+                    onClick={() => session && otpMutation.mutate({ sessionId: session.sessionId, code: otpCode })}
+                  >
+                    {otpMutation.isPending ? 'Verifying…' : 'Verify'}
+                  </Button>
+                </div>
+                {otpMutation.isError ? (
+                  <p role="alert" className="font-body text-body-sm text-danger">
+                    {otpMutation.error instanceof ApiError ? otpMutation.error.message : 'Incorrect code. Please try again.'}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {paymentMethod === 'cod' && codOtpVerified ? (
+              <p className="mt-16 font-body text-body-sm text-success">Phone verified — ready to place your order.</p>
+            ) : null}
+
+            {placeMutation.isError ? (
+              <p role="alert" className="mt-16 font-body text-body-sm text-danger">
+                {placeMutation.error instanceof ApiError ? placeMutation.error.message : 'Could not place your order. Please try again.'}
+              </p>
+            ) : null}
+
+            <Button type="submit" variant="primary" className="mt-16 w-full" disabled={!canPlaceOrder || placeMutation.isPending}>
+              {placeMutation.isPending ? 'Placing order…' : 'Place order'}
             </Button>
           </CheckoutStep>
         </div>
 
         <div className="w-full lg:w-[360px] lg:shrink-0">
-          <OrderSummary locale={locale} isCod={paymentMethod === 'cod'} />
+          <OrderSummary locale={locale} session={session} />
         </div>
       </form>
     </div>
@@ -270,20 +425,18 @@ function PaymentOption({
   value,
   label,
   description,
-  registerProps,
   checked,
-  disabled,
+  onSelect,
 }: {
   value: string;
   label: string;
   description: string;
-  registerProps: UseFormRegisterReturn<'paymentMethod'>;
   checked: boolean;
-  disabled?: boolean;
+  onSelect: () => void;
 }) {
   return (
-    <label className={`flex cursor-pointer items-start gap-12 border p-16 ${checked ? 'border-zamurrad' : 'border-ink-20'} ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}>
-      <input type="radio" value={value} disabled={disabled} className="mt-4 accent-zamurrad" {...registerProps} />
+    <label className={`flex cursor-pointer items-start gap-12 border p-16 ${checked ? 'border-zamurrad' : 'border-ink-20'}`}>
+      <input type="radio" name="paymentMethod" value={value} checked={checked} onChange={onSelect} className="mt-4 accent-zamurrad" />
       <span className="flex flex-col gap-4">
         <span className="font-body text-body font-medium text-ink">{label}</span>
         <span className="font-body text-body-sm text-mukaish">{description}</span>

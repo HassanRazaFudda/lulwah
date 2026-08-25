@@ -2,19 +2,22 @@
 
 import { useMemo, useState } from 'react';
 import { Button, cx } from '@lulwah/ui';
+import { ApiError } from '@/lib/api-client';
+import { rememberCartLineDisplay } from '@/lib/cart-display-cache';
 import type { VariantWithAvailability } from '@/lib/catalog-schemas';
-import { useCartStore } from '@/stores/cart-store';
+import { useAddCartItem } from '@/hooks/use-cart';
 import { QuantityStepper } from './QuantityStepper';
 import { WishlistButton } from './WishlistButton';
 
 /**
  * plan.md §15.4 info column items 5–10: colour/size selection, stock line,
- * quantity + Add to bag, delivery estimator. Client component — the cart
- * mutation itself stays local state (`useCartStore`, see that file's doc
- * comment for the real-cart migration path; no `apps/api` cart module
- * exists yet, out of scope for this workstream) — but the *data* driving
- * it is now the real PDP payload: `variants` is `GET /products/:slug`'s
- * live `VariantWithAvailability[]` (`product.dto.ts`), so the stock line
+ * quantity + Add to bag, delivery estimator. Client component. The cart
+ * mutation is now the real `POST /cart/:cartId/items` (`useAddCartItem`,
+ * `hooks/use-cart.ts`) — a cart is created lazily on first add (`POST
+ * /cart`, cookie round-trips automatically) rather than requiring one to
+ * already exist. The *data* driving colour/size/stock is the real PDP
+ * payload: `variants` is `GET /products/:slug`'s live
+ * `VariantWithAvailability[]` (`product.dto.ts`), so the stock line
  * ("Only N left" / "Sold out") reflects real inventory per the selected
  * colour/size combination, not a single static `totalStock` number.
  *
@@ -56,11 +59,8 @@ export function AddToBagForm({
   brandName,
   title,
   stitchingType,
-  pieceCount,
   image,
   variants,
-  fallbackPriceFils,
-  fallbackCompareAtPriceFils,
 }: AddToBagFormProps) {
   const colorOptions = useMemo(
     () => Array.from(new Set(variants.map((v) => v.options.color).filter((c): c is string => Boolean(c)))),
@@ -75,7 +75,7 @@ export function AddToBagForm({
   const [selectedSize, setSelectedSize] = useState<string | null>(sizeOptions[0] ?? null);
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
-  const addItem = useCartStore((state) => state.addItem);
+  const addCartItem = useAddCartItem();
 
   const matchedVariant: VariantWithAvailability | undefined =
     variants.find(
@@ -84,34 +84,38 @@ export function AddToBagForm({
         (sizeOptions.length === 0 || v.options.size === selectedSize),
     ) ?? variants[0];
 
-  const unitPriceFils = matchedVariant?.priceFils ?? fallbackPriceFils;
-  const compareAtPriceFils = matchedVariant ? matchedVariant.compareAtPriceFils : fallbackCompareAtPriceFils;
   const available = matchedVariant?.available ?? 0;
   const allowBackorder = matchedVariant?.allowBackorder ?? false;
   const inStock = available > 0 || allowBackorder;
   const isLowStock = available > 0 && available <= LOW_STOCK_THRESHOLD;
   const maxQuantity = Math.max(1, Math.min(10, available > 0 ? available : allowBackorder ? 10 : 1));
 
-  function handleAddToBag() {
+  async function handleAddToBag() {
     if (!matchedVariant) return;
-    const lineId = [productSlug, selectedColor, selectedSize].filter(Boolean).join('::');
-    addItem({
-      id: lineId,
+    // Remember display data for this variant — the cart API's `CartItem`
+    // has no title/brand/image snapshot (see `cart-display-cache.ts`'s doc
+    // comment); this is purely cosmetic, never consulted for price/qty.
+    rememberCartLineDisplay(matchedVariant.id, {
       productSlug,
       brandName,
       title,
       image,
       stitchingType,
-      pieceCount,
       ...(selectedColor ? { colorName: selectedColor } : {}),
       ...(selectedSize ? { size: selectedSize } : {}),
-      quantity,
-      unitPriceFils,
-      compareAtPriceFils,
     });
-    setJustAdded(true);
-    window.setTimeout(() => setJustAdded(false), 2400);
+    try {
+      await addCartItem.mutateAsync({ variantId: matchedVariant.id, quantity });
+      setJustAdded(true);
+      window.setTimeout(() => setJustAdded(false), 2400);
+    } catch {
+      // Surfaced via `addCartItem.error` below — swallow here so the
+      // rejection doesn't also reach the console as an unhandled promise.
+    }
   }
+
+  const addToBagErrorMessage =
+    addCartItem.error instanceof ApiError ? addCartItem.error.message : addCartItem.error ? 'Something went wrong. Please try again.' : null;
 
   return (
     <div className="flex flex-col gap-24">
@@ -183,11 +187,22 @@ export function AddToBagForm({
 
       <div className="flex items-center gap-16">
         <QuantityStepper label="Quantity" quantity={quantity} onChange={setQuantity} max={maxQuantity} />
-        <Button type="button" onClick={handleAddToBag} disabled={!inStock} className="flex-1">
-          {justAdded ? 'Added to bag' : inStock ? 'Add to bag' : 'Sold out'}
+        <Button
+          type="button"
+          onClick={() => void handleAddToBag()}
+          disabled={!inStock || addCartItem.isPending}
+          className="flex-1"
+        >
+          {addCartItem.isPending ? 'Adding…' : justAdded ? 'Added to bag' : inStock ? 'Add to bag' : 'Sold out'}
         </Button>
         <WishlistButton productSlug={productSlug} productTitle={title} />
       </div>
+
+      {addToBagErrorMessage ? (
+        <p role="alert" className="font-body text-body-sm text-danger">
+          {addToBagErrorMessage}
+        </p>
+      ) : null}
 
       <p className="font-body text-body-sm text-mukaish">
         Order in the next few hours for delivery by {estimateDeliveryDayLabel()} to Dubai.
