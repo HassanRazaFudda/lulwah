@@ -1,4 +1,5 @@
 import type { AdjustStockInput, InventoryItem, StockMovement } from '@lulwah/contracts';
+import { SYSTEM_ACTOR_ID } from '../../config/constants.js';
 import { AppError, notFoundError } from '../../shared/errors.js';
 import { assertPermission } from '../identity/identity.policy.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
@@ -114,6 +115,78 @@ export async function adminListMovements(actor: AuthenticatedUser, variantId: st
   assertPermission(actor, 'inventory.read');
   const { movements, total } = await repo.listMovementsForVariant(variantId, page, limit);
   return { movements: movements.map(toStockMovementDto), total };
+}
+
+// ---------------------------------------------------------------------------
+// Reservation flow — plan.md §8.4. Exported for `cart`'s exclusive use
+// (plan.md §5.3's module-boundary rule: `cart` never touches
+// `InventoryItemModel`/`StockMovementModel` directly, only these two
+// functions). Both are called while `cart` holds its own
+// `lock:variant:{id}` Redis lock — see `cart/reservation-store.ts` — so the
+// read-then-write below is safe from a concurrent reservation on the same
+// variant without needing a Mongo transaction.
+// ---------------------------------------------------------------------------
+
+export interface ReserveStockResult {
+  ok: boolean;
+  /** `available` after a successful reservation, or the current
+   *  (unchanged) `available` when `ok: false` — plan.md §8.4: "return
+   *  OUT_OF_STOCK with the max available qty." */
+  available: number;
+  item?: InventoryItem;
+}
+
+/** Increments `reserved` by `quantity` if `available >= quantity` (or the
+ *  variant allows backorder). Never throws for insufficient stock — the
+ *  caller (cart) decides what an `ok: false` becomes (plan.md §8.4:
+ *  `OUT_OF_STOCK`, not a 5xx). */
+export async function reserveStock(params: { variantId: string; quantity: number; reference: string }): Promise<ReserveStockResult> {
+  const item = await repo.findInventoryItemByVariantId(params.variantId);
+  if (!item) throw notFoundError('Inventory record not found for this variant.');
+
+  if (item.available < params.quantity && !item.allowBackorder) {
+    return { ok: false, available: item.available };
+  }
+
+  const beforeAvailable = item.available;
+  const { item: updated } = await repo.applyReservationAndRecordMovement({
+    item,
+    quantity: params.quantity,
+    reference: params.reference,
+    performedBy: SYSTEM_ACTOR_ID,
+  });
+
+  const deltaAvailable = updated.available - beforeAvailable;
+  if (deltaAvailable !== 0) await applyProductStockDelta(updated.productId.toString(), deltaAvailable);
+  emitStockEvents(updated.variantId.toString(), updated.productId.toString(), beforeAvailable, updated.available, updated.lowStockThreshold);
+
+  return { ok: true, available: updated.available, item: toInventoryItemDto(updated) };
+}
+
+/** Decrements `reserved` by `quantity` — the mirror of `reserveStock`.
+ *  Idempotent-safe: `reserved` is clamped at 0 at the repository layer, so
+ *  a caller that (rarely — see `cart/reservation-store.ts`'s sweep race
+ *  note) releases an already-released reservation can never make
+ *  `available` exceed `onHand`. Returns `null` (no-op) if the variant's
+ *  inventory record no longer exists — the sweep job hits this if a
+ *  variant was deleted out from under a stale reservation. */
+export async function releaseStock(params: { variantId: string; quantity: number; reference: string }): Promise<InventoryItem | null> {
+  const item = await repo.findInventoryItemByVariantId(params.variantId);
+  if (!item) return null;
+
+  const beforeAvailable = item.available;
+  const { item: updated } = await repo.applyReleaseAndRecordMovement({
+    item,
+    quantity: params.quantity,
+    reference: params.reference,
+    performedBy: SYSTEM_ACTOR_ID,
+  });
+
+  const deltaAvailable = updated.available - beforeAvailable;
+  if (deltaAvailable !== 0) await applyProductStockDelta(updated.productId.toString(), deltaAvailable);
+  emitStockEvents(updated.variantId.toString(), updated.productId.toString(), beforeAvailable, updated.available, updated.lowStockThreshold);
+
+  return toInventoryItemDto(updated);
 }
 
 function emitStockEvents(variantId: string, productId: string, before: number, after: number, lowStockThreshold: number): void {

@@ -86,6 +86,69 @@ export async function deleteInventoryItem(variantId: string): Promise<InventoryI
   return InventoryItemModel.findOneAndDelete({ variantId }).exec();
 }
 
+/**
+ * `cart`'s reservation flow (plan.md §8.4) — same pairing rule as
+ * `applyAdjustmentAndRecordMovement`: `reserved`/`available` never move
+ * without a `StockMovement` row alongside them. Caller (`inventory.service
+ * .ts#reserveStock`) has already verified `available >= quantity` (or
+ * `allowBackorder`) while holding the cart module's per-variant Redis lock
+ * — this function trusts that and just executes the write.
+ */
+export async function applyReservationAndRecordMovement(params: {
+  item: InventoryItemHydratedDoc;
+  quantity: number;
+  reference: string;
+  performedBy: string;
+}): Promise<{ item: InventoryItemHydratedDoc; movement: StockMovementHydratedDoc }> {
+  const { item, quantity, reference, performedBy } = params;
+  const beforeAvailable = item.available;
+  item.reserved += quantity;
+  item.available = item.onHand - item.reserved;
+  await item.save();
+  const movement = await StockMovementModel.create({
+    variantId: item.variantId,
+    type: 'reservation',
+    quantity: -quantity, // signed: a reservation reduces what's available for sale
+    before: beforeAvailable,
+    after: item.available,
+    reason: `Reserved for cart ${reference}`,
+    performedBy,
+  });
+  return { item, movement };
+}
+
+/**
+ * Releases a previously-reserved quantity — either an explicit cart
+ * mutation (item removed, quantity reduced) or the sweep job reclaiming a
+ * lapsed reservation (plan.md §8.4). `reserved` is clamped at 0 (mirrors
+ * `product.repository.ts#applyStockDelta`'s `$max: [0, ...]` clamp) so a
+ * caller that (rarely, see `reservation-store.ts`'s doc comment on its one
+ * accepted race window) attempts to release more than is actually reserved
+ * can never push `available` above `onHand`.
+ */
+export async function applyReleaseAndRecordMovement(params: {
+  item: InventoryItemHydratedDoc;
+  quantity: number;
+  reference: string;
+  performedBy: string;
+}): Promise<{ item: InventoryItemHydratedDoc; movement: StockMovementHydratedDoc }> {
+  const { item, quantity, reference, performedBy } = params;
+  const beforeAvailable = item.available;
+  item.reserved = Math.max(0, item.reserved - quantity);
+  item.available = item.onHand - item.reserved;
+  await item.save();
+  const movement = await StockMovementModel.create({
+    variantId: item.variantId,
+    type: 'release',
+    quantity: item.available - beforeAvailable, // signed: a release increases what's available
+    before: beforeAvailable,
+    after: item.available,
+    reason: `Released from cart ${reference}`,
+    performedBy,
+  });
+  return { item, movement };
+}
+
 export interface InventoryListFilter {
   // `| undefined` explicitly, not just `?:` — callers pass an already
   // Zod-parsed query object straight through (`inventory.controller.ts`),

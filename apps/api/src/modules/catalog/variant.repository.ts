@@ -41,6 +41,10 @@ export async function findVariantsByProductId(productId: string): Promise<Varian
   return VariantModel.find({ productId, ...NOT_DELETED }).sort({ sortOrder: 1, createdAt: 1 }).exec();
 }
 
+export async function findVariantsByIds(ids: readonly string[]): Promise<VariantHydratedDoc[]> {
+  return VariantModel.find({ _id: { $in: ids }, ...NOT_DELETED }).exec();
+}
+
 /** Every active variant's price — the input to `product.service.ts`'s
  *  `priceRange` recompute (plan.md §7.5: "Denormalised for listing
  *  performance ... recomputed on write"). */

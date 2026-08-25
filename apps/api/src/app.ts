@@ -13,9 +13,13 @@ import type { RateLimitStore } from './shared/rate-limit.js';
 import { createIdentityRouter } from './modules/identity/identity.routes.js';
 import { createCatalogRouter } from './modules/catalog/catalog.routes.js';
 import { createInventoryRouter } from './modules/inventory/inventory.routes.js';
+import { createCartRouter } from './modules/cart/cart.routes.js';
+import type { ReservationStore } from './modules/cart/reservation-store.js';
+import { createPricingRouter } from './modules/pricing/pricing.routes.js';
 
 export interface CreateAppOptions {
   rateLimitStore: RateLimitStore;
+  reservationStore: ReservationStore;
 }
 
 /**
@@ -35,7 +39,7 @@ export interface CreateAppOptions {
  * is what lets `supertest` drive the app directly in tests without a
  * real socket (`server.ts` is the only place that listens).
  */
-export function createApp({ rateLimitStore }: CreateAppOptions): Express {
+export function createApp({ rateLimitStore, reservationStore }: CreateAppOptions): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -62,6 +66,8 @@ export function createApp({ rateLimitStore }: CreateAppOptions): Express {
   app.use(API_PREFIX, createIdentityRouter({ rateLimitStore }));
   app.use(API_PREFIX, createCatalogRouter());
   app.use(API_PREFIX, createInventoryRouter());
+  app.use(API_PREFIX, createCartRouter({ reservationStore }));
+  app.use(API_PREFIX, createPricingRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet

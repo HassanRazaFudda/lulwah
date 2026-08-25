@@ -11,27 +11,49 @@ export type ListCollectionsQuery = z.infer<typeof ListCollectionsQuery>;
 export const ListCollectionsResponse = z.object({ collections: z.array(Collection) });
 export type ListCollectionsResponse = z.infer<typeof ListCollectionsResponse>;
 
-export const AdminCreateCollectionInput = z.object({
+/** See `brand.dto.ts`'s doc comment: built from `BASE_FIELDS` (no
+ *  `.default()`) rather than `AdminCreateCollectionInput.partial()`, which
+ *  was silently resetting `status` to `'draft'` and `layout` to `'grid'`
+ *  (among other fields) on every partial `PATCH` — e.g. editing a live
+ *  collection's `sortOrder` alone would have silently un-published it. */
+const BASE_FIELDS = {
   name: z.string().min(1),
-  nameAr: z.string().default(''),
+  nameAr: z.string(),
   slug: z.string().min(1).optional(),
-  subtitle: z.string().default(''),
-  descriptionEn: z.string().default(''),
-  descriptionAr: z.string().default(''),
-  brandId: objectId.nullable().default(null),
+  subtitle: z.string(),
+  descriptionEn: z.string(),
+  descriptionAr: z.string(),
+  brandId: objectId.nullable(),
   type: CollectionType,
-  productIds: z.array(objectId).default([]),
-  heroImage: MediaRef.nullable().default(null),
-  launchAt: z.coerce.date().nullable().default(null),
-  endAt: z.coerce.date().nullable().default(null),
-  status: CollectionStatus.default('draft'),
-  layout: CollectionLayout.default('grid'),
-  sortOrder: z.number().int().default(0),
-  isFeatured: z.boolean().default(false),
+  productIds: z.array(objectId),
+  heroImage: MediaRef.nullable(),
+  launchAt: z.coerce.date().nullable(),
+  endAt: z.coerce.date().nullable(),
+  status: CollectionStatus,
+  layout: CollectionLayout,
+  sortOrder: z.number().int(),
+  isFeatured: z.boolean(),
+};
+
+export const AdminCreateCollectionInput = z.object({
+  ...BASE_FIELDS,
+  nameAr: BASE_FIELDS.nameAr.default(''),
+  subtitle: BASE_FIELDS.subtitle.default(''),
+  descriptionEn: BASE_FIELDS.descriptionEn.default(''),
+  descriptionAr: BASE_FIELDS.descriptionAr.default(''),
+  brandId: BASE_FIELDS.brandId.default(null),
+  productIds: BASE_FIELDS.productIds.default([]),
+  heroImage: BASE_FIELDS.heroImage.default(null),
+  launchAt: BASE_FIELDS.launchAt.default(null),
+  endAt: BASE_FIELDS.endAt.default(null),
+  status: BASE_FIELDS.status.default('draft'),
+  layout: BASE_FIELDS.layout.default('grid'),
+  sortOrder: BASE_FIELDS.sortOrder.default(0),
+  isFeatured: BASE_FIELDS.isFeatured.default(false),
 });
 export type AdminCreateCollectionInput = z.infer<typeof AdminCreateCollectionInput>;
 
-export const AdminUpdateCollectionInput = AdminCreateCollectionInput.partial();
+export const AdminUpdateCollectionInput = z.object(BASE_FIELDS).partial();
 export type AdminUpdateCollectionInput = z.infer<typeof AdminUpdateCollectionInput>;
 
 export const AdminCollectionResponse = z.object({ collection: Collection });

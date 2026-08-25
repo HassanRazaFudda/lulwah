@@ -13,19 +13,33 @@ export type AdminListCategoriesQuery = z.infer<typeof AdminListCategoriesQuery>;
 export const ListCategoriesResponse = z.object({ categories: z.array(Category) });
 export type ListCategoriesResponse = z.infer<typeof ListCategoriesResponse>;
 
-export const AdminCreateCategoryInput = z.object({
+/** See `brand.dto.ts`'s doc comment: built from `BASE_FIELDS` (no
+ *  `.default()`) rather than `AdminCreateCategoryInput.partial()`, which
+ *  was silently resetting `isActive`/`showInMenu` to `true` and
+ *  `parentId`/`image` to `null` on every partial `PATCH`. */
+const BASE_FIELDS = {
   name: z.string().min(1),
-  nameAr: z.string().default(''),
+  nameAr: z.string(),
   slug: z.string().min(1).optional(),
-  parentId: objectId.nullable().default(null),
-  image: MediaRef.nullable().default(null),
-  sortOrder: z.number().int().default(0),
-  isActive: z.boolean().default(true),
-  showInMenu: z.boolean().default(true),
+  parentId: objectId.nullable(),
+  image: MediaRef.nullable(),
+  sortOrder: z.number().int(),
+  isActive: z.boolean(),
+  showInMenu: z.boolean(),
+};
+
+export const AdminCreateCategoryInput = z.object({
+  ...BASE_FIELDS,
+  nameAr: BASE_FIELDS.nameAr.default(''),
+  parentId: BASE_FIELDS.parentId.default(null),
+  image: BASE_FIELDS.image.default(null),
+  sortOrder: BASE_FIELDS.sortOrder.default(0),
+  isActive: BASE_FIELDS.isActive.default(true),
+  showInMenu: BASE_FIELDS.showInMenu.default(true),
 });
 export type AdminCreateCategoryInput = z.infer<typeof AdminCreateCategoryInput>;
 
-export const AdminUpdateCategoryInput = AdminCreateCategoryInput.partial();
+export const AdminUpdateCategoryInput = z.object(BASE_FIELDS).partial();
 export type AdminUpdateCategoryInput = z.infer<typeof AdminUpdateCategoryInput>;
 
 export const AdminCategoryResponse = z.object({ category: Category });

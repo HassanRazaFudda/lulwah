@@ -95,55 +95,97 @@ export type RelatedProductsResponse = z.infer<typeof RelatedProductsResponse>;
 // Admin — create/update product
 // ---------------------------------------------------------------------------
 
-export const AdminCreateProductInput = z.object({
+/**
+ * `AdminUpdateProductInput` is built from `BASE_FIELDS` (no `.default()`
+ * anywhere in it) rather than `AdminCreateProductInput.partial()` — a real
+ * bug found while building the `pricing`/`cart`/`identity` (address)
+ * modules' own admin/customer CRUD DTOs, which hit the exact same pattern
+ * (see `pricing.dto.ts`'s doc comment for the mechanism): Zod's
+ * `.partial()` still fires a field's own `.default(...)` when that key is
+ * entirely absent from the input, so `PATCH /admin/products/:id
+ * { basePriceFils: 25000 }` was silently resetting `status` to `'draft'`,
+ * `badges` to `[]`, `isFeatured`/`isNewIn`/`isExclusive` to `false`,
+ * `compareAtPriceFils` to `null`, etc. on every partial edit that didn't
+ * happen to also re-send those fields — e.g. editing just the price on a
+ * live, featured, on-sale product would have silently un-published it,
+ * un-featured it, and dropped its compare-at price.
+ */
+const BASE_PRODUCT_FIELDS = {
   title: z.string().min(1),
-  titleAr: z.string().default(''),
+  titleAr: z.string(),
   slug: z.string().min(1).optional(), // auto-generated from `title` when omitted
   articleCode: z.string().min(1),
   brandId: objectId,
-  categoryIds: z.array(objectId).default([]),
+  categoryIds: z.array(objectId),
   primaryCategoryId: objectId,
-  collectionIds: z.array(objectId).default([]),
+  collectionIds: z.array(objectId),
 
   stitchingType: StitchingType,
-  pieceCount: PieceCount.nullable().default(null),
-  pieces: z.array(ProductPiece).default([]),
+  pieceCount: PieceCount.nullable(),
+  pieces: z.array(ProductPiece),
   fabric: Fabric,
-  secondaryFabrics: z.array(Fabric).default([]),
-  work: z.array(Work).default([]),
-  dupattaType: DupattaType.nullable().default(null),
-  occasion: z.array(Occasion).default([]),
+  secondaryFabrics: z.array(Fabric),
+  work: z.array(Work),
+  dupattaType: DupattaType.nullable(),
+  occasion: z.array(Occasion),
   season: Season,
   colorName: z.string().min(1),
   colorFamily: ColorFamily,
-  colorHex: z
-    .string()
-    .regex(/^#[0-9a-f]{6}$/i)
-    .default('#000000'),
-  neckline: z.string().nullable().default(null),
-  sleeveLength: z.string().nullable().default(null),
-  shirtLength: z.string().nullable().default(null),
-  fit: z.string().nullable().default(null),
+  colorHex: z.string().regex(/^#[0-9a-f]{6}$/i),
+  neckline: z.string().nullable(),
+  sleeveLength: z.string().nullable(),
+  shirtLength: z.string().nullable(),
+  fit: z.string().nullable(),
 
   basePriceFils: Fils,
-  compareAtPriceFils: Fils.nullable().default(null),
-  taxClass: z.enum(['standard_5', 'zero']).default('standard_5'),
-  isCustomStitchAvailable: z.boolean().default(false),
-  stitchingPriceFils: Fils.nullable().default(null),
-  stitchingLeadDays: z.number().int().positive().nullable().default(null),
+  compareAtPriceFils: Fils.nullable(),
+  taxClass: z.enum(['standard_5', 'zero']),
+  isCustomStitchAvailable: z.boolean(),
+  stitchingPriceFils: Fils.nullable(),
+  stitchingLeadDays: z.number().int().positive().nullable(),
 
-  status: ProductStatus.default('draft'),
-  publishAt: z.coerce.date().nullable().default(null),
-  isFeatured: z.boolean().default(false),
-  isNewIn: z.boolean().default(false),
-  isExclusive: z.boolean().default(false),
-  badges: z.array(ProductBadge).default([]),
+  status: ProductStatus,
+  publishAt: z.coerce.date().nullable(),
+  isFeatured: z.boolean(),
+  isNewIn: z.boolean(),
+  isExclusive: z.boolean(),
+  badges: z.array(ProductBadge),
 
-  seo: ProductSeo.partial().default({}),
+  seo: ProductSeo.partial(),
+};
+
+export const AdminCreateProductInput = z.object({
+  ...BASE_PRODUCT_FIELDS,
+  titleAr: BASE_PRODUCT_FIELDS.titleAr.default(''),
+  categoryIds: BASE_PRODUCT_FIELDS.categoryIds.default([]),
+  collectionIds: BASE_PRODUCT_FIELDS.collectionIds.default([]),
+  pieceCount: BASE_PRODUCT_FIELDS.pieceCount.default(null),
+  pieces: BASE_PRODUCT_FIELDS.pieces.default([]),
+  secondaryFabrics: BASE_PRODUCT_FIELDS.secondaryFabrics.default([]),
+  work: BASE_PRODUCT_FIELDS.work.default([]),
+  dupattaType: BASE_PRODUCT_FIELDS.dupattaType.default(null),
+  occasion: BASE_PRODUCT_FIELDS.occasion.default([]),
+  colorHex: BASE_PRODUCT_FIELDS.colorHex.default('#000000'),
+  neckline: BASE_PRODUCT_FIELDS.neckline.default(null),
+  sleeveLength: BASE_PRODUCT_FIELDS.sleeveLength.default(null),
+  shirtLength: BASE_PRODUCT_FIELDS.shirtLength.default(null),
+  fit: BASE_PRODUCT_FIELDS.fit.default(null),
+  compareAtPriceFils: BASE_PRODUCT_FIELDS.compareAtPriceFils.default(null),
+  taxClass: BASE_PRODUCT_FIELDS.taxClass.default('standard_5'),
+  isCustomStitchAvailable: BASE_PRODUCT_FIELDS.isCustomStitchAvailable.default(false),
+  stitchingPriceFils: BASE_PRODUCT_FIELDS.stitchingPriceFils.default(null),
+  stitchingLeadDays: BASE_PRODUCT_FIELDS.stitchingLeadDays.default(null),
+  status: BASE_PRODUCT_FIELDS.status.default('draft'),
+  publishAt: BASE_PRODUCT_FIELDS.publishAt.default(null),
+  isFeatured: BASE_PRODUCT_FIELDS.isFeatured.default(false),
+  isNewIn: BASE_PRODUCT_FIELDS.isNewIn.default(false),
+  isExclusive: BASE_PRODUCT_FIELDS.isExclusive.default(false),
+  badges: BASE_PRODUCT_FIELDS.badges.default([]),
+  seo: BASE_PRODUCT_FIELDS.seo.default({}),
 });
 export type AdminCreateProductInput = z.infer<typeof AdminCreateProductInput>;
 
-export const AdminUpdateProductInput = AdminCreateProductInput.partial();
+export const AdminUpdateProductInput = z.object(BASE_PRODUCT_FIELDS).partial();
 export type AdminUpdateProductInput = z.infer<typeof AdminUpdateProductInput>;
 
 export const AdminProductResponse = z.object({ product: Product });
@@ -166,17 +208,32 @@ export type AdminProductDetailResponse = z.infer<typeof AdminProductDetailRespon
 // Admin — variants
 // ---------------------------------------------------------------------------
 
-export const AdminCreateVariantInput = z.object({
+/** Same `BASE_FIELDS`-without-`.default()` fix as `AdminUpdateProductInput`
+ *  above — the previous `AdminCreateVariantInput.omit(...).partial()` was
+ *  silently resetting `isActive` to `true` and `mediaIds` to `[]` on every
+ *  partial variant edit. */
+const BASE_VARIANT_FIELDS = {
   sku: z.string().min(1),
-  barcode: z.string().nullable().default(null),
-  options: VariantOptions.default({}),
+  barcode: z.string().nullable(),
+  options: VariantOptions,
   priceFils: Fils,
-  compareAtPriceFils: Fils.nullable().default(null),
-  costPriceFils: Fils.nullable().default(null),
+  compareAtPriceFils: Fils.nullable(),
+  costPriceFils: Fils.nullable(),
   weightGrams: z.number().int().positive(),
-  mediaIds: z.array(z.string()).default([]),
-  isActive: z.boolean().default(true),
-  sortOrder: z.number().int().default(0),
+  mediaIds: z.array(z.string()),
+  isActive: z.boolean(),
+  sortOrder: z.number().int(),
+};
+
+export const AdminCreateVariantInput = z.object({
+  ...BASE_VARIANT_FIELDS,
+  barcode: BASE_VARIANT_FIELDS.barcode.default(null),
+  options: BASE_VARIANT_FIELDS.options.default({}),
+  compareAtPriceFils: BASE_VARIANT_FIELDS.compareAtPriceFils.default(null),
+  costPriceFils: BASE_VARIANT_FIELDS.costPriceFils.default(null),
+  mediaIds: BASE_VARIANT_FIELDS.mediaIds.default([]),
+  isActive: BASE_VARIANT_FIELDS.isActive.default(true),
+  sortOrder: BASE_VARIANT_FIELDS.sortOrder.default(0),
   /** Seeds the variant's `InventoryItem.onHand` at creation — the only
    *  point this module lets a caller set stock without going through
    *  `POST /admin/inventory/:variantId/adjust`'s movement trail, since
@@ -185,7 +242,7 @@ export const AdminCreateVariantInput = z.object({
 });
 export type AdminCreateVariantInput = z.infer<typeof AdminCreateVariantInput>;
 
-export const AdminUpdateVariantInput = AdminCreateVariantInput.omit({ initialOnHand: true }).partial();
+export const AdminUpdateVariantInput = z.object(BASE_VARIANT_FIELDS).partial();
 export type AdminUpdateVariantInput = z.infer<typeof AdminUpdateVariantInput>;
 
 export const AdminVariantResponse = z.object({ variant: Variant });

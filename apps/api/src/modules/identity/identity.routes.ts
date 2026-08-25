@@ -3,6 +3,7 @@ import { AUTH_RATE_LIMIT } from '../../config/constants.js';
 import { createRateLimiter } from '../../shared/rate-limit.js';
 import type { RateLimitStore } from '../../shared/rate-limit.js';
 import * as controller from './identity.controller.js';
+import * as addressController from './address.controller.js';
 import { requireAuth, requirePermission } from './identity.policy.js';
 
 export interface IdentityRouterDeps {
@@ -47,6 +48,17 @@ export function createIdentityRouter({ rateLimitStore }: IdentityRouterDeps): Ro
   admin.get('/users', requireAuth(), requirePermission('users.read'), controller.listUsers);
   admin.patch('/users/:id/role', requireAuth(), requirePermission('users.write'), controller.updateUserRole);
   router.use('/admin', admin);
+
+  // plan.md §9.4 — Address lives under `identity` (§5.3's module-ownership
+  // table), auth-required throughout: a logged-in customer manages only
+  // their own address book.
+  const me = Router();
+  me.get('/addresses', requireAuth(), addressController.list);
+  me.post('/addresses', requireAuth(), addressController.create);
+  me.patch('/addresses/:id', requireAuth(), addressController.update);
+  me.delete('/addresses/:id', requireAuth(), addressController.remove);
+  me.post('/addresses/:id/default', requireAuth(), addressController.setDefault);
+  router.use('/me', me);
 
   return router;
 }

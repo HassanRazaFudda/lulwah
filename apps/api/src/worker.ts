@@ -2,18 +2,27 @@ import type { Job } from 'bullmq';
 import { env } from './shared/env.js';
 import { logger } from './shared/logger.js';
 import { connect as connectMongo } from './shared/mongo.js';
+import { connect as connectRedis } from './shared/redis.js';
+import { RedisReservationStore } from './modules/cart/reservation-store.js';
 import { createDomainEventsWorker } from './jobs/domain-events.queue.js';
 import { MEILISEARCH_SYNC_JOB_NAME, processMeilisearchSyncJob } from './jobs/meilisearch-sync.job.js';
+import { RESERVATION_SWEEP_JOB_NAME, processReservationSweepJob } from './jobs/reservation-sweep.job.js';
 
-/** Job name → handler dispatch table (plan.md §5.5). One entry today;
- *  more side-effect handlers (email, webhook, analytics, cache
- *  invalidation) land here as the modules that own them are built. */
-async function processDomainEventJob(job: Job): Promise<void> {
-  if (job.name === MEILISEARCH_SYNC_JOB_NAME) {
-    await processMeilisearchSyncJob(job.data as unknown);
-    return;
-  }
-  logger.warn({ jobId: job.id, jobName: job.name }, 'domain-events: no registered handler for this job name');
+/** Job name → handler dispatch table (plan.md §5.5). More side-effect
+ *  handlers (email, webhook, analytics, cache invalidation) land here as
+ *  the modules that own them are built. */
+function createDomainEventJobProcessor(reservationStore: InstanceType<typeof RedisReservationStore>) {
+  return async function processDomainEventJob(job: Job): Promise<void> {
+    if (job.name === MEILISEARCH_SYNC_JOB_NAME) {
+      await processMeilisearchSyncJob(job.data as unknown);
+      return;
+    }
+    if (job.name === RESERVATION_SWEEP_JOB_NAME) {
+      await processReservationSweepJob(reservationStore);
+      return;
+    }
+    logger.warn({ jobId: job.id, jobName: job.name }, 'domain-events: no registered handler for this job name');
+  };
 }
 
 /**
@@ -30,7 +39,8 @@ async function main(): Promise<void> {
   }
 
   await connectMongo();
-  const worker = createDomainEventsWorker(processDomainEventJob);
+  const reservationStore = new RedisReservationStore(connectRedis());
+  const worker = createDomainEventsWorker(createDomainEventJobProcessor(reservationStore));
   worker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err }, 'domain-events job failed');
   });

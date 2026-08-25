@@ -125,6 +125,26 @@ export async function getProductByIdAdmin(actor: AuthenticatedUser, id: string):
   return toProductDto(doc);
 }
 
+/**
+ * Read-only, no RBAC — for other modules' cross-module calls through
+ * `catalog`'s exported service interface (plan.md §5.3), never its
+ * repository/model directly. `cart` uses this to snapshot a line's current
+ * price/status; `pricing`'s discount engine wrapper uses it to resolve a
+ * discount's product/category/brand/collection eligibility. Same pattern
+ * as `inventory.service.ts#getInventoryForVariants` — a plain internal
+ * read, not a public HTTP-facing endpoint.
+ */
+export async function getProductsByIds(ids: readonly string[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+  const docs = await productRepo.findProductsByIds(ids);
+  return docs.map(toProductDto);
+}
+
+export async function getProductById(id: string): Promise<Product | null> {
+  const doc = await productRepo.findProductById(id);
+  return doc ? toProductDto(doc) : null;
+}
+
 /** Fires the events the sibling Meilisearch-sync job listens for (plan.md
  *  §5.3). Both event names get the same handler treatment on the
  *  subscriber side (re-read the product, upsert-or-remove based on its

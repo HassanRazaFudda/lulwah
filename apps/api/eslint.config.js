@@ -18,7 +18,7 @@ import { baseConfig } from '@lulwah/config/eslint.config.js';
 // — no `except`, so no ambiguity about what it's relative to. With only
 // one module today that list is empty (nothing to forbid yet); it fills
 // in correctly the moment a second module name is added to MODULES.
-const MODULES = ['identity', 'catalog', 'inventory'];
+const MODULES = ['identity', 'catalog', 'inventory', 'cart', 'pricing'];
 
 const moduleBoundaryZones = MODULES.map((moduleName) => ({
   target: `./src/modules/${moduleName}/**/*`,

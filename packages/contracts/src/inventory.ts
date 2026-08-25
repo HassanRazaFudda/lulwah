@@ -14,7 +14,7 @@ export const InventoryItem = z.object({
   productId: objectId,
   sku: z.string(),
   onHand: z.number().int(),
-  reserved: z.number().int().nonnegative(), // unused until `cart` exists (P2) — always 0 today
+  reserved: z.number().int().nonnegative(), // held by in-flight carts — `cart` module's reservation flow (§8.4)
   available: z.number().int(), // computed = onHand - reserved, stored + indexed
   lowStockThreshold: z.number().int().nonnegative(),
   allowBackorder: z.boolean(),
@@ -24,12 +24,16 @@ export const InventoryItem = z.object({
 export type InventoryItem = z.infer<typeof InventoryItem>;
 
 /**
- * StockMovement — plan.md §7.8, append-only audit trail. Scoped to this
- * phase's manual/warehouse movement types only; `reservation`/`release`/
- * `sale` belong to the cart/checkout reservation flow (§8.4), which is P2
- * scope, not built here.
+ * StockMovement — plan.md §7.8, append-only audit trail. `reservation`/
+ * `release` back the cart module's Redis-locked reservation flow (§8.4) —
+ * `reserved` incrementing on add-to-cart and decrementing on release-by-
+ * mutation or the sweep job. `sale` (reservation → committed stock at
+ * order placement) still awaits the `order` module, not built in this
+ * phase — the enum carries it now so a later addition isn't a schema
+ * migration, matching this file's own precedent for `reservation`/
+ * `release` themselves.
  */
-export const StockMovementType = z.enum(['purchase', 'adjustment', 'return', 'damage', 'transfer']);
+export const StockMovementType = z.enum(['purchase', 'adjustment', 'return', 'damage', 'transfer', 'reservation', 'release', 'sale']);
 export type StockMovementType = z.infer<typeof StockMovementType>;
 
 export const StockMovement = z.object({

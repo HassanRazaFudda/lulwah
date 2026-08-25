@@ -5,13 +5,14 @@ import { Schema, model, type HydratedDocument, type Types } from 'mongoose';
  * "Stock is never set by a bare `$set`. Every change writes a movement.
  * This is how we answer 'where did 4 pieces go?' six months later." — no
  * repository function in this module ever updates `InventoryItem.onHand`
- * without also inserting one of these (see `inventory.repository.ts`).
+ * OR `.reserved` without also inserting one of these.
  *
- * `reservation`/`release`/`sale` from the full plan enum belong to the
- * cart/checkout reservation flow (§8.4) — P2 scope, not built here (see
- * `@lulwah/contracts`' `inventory.ts` doc comment).
+ * `reservation`/`release` back the `cart` module's Redis-locked
+ * reservation flow (§8.4) — see `applyReservationAndRecordMovement`/
+ * `applyReleaseAndRecordMovement` below. `sale` (reservation → committed
+ * stock at order placement) still awaits the `order` module.
  */
-export type StockMovementType = 'purchase' | 'adjustment' | 'return' | 'damage' | 'transfer';
+export type StockMovementType = 'purchase' | 'adjustment' | 'return' | 'damage' | 'transfer' | 'reservation' | 'release' | 'sale';
 
 export interface StockMovementDoc {
   _id: Types.ObjectId;
@@ -28,7 +29,7 @@ export interface StockMovementDoc {
 const stockMovementSchema = new Schema<StockMovementDoc>(
   {
     variantId: { type: Schema.Types.ObjectId, required: true },
-    type: { type: String, enum: ['purchase', 'adjustment', 'return', 'damage', 'transfer'], required: true },
+    type: { type: String, enum: ['purchase', 'adjustment', 'return', 'damage', 'transfer', 'reservation', 'release', 'sale'], required: true },
     quantity: { type: Number, required: true },
     before: { type: Number, required: true },
     after: { type: Number, required: true },

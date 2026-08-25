@@ -5,13 +5,31 @@ import type { AuthenticatedUser } from '../identity/identity.policy.js';
 import * as productRepo from './product.repository.js';
 import * as variantRepo from './variant.repository.js';
 import { catalogEvents } from './catalog.events.js';
-import { toProductDto, toAdminVariantDto } from './product.mapper.js';
+import { toProductDto, toAdminVariantDto, toVariantDto } from './product.mapper.js';
 import { recomputePriceRange } from './product.service.js';
 import type { AdminCreateVariantInput, AdminProductDetailResponse, AdminUpdateVariantInput } from './product.dto.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 
 function isDuplicateSkuError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 11000;
+}
+
+/**
+ * Read-only, no RBAC — `cart`'s exclusive cross-module entry point into
+ * `catalog` for variant data (plan.md §5.3: exported service function,
+ * never `VariantModel` directly). Only active, non-deleted variants — a
+ * cart line referencing a deactivated/deleted variant is exactly the
+ * `VARIANT_INACTIVE` case the cart module's own service handles.
+ */
+export async function getVariantsByIds(ids: readonly string[]): Promise<Variant[]> {
+  if (ids.length === 0) return [];
+  const docs = await variantRepo.findVariantsByIds(ids);
+  return docs.map(toVariantDto);
+}
+
+export async function getVariantById(id: string): Promise<Variant | null> {
+  const doc = await variantRepo.findVariantById(id);
+  return doc ? toVariantDto(doc) : null;
 }
 
 async function requireProduct(productId: string) {
