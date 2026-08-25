@@ -106,7 +106,14 @@ export const OrderDiscountLine = z.object({
 export type OrderDiscountLine = z.infer<typeof OrderDiscountLine>;
 
 export const OrderShippingMethod = z.object({
-  id: objectId,
+  // Not a Mongo ref: plan.md §21 ships R1 shipping as a flat per-emirate
+  // rate table (`checkout/shipping-rates.ts`), not a `shipping_zones`
+  // collection, so this is a stable string identifier ('standard') rather
+  // than an ObjectId. The Mongoose schema (`order.model.ts`) already
+  // types this field as a plain String; this was a contract-only mismatch
+  // that made every real order's shippingMethod fail strict validation on
+  // any client that actually parses the response against this schema.
+  id: z.string(),
   name: z.string(),
   carrier: z.string(),
   etaMinDays: z.number().int().nonnegative(),
