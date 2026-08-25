@@ -1,38 +1,82 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { Skeleton } from '../../components/Skeleton';
 import { StatTile } from '../../components/StatTile';
-import { useDashboardQuery } from '../../lib/queries';
+import { useDashboardStatsQuery } from '../../lib/queries';
+import { useAdminInventoryQuery } from '../../lib/queries/inventory';
+import { useAdminOrdersQuery } from '../../lib/queries/orders';
+import { useAdminProductsQuery } from '../../lib/queries/products';
+
+/** The four "needs action" statuses from plan.md §11.1's Dashboard row,
+ *  each backed by a real, separately-filtered `GET /admin/orders?status=`
+ *  call (see `lib/queries/orders.ts`) rather than the old placeholder
+ *  array's `.filter()` over a hand-written order list. `limit` on that
+ *  endpoint caps at 100 (`AdminListOrdersQuery`), so a count here is exact
+ *  up to 100 orders in a given status — comfortably enough for this app's
+ *  current live-order volume; a true unbounded count would need the
+ *  response `meta.total` this app's `apiRequest` wrapper doesn't currently
+ *  surface (see that file's doc comment). */
+const ACTION_STATUSES = [
+  { status: 'pending_payment' as const, label: 'Pending payment' },
+  { status: 'ready_to_ship' as const, label: 'Ready to ship, not yet shipped' },
+  { status: 'stitching' as const, label: 'With tailor (stitching)' },
+  { status: 'returned' as const, label: 'Return requests to inspect' },
+];
 
 /**
- * plan.md §11.1 Dashboard row. Static-shaped placeholder data (via
- * `lib/queries.ts`'s simulated fetch) — the point of this screen in the
- * skeleton is the layout structure (stat tiles / needs-action / low-stock),
- * not real analytics wiring, which is a separate reports/API workstream.
+ * plan.md §11.1 Dashboard row. The stat tiles (revenue/orders/AOV/
+ * conversion) stay placeholder — no `reports`/analytics API module exists
+ * yet (see `lib/queries.ts`'s doc comment). "Orders needing action" and
+ * "Low stock" are real now: the `order` and `inventory` modules both merged
+ * this phase, and both list endpoints already had exactly the server-side
+ * filters (`status`, `lowStock`) this panel needs — no new API work
+ * required, just pointing existing real hooks at this page.
  */
 export default function DashboardPage() {
-  const { data, isLoading } = useDashboardQuery();
+  const { data: statsData, isLoading: statsLoading } = useDashboardStatsQuery();
+
+  // Hooks called unconditionally, one per fixed status — not a loop over a
+  // dynamic list, so this stays within the rules of hooks.
+  const pendingPayment = useAdminOrdersQuery({ status: 'pending_payment' });
+  const readyToShip = useAdminOrdersQuery({ status: 'ready_to_ship' });
+  const stitching = useAdminOrdersQuery({ status: 'stitching' });
+  const returned = useAdminOrdersQuery({ status: 'returned' });
+  const actionQueries = [pendingPayment, readyToShip, stitching, returned];
+  const actionItemsLoading = actionQueries.some((q) => q.isLoading);
+
+  const actionItems = ACTION_STATUSES.map((entry, index) => ({
+    id: entry.status,
+    label: entry.label,
+    count: actionQueries[index]?.data?.length ?? 0,
+    filterHref: `/orders?status=${entry.status}`,
+  }));
+
+  const { data: lowStockItems, isLoading: lowStockLoading } = useAdminInventoryQuery({ lowStock: true });
+  const { data: products } = useAdminProductsQuery();
+  const productById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
+  const lowStockRows = (lowStockItems ?? []).slice(0, 6);
 
   return (
     <div className="flex flex-col gap-24">
       <PageHeader title="Dashboard" description="Today · 7d · 30d — placeholder period, no date picker in this skeleton." />
 
       <div className="grid grid-cols-2 gap-16 lg:grid-cols-4">
-        {isLoading || !data
+        {statsLoading || !statsData
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[96px]" />)
-          : data.stats.map((stat) => <StatTile key={stat.id} {...stat} />)}
+          : statsData.map((stat) => <StatTile key={stat.id} {...stat} />)}
       </div>
 
       <div className="grid grid-cols-1 gap-16 lg:grid-cols-2">
         <Panel title="Orders needing action">
-          {isLoading || !data ? (
+          {actionItemsLoading ? (
             <Skeleton className="h-[120px]" />
           ) : (
             <ul className="flex flex-col gap-8">
-              {data.actionItems.map((item) => (
+              {actionItems.map((item) => (
                 <li key={item.id}>
                   <Link
                     href={item.filterHref}
@@ -48,15 +92,19 @@ export default function DashboardPage() {
         </Panel>
 
         <Panel title="Low stock">
-          {isLoading || !data ? (
+          {lowStockLoading ? (
             <Skeleton className="h-[120px]" />
+          ) : lowStockRows.length === 0 ? (
+            <p className="text-body-sm text-ink-70">Nothing under its low-stock threshold right now.</p>
           ) : (
             <ul className="flex flex-col gap-8">
-              {data.lowStock.map((item) => (
-                <li key={item.sku} className="flex items-center justify-between border-b border-line py-8 text-body-sm">
-                  <span className="text-ink">{item.title}</span>
+              {lowStockRows.map((item) => (
+                <li key={item.variantId} className="flex items-center justify-between border-b border-line py-8 text-body-sm">
+                  <span className="text-ink">
+                    {productById.get(item.productId)?.title ?? 'Unknown product'} — {item.sku}
+                  </span>
                   <span className={item.onHand === 0 ? 'font-semibold text-danger' : 'font-semibold text-warning'}>
-                    {item.onHand} / {item.threshold}
+                    {item.onHand} / {item.lowStockThreshold}
                   </span>
                 </li>
               ))}

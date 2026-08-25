@@ -32,9 +32,9 @@ const MOVEMENT_COLUMNS: DataTableColumn<StockMovement>[] = [
  * variant" ("the API exposes this — link to it"). There's no single-item
  * `GET /admin/inventory/:variantId` endpoint (only list + adjust +
  * movements — see `inventory.routes.ts`), so the item itself is found in
- * the already-fetched list query by `variantId`, the same
- * fetch-all-then-find-by-id shape `lib/queries.ts`'s `findAdminOrderById`
- * already uses for order detail.
+ * the already-fetched list query by `variantId` — a fetch-all-then-find-by-
+ * id shape, unlike order detail (`GET /admin/orders/:id` — a real
+ * single-item endpoint exists there, see `lib/queries/orders.ts`).
  */
 export default function InventoryDetailPage() {
   const params = useParams();
