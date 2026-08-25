@@ -1,0 +1,529 @@
+import { Types } from 'mongoose';
+import type { AddressSnapshot, DiscountType, Order, OrderStatus, PaymentMethod, Size } from '@lulwah/contracts';
+import { env } from '../../shared/env.js';
+import { AppError } from '../../shared/errors.js';
+import { notifyStub } from '../../shared/notify.js';
+import { SYSTEM_ACTOR_ID } from '../../config/constants.js';
+import { assertPermission } from '../identity/identity.policy.js';
+import type { AuthenticatedUser } from '../identity/identity.policy.js';
+import * as identityService from '../identity/identity.service.js';
+import * as inventoryService from '../inventory/inventory.service.js';
+import * as pricingService from '../pricing/pricing.service.js';
+import * as productService from '../catalog/product.service.js';
+import * as repo from './order.repository.js';
+import type { AdminOrderListFilter, CreateOrderInput } from './order.repository.js';
+import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
+import { toOrderDto, toPublicTrackingView } from './order.mapper.js';
+import type { PublicOrderTrackingView } from './order.mapper.js';
+import { assertValidOrderStatusTransition } from './order.transitions.js';
+import { orderEvents } from './order.events.js';
+import type { UpdateOrderStatusInput } from './order.dto.js';
+
+/**
+ * ALL order business rules live here, framework-free (no `express` — plan.md
+ * §5.4). `order.controller.ts` only parses/shapes; `order.repository.ts`
+ * only persists.
+ */
+
+function isDuplicateKeyError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 11000;
+}
+
+function toOrderAddressSubdoc(a: AddressSnapshot): OrderDoc['shippingAddress'] {
+  return {
+    label: a.label,
+    firstName: a.firstName,
+    lastName: a.lastName,
+    phone: { countryCode: a.phone.countryCode, number: a.phone.number },
+    emirate: a.emirate,
+    city: a.city,
+    area: a.area,
+    buildingName: a.buildingName,
+    apartment: a.apartment ?? null,
+    street: a.street ?? null,
+    landmark: a.landmark,
+    makani: a.makani,
+    poBox: a.poBox,
+    country: a.country,
+    geo: a.geo,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Order creation — `checkout`'s exclusive entry point (plan.md §5.3): never
+// `OrderModel` directly, only this function.
+// ---------------------------------------------------------------------------
+
+export interface CreateOrderFromCheckoutItemInput {
+  productId: string;
+  variantId: string;
+  sku: string;
+  titleSnapshot: string;
+  brandSnapshot: string;
+  imageSnapshot: string;
+  optionsSnapshot: { size?: Size; color?: string; pieceCount?: 1 | 2 | 3 };
+  stitchingTypeSnapshot: string;
+  articleCodeSnapshot: string;
+  quantity: number;
+  unitPriceFils: number;
+  lineDiscountFils: number;
+  lineTaxFils: number;
+  lineTotalFils: number;
+}
+
+export interface CreateOrderFromCheckoutDiscountInput {
+  discountId: string;
+  code: string | null;
+  type: DiscountType;
+  amountFils: number;
+  appliedTo: 'order' | 'shipping' | 'item';
+  itemId?: string;
+}
+
+export interface CreateOrderFromCheckoutInput {
+  idempotencyKey: string;
+  checkoutSessionId: string;
+  userId: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  items: CreateOrderFromCheckoutItemInput[];
+  subtotalFils: number;
+  discountTotalFils: number;
+  shippingFils: number;
+  codFeeFils: number;
+  taxFils: number;
+  grandTotalFils: number;
+  discounts: CreateOrderFromCheckoutDiscountInput[];
+  shippingAddress: AddressSnapshot;
+  billingAddress: AddressSnapshot;
+  shippingMethod: { id: string; name: string; carrier: string; etaMinDays: number; etaMaxDays: number; priceFils: number };
+  paymentMethod: PaymentMethod;
+  paymentGateway: string | null;
+  paymentIntentId: string | null;
+  codVerifiedAt: Date | null;
+  customerNote?: string | undefined;
+}
+
+/**
+ * `POST /checkout/session/:id/place` (via `checkout.service.ts`). Creates
+ * the order snapshot (plan.md §7.11's rule — every field below is a copy,
+ * never a reference `catalog` would need to be re-read to resolve) and
+ * starts the plan.md §8.7 state machine at `pending_payment`.
+ *
+ * COD orders auto-advance to `confirmed` immediately (see the doc comment
+ * on the `if (input.paymentMethod === 'cod')` branch below) — every other
+ * method waits for its payment confirmation (a Stripe webhook) to make
+ * that same transition.
+ *
+ * `created: false` on the return value means this call was itself a
+ * retried request that raced past `checkout`'s Redis-side idempotency
+ * check (see `checkout.service.ts#place`'s doc comment) — the
+ * `idempotencyKey` unique index on `OrderModel` is the correctness
+ * backstop that makes that race harmless: the duplicate insert fails, and
+ * the original order (not a second one) is returned instead.
+ */
+export async function createOrderFromCheckout(input: CreateOrderFromCheckoutInput): Promise<{ order: Order; created: boolean }> {
+  const orderNumber = await repo.nextOrderNumber();
+  const now = new Date();
+
+  const doc: CreateOrderInput = {
+    orderNumber,
+    userId: input.userId,
+    guestEmail: input.guestEmail,
+    guestPhone: input.guestPhone,
+    items: input.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId,
+      sku: item.sku,
+      titleSnapshot: item.titleSnapshot,
+      brandSnapshot: item.brandSnapshot,
+      imageSnapshot: item.imageSnapshot,
+      optionsSnapshot: { size: item.optionsSnapshot.size ?? null, color: item.optionsSnapshot.color ?? null, pieceCount: item.optionsSnapshot.pieceCount ?? null },
+      stitchingTypeSnapshot: item.stitchingTypeSnapshot,
+      articleCodeSnapshot: item.articleCodeSnapshot,
+      quantity: item.quantity,
+      unitPriceFils: item.unitPriceFils,
+      lineDiscountFils: item.lineDiscountFils,
+      lineTaxFils: item.lineTaxFils,
+      lineTotalFils: item.lineTotalFils,
+      stitching: null,
+      fulfilmentStatus: 'pending',
+      returnedQty: 0,
+      refundedFils: 0,
+    })),
+    currency: 'AED',
+    subtotalFils: input.subtotalFils,
+    discountTotalFils: input.discountTotalFils,
+    shippingFils: input.shippingFils,
+    codFeeFils: input.codFeeFils,
+    taxFils: input.taxFils,
+    taxRate: env.VAT_RATE,
+    taxInclusive: true,
+    grandTotalFils: input.grandTotalFils,
+    paidFils: 0,
+    refundedFils: 0,
+    balanceDueFils: input.grandTotalFils,
+    discounts: input.discounts.map((d) => ({ discountId: d.discountId, code: d.code, type: d.type, amountFils: d.amountFils, appliedTo: d.appliedTo, itemId: d.itemId ?? null })),
+    status: 'pending_payment',
+    statusHistory: [{ from: null, to: 'pending_payment', at: now, byUserId: SYSTEM_ACTOR_ID, note: undefined, notifiedCustomer: false }],
+    paymentStatus: 'unpaid',
+    fulfilmentStatus: 'unfulfilled',
+    shippingAddress: toOrderAddressSubdoc(input.shippingAddress),
+    billingAddress: toOrderAddressSubdoc(input.billingAddress),
+    shippingMethod: input.shippingMethod,
+    payment: { method: input.paymentMethod, gateway: input.paymentGateway, intentId: input.paymentIntentId, transactionIds: [], last4: null, brand: null, threeDSResult: null, codVerifiedAt: input.codVerifiedAt },
+    customerNote: input.customerNote,
+    tags: [],
+    placedAt: now,
+    confirmedAt: null,
+    shippedAt: null,
+    deliveredAt: null,
+    cancelledAt: null,
+    cancelReason: null,
+    invoiceNumber: null,
+    checkoutSessionId: input.checkoutSessionId,
+    idempotencyKey: input.idempotencyKey,
+    internalNotes: [],
+  };
+
+  let created: OrderHydratedDoc;
+  try {
+    created = await repo.createOrder(doc);
+  } catch (err) {
+    if (isDuplicateKeyError(err)) {
+      const existing = await repo.findOrderByIdempotencyKey(input.idempotencyKey);
+      if (existing) return { order: toOrderDto(existing), created: false };
+    }
+    throw err;
+  }
+
+  // COD: there is no online payment step to await — the "payment" for a
+  // cash-on-delivery order happens physically at the doorstep, and the
+  // 6-digit OTP already verified before this call proves the customer's
+  // intent to buy. Confirming immediately (rather than sitting at
+  // `pending_payment` forever, since nothing will ever complete that
+  // payment online) is the documented, deliberate reading of plan.md
+  // §8.7's state machine for this payment method. Card/other methods stay
+  // `pending_payment` until their gateway confirms — see `payment.service
+  // .ts`'s webhook handler.
+  if (input.paymentMethod === 'cod') {
+    await applyTransition(created, 'confirmed', {
+      actorId: SYSTEM_ACTOR_ID,
+      isSuperAdminForce: false,
+      note: 'COD order — confirmed automatically, no online payment to await.',
+      notifyCustomer: true,
+    });
+  }
+
+  return { order: toOrderDto(created), created: true };
+}
+
+// ---------------------------------------------------------------------------
+// Status transitions — plan.md §8.7, the state machine.
+// ---------------------------------------------------------------------------
+
+interface TransitionOptions {
+  actorId: string;
+  isSuperAdminForce: boolean;
+  note: string | undefined;
+  notifyCustomer: boolean;
+  trackingNumber?: string | undefined;
+  carrier?: string | undefined;
+}
+
+const ITEM_STATUS_BY_ORDER_STATUS: Partial<Record<OrderStatus, OrderDoc['items'][number]['fulfilmentStatus']>> = {
+  processing: 'processing',
+  stitching: 'stitching',
+  ready_to_ship: 'packed',
+  shipped: 'shipped',
+  delivered: 'delivered',
+  cancelled: 'cancelled',
+  returned: 'returned',
+};
+
+/** The single place `order.status` ever changes (plan.md §8.7.4:
+ *  "immutable" audit trail — every change appends, never edits, a
+ *  `statusHistory` entry). Runs the DB-local side effects synchronously
+ *  (timestamps, item statuses, a shipment record), then publishes the
+ *  cross-module side effects as domain events (plan.md §8.7.3) — see
+ *  `order.events.ts`'s doc comment on why those are `await`ed here rather
+ *  than fire-and-forget. */
+async function applyTransition(order: OrderHydratedDoc, to: OrderStatus, opts: TransitionOptions): Promise<OrderHydratedDoc> {
+  const from = order.status;
+  assertValidOrderStatusTransition(from, to, { isForcedBySuperAdmin: opts.isSuperAdminForce, reason: opts.note });
+
+  order.status = to;
+  order.statusHistory.push({ from, to, at: new Date(), byUserId: opts.actorId, note: opts.note, notifiedCustomer: opts.notifyCustomer });
+
+  const itemStatus = ITEM_STATUS_BY_ORDER_STATUS[to];
+  if (itemStatus) {
+    for (const item of order.items) item.fulfilmentStatus = itemStatus;
+  }
+
+  if (to === 'confirmed') order.confirmedAt = new Date();
+  if (to === 'shipped') {
+    order.shippedAt = new Date();
+    order.fulfilmentStatus = 'fulfilled';
+    if (opts.trackingNumber && opts.carrier) {
+      order.shipments.push({
+        _id: new Types.ObjectId(),
+        carrier: opts.carrier,
+        trackingNumber: opts.trackingNumber,
+        items: order.items.map((i) => ({ itemId: i._id, quantity: i.quantity })),
+        shippedAt: new Date(),
+        deliveredAt: null,
+        events: [],
+      });
+    }
+  }
+  if (to === 'delivered') order.deliveredAt = new Date();
+  if (to === 'cancelled') {
+    order.cancelledAt = new Date();
+    order.cancelReason = opts.note ?? null;
+  }
+  if (to === 'returned') order.fulfilmentStatus = 'returned';
+
+  await repo.save(order);
+
+  const orderId = order._id.toString();
+  if (to === 'confirmed') await orderEvents.publish('order.confirmed', { orderId });
+  if (to === 'cancelled') await orderEvents.publish('order.cancelled', { orderId });
+  if (to === 'delivered') await orderEvents.publish('order.delivered', { orderId });
+  await orderEvents.publish('order.status_changed', { orderId, orderNumber: order.orderNumber, from, to, notifyCustomer: opts.notifyCustomer });
+
+  return order;
+}
+
+/** `PATCH /admin/orders/:id/status` — plan.md §9.7, the status flag
+ *  endpoint the admin UI's `StatusTransitionDropdown` calls.
+ *  `super_admin` may force any transition outside `order.transitions.ts`'s
+ *  table (audited, with the mandatory reason `assertValidOrderStatusTransition`
+ *  enforces) — every other role is constrained to it. */
+export async function updateOrderStatus(actor: AuthenticatedUser, orderId: string, input: UpdateOrderStatusInput): Promise<Order> {
+  assertPermission(actor, 'orders.status.update');
+  const order = await repo.findOrderById(orderId);
+  if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+
+  const updated = await applyTransition(order, input.status, {
+    actorId: actor.id,
+    isSuperAdminForce: actor.role === 'super_admin',
+    note: input.note,
+    notifyCustomer: input.notifyCustomer,
+    trackingNumber: input.trackingNumber,
+    carrier: input.carrier,
+  });
+  return toOrderDto(updated);
+}
+
+/**
+ * `payment` module's exclusive entry point for its Stripe webhook handler
+ * (plan.md §5.3, §9.6) — never `OrderModel` directly. Records the card
+ * charge's outcome on `payment`/money fields (which the generic
+ * `applyTransition` doesn't know how to touch — a webhook is the one place
+ * this codebase learns a card charge actually settled) and drives the
+ * matching `pending_payment → confirmed` / `pending_payment → failed`
+ * transition in one step, so `order.confirmed`'s side effects (stock
+ * commit, invoice number, discount usage) fire exactly the same way they
+ * do for a COD order's auto-confirmation.
+ */
+export async function recordCardPaymentResult(paymentIntentId: string, result: 'succeeded' | 'failed', chargeId?: string): Promise<Order | null> {
+  const order = await repo.findOrderByPaymentIntentId(paymentIntentId);
+  if (!order) return null;
+  // Idempotent against a re-delivered webhook for the same event: once the
+  // order has left `pending_payment`, there is nothing left for this
+  // function to do (a valid transition is required either way — a second
+  // "succeeded" webhook attempting `pending_payment → confirmed` on an
+  // already-`confirmed` order would fail `assertValidOrderStatusTransition`
+  // otherwise, unnecessarily). `payment.service.ts`'s webhook idempotency
+  // store is the primary guard; this is a second, cheap line of defense.
+  if (order.status !== 'pending_payment') return toOrderDto(order);
+
+  if (result === 'succeeded') {
+    order.paymentStatus = 'paid';
+    order.paidFils = order.grandTotalFils;
+    order.balanceDueFils = 0;
+    if (chargeId) order.payment.transactionIds.push(chargeId);
+    await repo.save(order);
+    const updated = await applyTransition(order, 'confirmed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Stripe payment confirmed.', notifyCustomer: true });
+    return toOrderDto(updated);
+  }
+
+  order.paymentStatus = 'failed';
+  await repo.save(order);
+  const updated = await applyTransition(order, 'failed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Stripe payment failed.', notifyCustomer: true });
+  return toOrderDto(updated);
+}
+
+/** Internal system-driven transition — `payment` module's Stripe webhook
+ *  handler calls this to move a card order `pending_payment → confirmed`
+ *  (payment succeeded) or `pending_payment → failed` (payment failed),
+ *  attributed to `SYSTEM_ACTOR_ID` (plan.md's own sentinel for exactly
+ *  this — see `config/constants.ts`). Not exposed over HTTP. */
+export async function transitionOrderStatusAsSystem(orderId: string, to: OrderStatus, note: string): Promise<Order | null> {
+  const order = await repo.findOrderById(orderId);
+  if (!order) return null;
+  const updated = await applyTransition(order, to, { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note, notifyCustomer: true });
+  return toOrderDto(updated);
+}
+
+// ---------------------------------------------------------------------------
+// Side-effect listeners — plan.md §8.7.3. Registered once, at module load,
+// right alongside the transition function that publishes them (the
+// structural separation plan.md's "not inline" asks for — see `order
+// .events.ts`'s doc comment).
+// ---------------------------------------------------------------------------
+
+orderEvents.subscribe('order.confirmed', async ({ orderId }) => {
+  const order = await repo.findOrderById(orderId);
+  if (!order) return;
+
+  for (const item of order.items) {
+    await inventoryService.commitReservedSale({ variantId: item.variantId.toString(), quantity: item.quantity, reference: order.orderNumber });
+  }
+
+  order.invoiceNumber = `INV-${order.orderNumber}`;
+
+  const discountIds = new Set(order.discounts.map((d) => d.discountId.toString()));
+  for (const id of discountIds) await pricingService.incrementDiscountUsage(id);
+
+  for (const item of order.items) await productService.incrementSoldCount(item.productId.toString(), item.quantity);
+
+  await repo.save(order);
+});
+
+orderEvents.subscribe('order.cancelled', async ({ orderId }) => {
+  const order = await repo.findOrderById(orderId);
+  if (!order) return;
+
+  // A sale was only ever committed once the order reached `confirmed` (see
+  // `applyTransition`'s `confirmedAt` write) — a cancellation before that
+  // point (still `pending_payment`) never converted the reservation, so it
+  // only needs releasing, not reversing.
+  const saleWasCommitted = order.confirmedAt !== null;
+  for (const item of order.items) {
+    if (saleWasCommitted) {
+      await inventoryService.restockCancelledSale({ variantId: item.variantId.toString(), quantity: item.quantity, reference: order.orderNumber });
+    } else {
+      await inventoryService.releaseStock({ variantId: item.variantId.toString(), quantity: item.quantity, reference: order.orderNumber });
+    }
+  }
+
+  const discountIds = new Set(order.discounts.map((d) => d.discountId.toString()));
+  for (const id of discountIds) await pricingService.decrementDiscountUsage(id);
+});
+
+orderEvents.subscribe('order.delivered', async ({ orderId }) => {
+  const order = await repo.findOrderById(orderId);
+  if (!order) return;
+  // COD: cash is collected at the door on delivery — this is the moment
+  // that payment is actually settled. Card payments were already marked
+  // `paid` when the gateway confirmed (see `payment.service.ts`).
+  if (order.payment.method === 'cod' && order.paymentStatus !== 'paid') {
+    order.paymentStatus = 'paid';
+    order.paidFils = order.grandTotalFils;
+    order.balanceDueFils = 0;
+    await repo.save(order);
+  }
+});
+
+orderEvents.subscribe('order.status_changed', async ({ orderId, orderNumber, to, notifyCustomer }) => {
+  if (!notifyCustomer) return;
+  const order = await repo.findOrderById(orderId);
+  if (!order) return;
+
+  let email = order.guestEmail;
+  let phone = order.guestPhone;
+  if (order.userId) {
+    const user = await identityService.me(order.userId.toString()).catch(() => null);
+    email = email ?? user?.email ?? null;
+    phone = phone ?? user?.phone?.number ?? null;
+  }
+
+  if (email) notifyStub({ channel: 'email', to: email, template: `order-status-${to}`, data: { orderNumber, status: to } });
+  if (phone) notifyStub({ channel: 'sms', to: phone, template: `order-status-${to}`, data: { orderNumber, status: to } });
+});
+
+// ---------------------------------------------------------------------------
+// Reads — admin (plan.md §9.7) + customer-facing (`/me`, guest tracking).
+// ---------------------------------------------------------------------------
+
+export async function adminListOrders(actor: AuthenticatedUser, filter: AdminOrderListFilter, page: number, limit: number): Promise<{ orders: Order[]; total: number }> {
+  assertPermission(actor, 'orders.read');
+  const { orders, total } = await repo.adminListOrders(filter, page, limit);
+  return { orders: orders.map(toOrderDto), total };
+}
+
+export async function adminGetOrder(actor: AuthenticatedUser, id: string): Promise<Order> {
+  assertPermission(actor, 'orders.read');
+  const order = await repo.findOrderById(id);
+  if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+  return toOrderDto(order);
+}
+
+/** `POST /admin/orders/:id/notes` — plan.md §9.7. Internal-only, never
+ *  visible to the customer (see `order.model.ts`'s `internalNotes` doc
+ *  comment). */
+export async function addAdminNote(actor: AuthenticatedUser, id: string, note: string): Promise<Order> {
+  assertPermission(actor, 'orders.status.update');
+  const order = await repo.findOrderById(id);
+  if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+  order.internalNotes.push({ note, byUserId: new Types.ObjectId(actor.id), at: new Date() });
+  await repo.save(order);
+  return toOrderDto(order);
+}
+
+/**
+ * `checkout`'s exclusive read for idempotent `place` replays (plan.md
+ * §9.5) — see `checkout.service.ts#place`'s doc comment. Re-derives from
+ * Mongo's own unique index rather than trusting Redis's cached id blindly,
+ * so a stale/lost Redis record can never point a replay at the wrong (or a
+ * no-longer-existent) order.
+ */
+export async function getOrderByIdempotencyKey(key: string): Promise<Order | null> {
+  const order = await repo.findOrderByIdempotencyKey(key);
+  return order ? toOrderDto(order) : null;
+}
+
+/** `checkout`'s exclusive read for the discount engine's `isFirstOrder`
+ *  condition (plan.md §8.3) — cart-phase computes this defensively as
+ *  `false` (no `order` module existed yet to ask); `checkout`/`place` can
+ *  finally answer it for real. */
+export async function hasPriorOrders(userId: string): Promise<boolean> {
+  const { total } = await repo.listOrdersForUser(userId, 1, 1);
+  return total > 0;
+}
+
+export async function getMyOrders(userId: string, page: number, limit: number): Promise<{ orders: Order[]; total: number }> {
+  const { orders, total } = await repo.listOrdersForUser(userId, page, limit);
+  return { orders: orders.map(toOrderDto), total };
+}
+
+export async function getMyOrderByNumber(userId: string, orderNumber: string): Promise<Order> {
+  const order = await repo.findOrderByOrderNumberForUser(orderNumber, userId);
+  if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+  return toOrderDto(order);
+}
+
+/** `GET /orders/track` — plan.md §8.7.5. No login: the order number plus
+ *  the email/phone on file together stand in for authentication. Rate-
+ *  limited at the router (`order.routes.ts`, reusing `shared/rate-limit.ts`)
+ *  so this can't be used to brute-force either fact. */
+export async function trackOrder(orderNumber: string, emailOrPhone: string): Promise<PublicOrderTrackingView> {
+  const order = await repo.findOrderByOrderNumber(orderNumber);
+  const notFound = () => new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'We could not find an order matching those details.' });
+  if (!order) throw notFound();
+
+  let email = order.guestEmail;
+  let phone = order.guestPhone;
+  if (order.userId) {
+    const user = await identityService.me(order.userId.toString()).catch(() => null);
+    email = email ?? user?.email ?? null;
+    phone = phone ?? user?.phone?.number ?? null;
+  }
+
+  const needle = emailOrPhone.trim().toLowerCase();
+  const matches = (email && email.toLowerCase() === needle) || (phone && phone.toLowerCase() === needle);
+  if (!matches) throw notFound();
+
+  return toPublicTrackingView(order);
+}

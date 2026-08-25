@@ -5,6 +5,7 @@ import { connect as connectMongo } from './shared/mongo.js';
 import { connect as connectRedis } from './shared/redis.js';
 import { RedisRateLimitStore } from './shared/rate-limit.js';
 import { RedisReservationStore } from './modules/cart/reservation-store.js';
+import { RedisIdempotencyStore } from './modules/checkout/idempotency-store.js';
 import { createDomainEventsQueue } from './jobs/domain-events.queue.js';
 import { registerMeilisearchSyncOnQueue } from './jobs/meilisearch-sync.job.js';
 import { registerReservationSweepOnQueue } from './jobs/reservation-sweep.job.js';
@@ -19,7 +20,7 @@ import { registerReservationSweepOnQueue } from './jobs/reservation-sweep.job.js
 async function main(): Promise<void> {
   await connectMongo();
   const redis = connectRedis();
-  const app = createApp({ rateLimitStore: new RedisRateLimitStore(redis), reservationStore: new RedisReservationStore(redis) });
+  const app = createApp({ rateLimitStore: new RedisRateLimitStore(redis), reservationStore: new RedisReservationStore(redis), idempotencyStore: new RedisIdempotencyStore(redis) });
 
   // Bridges `catalog`'s in-process events onto the BullMQ `domain-events`
   // queue (plan.md §5.5) — only done here, in the real boot path, never in

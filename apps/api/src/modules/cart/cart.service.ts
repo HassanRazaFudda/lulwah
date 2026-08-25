@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { env } from '../../shared/env.js';
 import { AppError, notFoundError } from '../../shared/errors.js';
-import { CART_COOKIE_TTL_MS, CART_MAX_LINES, CART_MAX_QTY_PER_LINE, CART_RESERVATION_TTL_MS } from '../../config/constants.js';
+import { CART_COOKIE_TTL_MS, CART_MAX_LINES, CART_MAX_QTY_PER_LINE, CART_RESERVATION_TTL_MS, CHECKOUT_RESERVATION_TTL_MS } from '../../config/constants.js';
 import * as repo from './cart.repository.js';
 import type { CartHydratedDoc, CartItemDoc } from './cart.model.js';
 import type { ReservationStore } from './reservation-store.js';
@@ -336,6 +336,65 @@ export async function removeCoupon(cartId: string): Promise<CartResponse> {
   const { itemFlags } = await recalculate(cart);
   await repo.save(cart);
   return toCartResponse(cart, itemFlags);
+}
+
+// ---------------------------------------------------------------------------
+// Checkout hand-off — plan.md §9.5. `checkout`'s exclusive entry point into
+// `cart` for these two operations (plan.md §5.3: exported service function,
+// never `CartModel`/`ReservationStore` internals directly). A narrow,
+// deliberate extension of this module — the same category as `inventory
+// .service.ts`'s `reserveStock`/`releaseStock` being added here for cart's
+// own use one phase ago; `checkout` needs exactly this much of cart's
+// internals and no more.
+// ---------------------------------------------------------------------------
+
+/**
+ * `POST /checkout/session` — plan.md §9.5: "validates the cart's stock is
+ * still available, locks prices, extends the cart's reservation from
+ * `CART_RESERVATION_TTL_MS` to `CHECKOUT_RESERVATION_TTL_MS`." Re-runs the
+ * same `recalculate()` every mutation already goes through (so a price
+ * change or a stock shortfall is caught here too, not just on the next
+ * cart read), then re-marks every line's reservation under the longer
+ * checkout TTL. Throws `OUT_OF_STOCK` for any line whose reservation can't
+ * cover its current quantity — checkout has no business starting from a
+ * cart it can't actually fulfil.
+ */
+export async function extendReservationForCheckout(store: ReservationStore, cartId: string): Promise<CartResponse> {
+  const cart = await requireCart(cartId);
+  if (cart.items.length === 0) {
+    throw new AppError('VALIDATION_FAILED', 400, { messageEn: 'Your cart is empty.' });
+  }
+
+  const { itemFlags } = await recalculate(cart);
+  for (const item of cart.items) {
+    const flags = itemFlags.get(item._id.toString());
+    if (flags && flags.availableStock < item.quantity) {
+      throw new AppError('OUT_OF_STOCK', 409, {
+        messageEn: flags.availableStock > 0 ? `Only ${flags.availableStock} piece${flags.availableStock === 1 ? '' : 's'} of one item in your cart ${flags.availableStock === 1 ? 'is' : 'are'} left.` : 'One of the items in your cart is out of stock.',
+        details: { variantId: item.variantId.toString(), available: flags.availableStock },
+      });
+    }
+  }
+
+  for (const item of cart.items) {
+    const variantId = item.variantId.toString();
+    await store.withVariantLock(variantId, async () => {
+      await store.markReserved(cartId, variantId, CHECKOUT_RESERVATION_TTL_MS);
+    });
+  }
+
+  await repo.save(cart);
+  return toCartResponse(cart, itemFlags);
+}
+
+/** `POST /checkout/session/:id/place` — marks the cart `converted` once an
+ *  order has actually been created from it (plan.md §7.10's `CartStatus`
+ *  already includes this value; nothing set it before `checkout` existed).
+ *  A converted cart no longer resolves via `findCartByCartId`
+ *  (`status: 'active'`-scoped), so it naturally drops out of every
+ *  cart-mutation code path from this point on. */
+export async function convertCart(cartId: string): Promise<void> {
+  await repo.markConverted(cartId);
 }
 
 // ---------------------------------------------------------------------------

@@ -52,3 +52,9 @@ export async function findActiveCartByUserId(userId: string): Promise<CartHydrat
 export async function save(doc: CartHydratedDoc): Promise<CartHydratedDoc> {
   return doc.save();
 }
+
+/** `checkout`'s exclusive write path onto `Cart.status` (plan.md §5.3) —
+ *  see `cart.service.ts#convertCart`'s doc comment. */
+export async function markConverted(cartId: string): Promise<void> {
+  await CartModel.updateOne({ cartId, status: 'active' }, { status: 'converted' }).exec();
+}

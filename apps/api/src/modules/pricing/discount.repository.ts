@@ -120,3 +120,16 @@ export async function toggleDiscountStatus(id: string, status: DiscountDoc['stat
 export async function incrementUsedCount(id: string): Promise<void> {
   await DiscountModel.updateOne({ _id: id }, { $inc: { 'usage.usedCount': 1 } }).exec();
 }
+
+/** The mirror of `incrementUsedCount` — `order` module's cancellation
+ *  side-effect (plan.md §8.7.3: "on → cancelled ... decrement discount
+ *  usage"). An aggregation-pipeline update so the floor at 0 is atomic
+ *  (never a read-then-write race), same clamp pattern as `product
+ *  .repository.ts#applyStockDelta`. */
+export async function decrementUsedCount(id: string): Promise<void> {
+  await DiscountModel.updateOne(
+    { _id: id },
+    [{ $set: { 'usage.usedCount': { $max: [0, { $subtract: ['$usage.usedCount', 1] }] } } }],
+    { updatePipeline: true },
+  ).exec();
+}

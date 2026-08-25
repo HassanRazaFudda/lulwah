@@ -149,6 +149,87 @@ export async function applyReleaseAndRecordMovement(params: {
   return { item, movement };
 }
 
+/**
+ * `order` module's confirmation-side-effect call site (plan.md §8.4: "On
+ * `order.placed`: reservation → sale movement, `onHand -= qty, reserved -=
+ * qty`"). Tracks before/after on `onHand` (unlike `applyReservationAndRecordMovement`/
+ * `applyReleaseAndRecordMovement`, which track `available`) — a sale is
+ * fundamentally physical stock leaving the warehouse, and "where did N
+ * pieces go" (this file's own §7.8 mandate) is best answered in `onHand`
+ * terms for this movement type. `available` is unaffected by construction
+ * (`onHand` and `reserved` both drop by the same amount), so — unlike
+ * every other mutator in this file — this one does NOT call
+ * `applyProductStockDelta`; the storefront-facing `available`/`totalStock`
+ * were already decremented when the line was originally reserved.
+ *
+ * Both `onHand`/`reserved` are clamped at 0 rather than allowed to go
+ * negative — the documented, accepted edge case (see `inventory.service
+ * .ts#commitReservedSale`'s doc comment) where a checkout's extended
+ * reservation genuinely lapsed (sweep job reclaimed it) in the narrow
+ * window before a slow webhook confirmed payment. `quantity` on the
+ * recorded movement reflects the *actual* clamped decrease, not the
+ * nominal request, so the audit trail is never a lie even in that case.
+ */
+export async function applySaleAndRecordMovement(params: {
+  item: InventoryItemHydratedDoc;
+  quantity: number;
+  reference: string;
+  performedBy: string;
+}): Promise<{ item: InventoryItemHydratedDoc; movement: StockMovementHydratedDoc }> {
+  const { item, quantity, reference, performedBy } = params;
+  const beforeOnHand = item.onHand;
+  item.onHand = Math.max(0, item.onHand - quantity);
+  item.reserved = Math.max(0, item.reserved - quantity);
+  item.available = item.onHand - item.reserved;
+  await item.save();
+  const actualDecrease = beforeOnHand - item.onHand;
+  const movement = await StockMovementModel.create({
+    variantId: item.variantId,
+    type: 'sale',
+    quantity: -actualDecrease, // signed: stock leaving onHand
+    before: beforeOnHand,
+    after: item.onHand,
+    reason: `Sold — order ${reference}`,
+    performedBy,
+  });
+  return { item, movement };
+}
+
+/**
+ * The mirror of `applySaleAndRecordMovement` — `order` module's
+ * cancellation side-effect when a sale was already committed (an order
+ * cancelled from `confirmed` or later, per `order.transitions.ts`; a
+ * cancellation still in `pending_payment` never committed a sale in the
+ * first place and uses the plain `releaseStock` reservation path instead).
+ * Recorded as `adjustment`, not `return` — an RMA-style `return` implies
+ * the goods physically left and came back inspected; this is a sale that
+ * never shipped being reversed, an out-of-band correction to `onHand`, not
+ * a customer return.
+ */
+export async function applyCancellationRestockAndRecordMovement(params: {
+  item: InventoryItemHydratedDoc;
+  quantity: number;
+  reference: string;
+  performedBy: string;
+}): Promise<{ item: InventoryItemHydratedDoc; movement: StockMovementHydratedDoc; deltaAvailable: number }> {
+  const { item, quantity, reference, performedBy } = params;
+  const beforeOnHand = item.onHand;
+  const beforeAvailable = item.available;
+  item.onHand = item.onHand + quantity;
+  item.available = item.onHand - item.reserved;
+  await item.save();
+  const movement = await StockMovementModel.create({
+    variantId: item.variantId,
+    type: 'adjustment',
+    quantity,
+    before: beforeOnHand,
+    after: item.onHand,
+    reason: `Order ${reference} cancelled after confirmation — stock restored`,
+    performedBy,
+  });
+  return { item, movement, deltaAvailable: item.available - beforeAvailable };
+}
+
 export interface InventoryListFilter {
   // `| undefined` explicitly, not just `?:` — callers pass an already
   // Zod-parsed query object straight through (`inventory.controller.ts`),

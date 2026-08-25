@@ -236,6 +236,20 @@ export async function applyProductStockDelta(productId: string, deltaTotalStock:
   await productRepo.applyStockDelta(productId, deltaTotalStock);
 }
 
+/**
+ * Order-module call site (plan.md §8.7.3, `order` module — P2 second
+ * half): on confirmation, increment each ordered product's `soldCount` so
+ * `sort=bestselling` (already wired in `product.repository.ts`'s
+ * `SORT_SPECS`) means something. `catalog` never reaches into `order`'s
+ * models, and `order` never reaches into `ProductModel` directly (plan.md
+ * §5.3) — this is the one exported seam. A narrow, deliberate extension to
+ * this file, same category as `inventory.service.ts`'s `reserveStock`/
+ * `releaseStock` being added for `cart` in the previous phase.
+ */
+export async function incrementSoldCount(productId: string, quantity: number): Promise<void> {
+  await productRepo.incrementSoldCount(productId, quantity);
+}
+
 /** Recomputes `priceRange` from the product's own active variants — called
  *  by `variant.service.ts` after any variant create/update/delete that
  *  could move the min/max (plan.md §7.5: "recomputed on write"). Falls

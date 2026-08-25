@@ -22,6 +22,18 @@ export async function getBrandBySlug(slug: string): Promise<Brand> {
   return toBrandDto(doc);
 }
 
+/** Read-only, no RBAC — `checkout`'s cross-module entry point into
+ *  `catalog` for brand names (plan.md §5.3), needed to build an order
+ *  line's `brandSnapshot` (plan.md §7.11) at checkout-session creation.
+ *  Same pattern as `product.service.ts#getProductsByIds`/`variant.service
+ *  .ts#getVariantsByIds` — the repository call already existed
+ *  (`findBrandsByIds`), it just had no service-level export yet. */
+export async function getBrandsByIds(ids: readonly string[]): Promise<Brand[]> {
+  if (ids.length === 0) return [];
+  const docs = await repo.findBrandsByIds(ids);
+  return docs.map(toBrandDto);
+}
+
 export async function adminListBrands(actor: AuthenticatedUser, page: number, limit: number): Promise<{ brands: Brand[]; total: number }> {
   assertPermission(actor, 'products.read');
   const { brands, total } = await repo.listAllBrands(page, limit);

@@ -126,3 +126,22 @@ export async function computeCartDiscounts(input: ComputeCartDiscountsInput): Pr
 
   return applyDiscounts({ lines: input.lines, subtotalFils: input.subtotalFils, couponCodes: input.couponCode ? [input.couponCode] : [] }, discounts, ctx);
 }
+
+/**
+ * `order` module's confirmation/cancellation side-effects (plan.md §8.7.3).
+ * This is the "checked in Redis then Mongo" counter's Mongo half — this
+ * file's own doc comment already flagged that nothing increments
+ * `usage.usedCount` until `order` exists to call it at the moment a
+ * discount is *actually* consumed (not merely applied to a cart, which
+ * must not burn a redemption). Exported rather than reached into
+ * `discount.repository.ts` directly, per plan.md §5.3.
+ */
+export async function incrementDiscountUsage(discountId: string): Promise<void> {
+  await repo.incrementUsedCount(discountId);
+}
+
+/** The mirror of `incrementDiscountUsage` — a cancelled order gives its
+ *  redemption back. */
+export async function decrementDiscountUsage(discountId: string): Promise<void> {
+  await repo.decrementUsedCount(discountId);
+}

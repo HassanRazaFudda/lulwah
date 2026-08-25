@@ -16,10 +16,19 @@ import { createInventoryRouter } from './modules/inventory/inventory.routes.js';
 import { createCartRouter } from './modules/cart/cart.routes.js';
 import type { ReservationStore } from './modules/cart/reservation-store.js';
 import { createPricingRouter } from './modules/pricing/pricing.routes.js';
+import { createOrderRouter } from './modules/order/order.routes.js';
+import { createCheckoutRouter } from './modules/checkout/checkout.routes.js';
+import type { IdempotencyStore } from './modules/checkout/idempotency-store.js';
+import { createPaymentRouter } from './modules/payment/payment.routes.js';
+
+/** The one route that must never go through the global JSON body parser —
+ *  see this file's doc comment on `STRIPE_WEBHOOK_PATH`. */
+const STRIPE_WEBHOOK_PATH = `${API_PREFIX}/webhooks/stripe`;
 
 export interface CreateAppOptions {
   rateLimitStore: RateLimitStore;
   reservationStore: ReservationStore;
+  idempotencyStore: IdempotencyStore;
 }
 
 /**
@@ -39,7 +48,7 @@ export interface CreateAppOptions {
  * is what lets `supertest` drive the app directly in tests without a
  * real socket (`server.ts` is the only place that listens).
  */
-export function createApp({ rateLimitStore, reservationStore }: CreateAppOptions): Express {
+export function createApp({ rateLimitStore, reservationStore, idempotencyStore }: CreateAppOptions): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -56,7 +65,21 @@ export function createApp({ rateLimitStore, reservationStore }: CreateAppOptions
     }),
   );
   app.use(cookieParser());
-  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+  // Stripe webhook signature verification (plan.md §9.6) needs the exact
+  // raw request bytes — Stripe signs those, not a semantically-equivalent
+  // re-serialization of the parsed JSON, so this one path must never go
+  // through `express.json()`. Express has no clean "skip global middleware
+  // for one path" primitive, so this dispatches per-request instead of
+  // registering two competing `app.use()` calls.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === STRIPE_WEBHOOK_PATH) {
+      express.raw({ type: 'application/json', limit: JSON_BODY_LIMIT })(req, res, next);
+    } else {
+      express.json({ limit: JSON_BODY_LIMIT })(req, res, next);
+    }
+  });
+
   app.use(requestId());
 
   app.get(`${API_PREFIX}/health`, (_req: Request, res: Response) => {
@@ -68,6 +91,9 @@ export function createApp({ rateLimitStore, reservationStore }: CreateAppOptions
   app.use(API_PREFIX, createInventoryRouter());
   app.use(API_PREFIX, createCartRouter({ reservationStore }));
   app.use(API_PREFIX, createPricingRouter());
+  app.use(API_PREFIX, createOrderRouter({ rateLimitStore }));
+  app.use(API_PREFIX, createCheckoutRouter({ reservationStore, idempotencyStore }));
+  app.use(API_PREFIX, createPaymentRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet

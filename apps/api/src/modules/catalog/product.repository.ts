@@ -197,6 +197,14 @@ export async function updatePriceRange(productId: string, priceRange: { minFils:
   await ProductModel.updateOne({ _id: productId }, { priceRange }).exec();
 }
 
+/** Order-module call site (plan.md §8.7.3: "on → confirmed ... increment
+ *  `product.soldCount`"). A plain `$inc` — `soldCount` is internal-only
+ *  (never on the public `Product` DTO, see this model's doc comment) and
+ *  only ever moves via this one atomic path, never a read-then-write. */
+export async function incrementSoldCount(productId: string, quantity: number): Promise<void> {
+  await ProductModel.updateOne({ _id: productId }, { $inc: { soldCount: quantity } }).exec();
+}
+
 /** plan.md §7.14: "If Meilisearch is unreachable the API falls back to a
  *  Mongo regex query on `title` + `articleCode`." Used only by
  *  `catalog/search.service.ts#searchProducts`'s catch branch. */

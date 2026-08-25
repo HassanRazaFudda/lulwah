@@ -1,4 +1,4 @@
-import type { Address } from '@lulwah/contracts';
+import type { Address, AddressSnapshot } from '@lulwah/contracts';
 import { notFoundError } from '../../shared/errors.js';
 import * as repo from './address.repository.js';
 import { toAddressDto } from './address.mapper.js';
@@ -69,6 +69,39 @@ export async function updateAddress(userId: string, id: string, input: UpdateAdd
 export async function deleteAddress(userId: string, id: string): Promise<void> {
   const deleted = await repo.softDeleteAddress(id, userId);
   if (!deleted) throw notFoundError('Address not found.');
+}
+
+/**
+ * `checkout`'s exclusive read-only entry point into `identity`'s address
+ * book (plan.md §5.3) — returns an immutable, embeddable copy (plan.md
+ * §7.11's snapshot rule) rather than the live `Address` (with its `id`/
+ * `userId`/default-flag bookkeeping, none of which belongs on a checkout
+ * session or an order). Scoped by `userId` like every other function in
+ * this file — a checkout session can never snapshot another customer's
+ * saved address by guessing an id. A narrow, deliberate extension of this
+ * module (see `checkout` module's report).
+ */
+export async function getAddressSnapshot(userId: string, id: string): Promise<AddressSnapshot> {
+  const doc = await repo.findAddressForUser(id, userId);
+  if (!doc) throw notFoundError('Address not found.');
+  const address = toAddressDto(doc);
+  return {
+    label: address.label,
+    firstName: address.firstName,
+    lastName: address.lastName,
+    phone: address.phone,
+    emirate: address.emirate,
+    city: address.city,
+    area: address.area,
+    buildingName: address.buildingName,
+    ...(address.apartment !== undefined ? { apartment: address.apartment } : {}),
+    ...(address.street !== undefined ? { street: address.street } : {}),
+    landmark: address.landmark,
+    makani: address.makani,
+    poBox: address.poBox,
+    country: address.country,
+    geo: address.geo,
+  };
 }
 
 /** `POST /me/addresses/:id/default` — plan.md §9.4. Sets this address as

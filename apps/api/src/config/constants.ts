@@ -55,3 +55,39 @@ export const VARIANT_LOCK_RETRY_DELAY_MS = 50;
  * real `ObjectId` (those always encode a non-zero timestamp).
  */
 export const SYSTEM_ACTOR_ID = '000000000000000000000000';
+
+/** plan.md §8.7.5: guest order tracking is public and unauthenticated, so
+ *  it needs its own (stricter) rate limit — otherwise `GET /orders/track`
+ *  is a free-form order-number/email brute-force oracle. Same "10/min/IP"
+ *  shape as `AUTH_RATE_LIMIT`. */
+export const ORDER_TRACK_RATE_LIMIT = { windowMs: 60_000, max: 10 } as const;
+
+/**
+ * COD OTP — plan.md §20/§10.1's pattern ("6 digits, hashed, 10-min TTL, 3
+ * attempts") applied to `payment`'s `CodGateway`, the same shape
+ * `identity.model.ts`'s (currently unused — its `/auth/otp/*` routes
+ * return 501) `OtpModel` documents for its own future use. `payment` keeps
+ * its own OTP collection rather than reaching into `identity`'s (plan.md
+ * §5.3: cross-module calls only through an exported service function, and
+ * `identity` doesn't expose one for this) — see `payment` module's report.
+ */
+export const COD_OTP_LENGTH = 6;
+export const COD_OTP_TTL_MS = 10 * 60_000;
+export const COD_OTP_MAX_ATTEMPTS = 3;
+export const COD_OTP_RESEND_COOLDOWN_MS = 60_000;
+
+/** `checkout`'s `POST /checkout/session/:id/place` — plan.md §9.5: "requires
+ *  an `Idempotency-Key` header." The Redis record's TTL: long enough to
+ *  outlive any plausible client retry window, short enough not to matter
+ *  once the key stops being reused. */
+export const IDEMPOTENCY_KEY_TTL_MS = 24 * 60 * 60_000;
+/** How long a "this key is currently being processed" placeholder holds a
+ *  concurrent duplicate request off while the first one is still running —
+ *  long enough to cover a real order-creation request, short enough that a
+ *  crashed request doesn't wedge the key for a client's legitimate retry. */
+export const IDEMPOTENCY_LOCK_TTL_MS = 2 * 60_000;
+
+/** plan.md §21: R1 shipping is a flat rate per emirate, not a carrier
+ *  integration — `checkout`'s own scope, not a `shipping_zones` admin CRUD.
+ *  AED 20 standard, waived above `env.FREE_SHIPPING_THRESHOLD_FILS`. */
+export const STANDARD_SHIPPING_FEE_FILS = 2_000;

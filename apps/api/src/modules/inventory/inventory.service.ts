@@ -189,6 +189,58 @@ export async function releaseStock(params: { variantId: string; quantity: number
   return toInventoryItemDto(updated);
 }
 
+// ---------------------------------------------------------------------------
+// Sale conversion — plan.md §8.4/§8.7.3. Exported for `order`'s exclusive
+// use, the same module-boundary rule as `reserveStock`/`releaseStock`
+// above: `order` calls these, never `InventoryItemModel`/`StockMovementModel`
+// directly. A narrow, deliberate extension of this module (see this
+// module's report) — plan.md's own §7.8 doc comment already reserved the
+// `sale` `StockMovementType` for exactly this, "not built in this phase"
+// at the time cart/inventory were built; that phase is now.
+// ---------------------------------------------------------------------------
+
+/** On order confirmation: converts a cart's stock reservation into a real
+ *  sale — `onHand -= qty`, `reserved -= qty`, `available` unchanged (it was
+ *  already decremented when the line was reserved). Returns `null` if the
+ *  variant's inventory record no longer exists (defensive; should not
+ *  happen in practice since a variant with an order line was, by
+ *  definition, orderable). */
+export async function commitReservedSale(params: { variantId: string; quantity: number; reference: string }): Promise<InventoryItem | null> {
+  const item = await repo.findInventoryItemByVariantId(params.variantId);
+  if (!item) return null;
+
+  const { item: updated } = await repo.applySaleAndRecordMovement({
+    item,
+    quantity: params.quantity,
+    reference: params.reference,
+    performedBy: SYSTEM_ACTOR_ID,
+  });
+  // No `applyProductStockDelta` call here — see `inventory.repository.ts`'s
+  // doc comment on `applySaleAndRecordMovement`: `available` doesn't move.
+  return toInventoryItemDto(updated);
+}
+
+/** The mirror of `commitReservedSale` — an order cancelled *after* its sale
+ *  was already committed (`confirmed` or later) needs the stock physically
+ *  restored, not merely a reservation released (there is no reservation
+ *  left to release by then). Returns `null` if the inventory record no
+ *  longer exists. */
+export async function restockCancelledSale(params: { variantId: string; quantity: number; reference: string }): Promise<InventoryItem | null> {
+  const item = await repo.findInventoryItemByVariantId(params.variantId);
+  if (!item) return null;
+
+  const beforeAvailable = item.available;
+  const { item: updated, deltaAvailable } = await repo.applyCancellationRestockAndRecordMovement({
+    item,
+    quantity: params.quantity,
+    reference: params.reference,
+    performedBy: SYSTEM_ACTOR_ID,
+  });
+  if (deltaAvailable !== 0) await applyProductStockDelta(updated.productId.toString(), deltaAvailable);
+  emitStockEvents(updated.variantId.toString(), updated.productId.toString(), beforeAvailable, updated.available, updated.lowStockThreshold);
+  return toInventoryItemDto(updated);
+}
+
 function emitStockEvents(variantId: string, productId: string, before: number, after: number, lowStockThreshold: number): void {
   if (after <= 0 && before > 0) {
     inventoryEvents.publish('stock.out', { variantId, productId });
