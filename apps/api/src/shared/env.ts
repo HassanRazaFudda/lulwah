@@ -15,12 +15,21 @@ import { z } from 'zod';
  * what the process actually needs.
  *
  * Second deviation: this skeleton only implements the identity module.
- * Vars for integrations that don't exist yet (Stripe, Tabby, Tamara,
- * Resend, Unifonic, WhatsApp, Aramex, Sentry, S3/imgproxy, Meilisearch)
- * are still declared — so the schema documents the complete §25.3
- * contract and typos are still caught once each module lands — but kept
- * `.optional()` so today's boot doesn't demand secrets for features that
- * don't exist. Flip each to required as its module is built.
+ * Vars for integrations that don't exist yet (Tabby, Tamara, Resend,
+ * Unifonic, WhatsApp, Aramex, Sentry, S3/imgproxy, Meilisearch) are still
+ * declared — so the schema documents the complete §25.3 contract and typos
+ * are still caught once each module lands — but kept `.optional()` so
+ * today's boot doesn't demand secrets for features that don't exist. Flip
+ * each to required as its module is built.
+ *
+ * `ZIINA_API_KEY`/`ZIINA_WEBHOOK_SECRET` (payments, below) follow the same
+ * "may be unset" posture for a different reason than the rest of this
+ * list: `payment` *is* built (plan.md §20), but Ziina has no self-serve
+ * sandbox signup (onboarding requires an Emirates ID via the business
+ * dashboard — see `docs/ziina-integration-notes.md` §2), so no real key
+ * exists for this project yet, same situation the original
+ * `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` were in before the client
+ * switched gateways.
  */
 
 const booleanFromString = (defaultValue: 'true' | 'false') =>
@@ -77,10 +86,11 @@ const envSchema = z.object({
   STORE_PHONE: optionalString(),
   STORE_WHATSAPP: optionalString(),
 
-  // --- payments (payment module not built yet) ------------------------------
-  STRIPE_SECRET_KEY: optionalString(),
-  STRIPE_WEBHOOK_SECRET: optionalString(),
-  STRIPE_PUBLISHABLE_KEY: optionalString(),
+  // --- payments (plan.md §20 — Ziina; no publishable/client-side key
+  // exists in the hosted-redirect model, unlike the Stripe key this
+  // replaced, so there is no ZIINA_PUBLISHABLE_KEY equivalent) -------------
+  ZIINA_API_KEY: optionalString(),
+  ZIINA_WEBHOOK_SECRET: optionalString(),
   TABBY_SECRET_KEY: optionalString(),
   TABBY_PUBLIC_KEY: optionalString(),
   TABBY_WEBHOOK_SECRET: optionalString(),

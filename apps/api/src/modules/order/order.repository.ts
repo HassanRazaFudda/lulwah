@@ -35,11 +35,12 @@ export async function nextOrderNumber(now: Date = new Date()): Promise<string> {
  *  other modules' DTOs), not `OrderDoc`'s Mongoose-native `Types.ObjectId`.
  *  Same "normalize at the repository boundary, cast once" pattern as
  *  `product.repository.ts`/`discount.repository.ts`. */
-export type CreateOrderInput = Omit<OrderDoc, '_id' | 'createdAt' | 'updatedAt' | 'userId' | 'items' | 'shipments' | 'discounts' | 'checkoutSessionId'> & {
+export type CreateOrderInput = Omit<OrderDoc, '_id' | 'createdAt' | 'updatedAt' | 'userId' | 'items' | 'shipments' | 'discounts' | 'refunds' | 'checkoutSessionId'> & {
   userId: string | null;
   items: unknown[];
   shipments?: unknown[];
   discounts?: unknown[];
+  refunds?: unknown[];
   checkoutSessionId: string | null;
 };
 

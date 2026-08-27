@@ -158,6 +158,29 @@ export type OrderPayment = z.infer<typeof OrderPayment>;
 export const OrderFulfilmentStatus = z.enum(['unfulfilled', 'partially_fulfilled', 'fulfilled', 'returned']);
 export type OrderFulfilmentStatus = z.infer<typeof OrderFulfilmentStatus>;
 
+/** plan.md §8.8 Returns & refunds. One entry per refund *attempt* — an
+ *  immutable audit trail, the same "append, never edit" convention
+ *  `OrderStatusHistoryEntry` sets (§8.7.4). A `failed` entry is kept (not
+ *  discarded) so a retried refund attempt is visible in the trail; only a
+ *  `pending`/`completed` entry ever moves `Order.refundedFils`/
+ *  `paymentStatus` (see `order.service.ts#refundOrder`). `status` is a
+ *  small closed union we control, not the gateway's own free-form refund
+ *  status string (Ziina: `pending|completed|failed`; Stripe/other
+ *  gateways may differ) — `payment.service.ts` normalizes into this. */
+export const OrderRefund = z.object({
+  id: objectId,
+  amountFils: Fils,
+  reason: z.string().max(500).optional(),
+  status: z.enum(['pending', 'completed', 'failed']),
+  /** The gateway's own refund id (e.g. Ziina's `re_...`-shaped `id`), for
+   *  support/reconciliation — `null` for a gateway with no such concept
+   *  (COD's logged no-op, see `cod.gateway.ts#refund`). */
+  gatewayRefundId: z.string().nullable(),
+  byUserId: objectId,
+  at: z.coerce.date(),
+});
+export type OrderRefund = z.infer<typeof OrderRefund>;
+
 /** Order — plan.md §7.11. Money is stored, never recomputed at read time. */
 export const Order = z.object({
   id: objectId,
@@ -196,6 +219,7 @@ export const Order = z.object({
   shipments: z.array(OrderShipment),
 
   payment: OrderPayment,
+  refunds: z.array(OrderRefund),
 
   customerNote: z.string().optional(),
   tags: z.array(z.string()),

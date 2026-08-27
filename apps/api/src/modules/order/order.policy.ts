@@ -13,3 +13,8 @@ import { requireAuth, requirePermission } from '../identity/identity.policy.js';
  */
 export const requireOrderRead = () => [requireAuth(), requirePermission('orders.read')] as const;
 export const requireOrderStatusUpdate = () => [requireAuth(), requirePermission('orders.status.update')] as const;
+/** `POST /admin/orders/:id/refund` — plan.md §8.8, `refunds.write` (already
+ *  declared in `identity.policy.ts`'s `PERMISSIONS` list, ahead of this
+ *  module needing it — the same "declared ahead of time" pattern
+ *  `orders.read`/`orders.status.update` already used). */
+export const requireOrderRefund = () => [requireAuth(), requirePermission('refunds.write')] as const;

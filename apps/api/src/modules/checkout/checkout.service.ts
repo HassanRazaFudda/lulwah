@@ -273,14 +273,18 @@ export async function createPaymentIntent(actor: AuthenticatedUser | null, sessi
     session.paymentGateway = 'cod';
     session.paymentIntentId = intentId;
     await repo.save(session);
-    return { method: 'cod', clientSecret: null, otpRequired: true };
+    return { method: 'cod', redirectUrl: null, otpRequired: true };
   }
 
+  // Ziina (plan.md §20 — replaced Stripe): hosted-redirect, no client
+  // secret. `intent.redirectUrl` is where the storefront must send the
+  // browser next; the webhook (`payment.service.ts#handleZiinaWebhook`),
+  // not this response, is what actually confirms the order.
   const intent = await paymentService.createCardIntent({ reference: session.sessionId, amountFils: session.grandTotalFils, currency: 'AED', customerEmail: email, customerPhone: phone });
-  session.paymentGateway = 'stripe';
+  session.paymentGateway = 'ziina';
   session.paymentIntentId = intent.intentId;
   await repo.save(session);
-  return { method: 'card', clientSecret: intent.clientSecret, otpRequired: false };
+  return { method: 'card', redirectUrl: intent.redirectUrl, otpRequired: false };
 }
 
 // ---------------------------------------------------------------------------

@@ -99,6 +99,15 @@ export function toOrderDto(doc: OrderDoc | OrderHydratedDoc): Order {
       threeDSResult: doc.payment.threeDSResult,
       codVerifiedAt: doc.payment.codVerifiedAt,
     },
+    refunds: doc.refunds.map((r) => ({
+      id: r._id.toString(),
+      amountFils: r.amountFils,
+      ...(r.reason !== undefined ? { reason: r.reason } : {}),
+      status: r.status,
+      gatewayRefundId: r.gatewayRefundId,
+      byUserId: r.byUserId.toString(),
+      at: r.at,
+    })),
 
     ...(doc.customerNote !== undefined ? { customerNote: doc.customerNote } : {}),
     tags: doc.tags,

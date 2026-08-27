@@ -76,7 +76,7 @@ export const ALL_ORDER_STATUSES: readonly OrderStatus[] = [
 
 /**
  * The one place `PATCH /admin/orders/:id/status` (and the internal
- * system-driven transitions this module makes on its own — e.g. a Stripe
+ * system-driven transitions this module makes on its own — e.g. a Ziina
  * webhook confirming payment) gates a status change through. Throws `409
  * INVALID_STATUS_TRANSITION` for anything not in the table, UNLESS
  * `isForcedBySuperAdmin` is true — in which case the transition is allowed

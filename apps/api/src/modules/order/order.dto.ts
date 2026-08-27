@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Order, OrderStatus, PaymentStatus, UpdateOrderStatusInput } from '@lulwah/contracts';
+import { Fils, Order, OrderStatus, PaymentStatus, UpdateOrderStatusInput } from '@lulwah/contracts';
 
 /**
  * Request/response DTOs for `order` — plan.md §9.7 (admin), the `/me`
@@ -30,6 +30,17 @@ export type OrderResponse = z.infer<typeof OrderResponse>;
  *  (see `order.model.ts`'s doc comment on `internalNotes`). */
 export const AdminAddOrderNoteInput = z.object({ note: z.string().min(1).max(2000) });
 export type AdminAddOrderNoteInput = z.infer<typeof AdminAddOrderNoteInput>;
+
+/** `POST /admin/orders/:id/refund` — plan.md §8.8. `amountFils` omitted
+ *  means a full refund (of whatever is still refundable — resolved in
+ *  `order.service.ts#refundOrder`, which has `order.paidFils`/
+ *  `refundedFils` to compute that from). `reason` is free text, not the
+ *  §8.8 customer-facing return-reason enum — this is a standalone admin
+ *  refund action (no full RMA/returns workflow exists yet, see
+ *  `docs/implemented-plan.md`'s suggested-next-steps), so it's closer to
+ *  `UpdateOrderStatusInput.note` than to a controlled return reason. */
+export const AdminRefundOrderInput = z.object({ amountFils: Fils.optional(), reason: z.string().max(500).optional() });
+export type AdminRefundOrderInput = z.infer<typeof AdminRefundOrderInput>;
 
 export const MeOrdersQuery = z.object({
   page: z.coerce.number().int().positive().default(1),

@@ -13,7 +13,7 @@ function isDuplicateKeyError(err: unknown): boolean {
  * event (the caller should process it), `false` if it was already seen
  * (the caller should just 200 immediately, per plan.md §9.6).
  */
-export async function tryClaimWebhookEvent(provider: 'stripe', eventId: string, type: string): Promise<boolean> {
+export async function tryClaimWebhookEvent(provider: 'ziina', eventId: string, type: string): Promise<boolean> {
   try {
     await WebhookEventModel.create({ provider, eventId, type });
     return true;

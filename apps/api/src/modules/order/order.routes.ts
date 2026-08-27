@@ -4,7 +4,7 @@ import { createRateLimiter } from '../../shared/rate-limit.js';
 import type { RateLimitStore } from '../../shared/rate-limit.js';
 import { requireAuth } from '../identity/identity.policy.js';
 import * as controller from './order.controller.js';
-import { requireOrderRead, requireOrderStatusUpdate } from './order.policy.js';
+import { requireOrderRead, requireOrderRefund, requireOrderStatusUpdate } from './order.policy.js';
 
 export interface OrderRouterDeps {
   rateLimitStore: RateLimitStore;
@@ -24,6 +24,7 @@ export function createOrderRouter({ rateLimitStore }: OrderRouterDeps): Router {
   router.get('/admin/orders/:id', ...requireOrderRead(), controller.adminGet);
   router.patch('/admin/orders/:id/status', ...requireOrderStatusUpdate(), controller.adminUpdateStatus);
   router.post('/admin/orders/:id/notes', ...requireOrderStatusUpdate(), controller.adminAddNote);
+  router.post('/admin/orders/:id/refund', ...requireOrderRefund(), controller.adminRefund);
 
   // --- customer-facing — plan.md §9.5/§8.7.5 ----------------------------------
   router.get('/me/orders', requireAuth(), controller.meList);

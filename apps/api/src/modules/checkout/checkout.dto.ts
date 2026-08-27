@@ -122,9 +122,22 @@ export const CheckoutSessionResponse = z.object({
 });
 export type CheckoutSessionResponse = z.infer<typeof CheckoutSessionResponse>;
 
+/** `redirectUrl` — renamed from `clientSecret` (plan.md §20's Ziina swap):
+ *  Ziina is a hosted-redirect gateway with no client-side confirmation
+ *  step, so there is no secret for a client to hold. `null` for `cod`
+ *  (its "confirmation" is the OTP flow, `otpRequired`); a real URL for
+ *  `card`, which the client should send the browser to. See
+ *  `payment-gateway.ts#CreateIntentResult`'s doc comment for the full
+ *  rationale — this DTO just mirrors that rename one level up, since
+ *  `checkout`'s response shape isn't in `@lulwah/contracts` (no wire
+ *  contract exists for `CheckoutSession`/this response yet — see
+ *  `checkout.model.ts`'s doc comment), so the rename touched no shared
+ *  package and nothing outside this module + `apps/web` (out of scope for
+ *  this change; a later stage builds the storefront redirect UI against
+ *  this new shape). */
 export const PaymentIntentResponse = z.object({
   method: PaymentMethod,
-  clientSecret: z.string().nullable(),
+  redirectUrl: z.string().nullable(),
   otpRequired: z.boolean(),
 });
 export type PaymentIntentResponse = z.infer<typeof PaymentIntentResponse>;

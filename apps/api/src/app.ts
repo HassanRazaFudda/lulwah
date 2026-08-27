@@ -22,8 +22,8 @@ import type { IdempotencyStore } from './modules/checkout/idempotency-store.js';
 import { createPaymentRouter } from './modules/payment/payment.routes.js';
 
 /** The one route that must never go through the global JSON body parser —
- *  see this file's doc comment on `STRIPE_WEBHOOK_PATH`. */
-const STRIPE_WEBHOOK_PATH = `${API_PREFIX}/webhooks/stripe`;
+ *  see this file's doc comment on `ZIINA_WEBHOOK_PATH`. */
+const ZIINA_WEBHOOK_PATH = `${API_PREFIX}/webhooks/ziina`;
 
 export interface CreateAppOptions {
   rateLimitStore: RateLimitStore;
@@ -66,14 +66,15 @@ export function createApp({ rateLimitStore, reservationStore, idempotencyStore }
   );
   app.use(cookieParser());
 
-  // Stripe webhook signature verification (plan.md §9.6) needs the exact
-  // raw request bytes — Stripe signs those, not a semantically-equivalent
-  // re-serialization of the parsed JSON, so this one path must never go
-  // through `express.json()`. Express has no clean "skip global middleware
-  // for one path" primitive, so this dispatches per-request instead of
-  // registering two competing `app.use()` calls.
+  // Ziina webhook signature verification (plan.md §9.6, docs/ziina
+  // -integration-notes.md §6) needs the exact raw request bytes — the
+  // `X-Hmac-Signature` header is an HMAC over those, not a semantically-
+  // equivalent re-serialization of the parsed JSON, so this one path must
+  // never go through `express.json()`. Express has no clean "skip global
+  // middleware for one path" primitive, so this dispatches per-request
+  // instead of registering two competing `app.use()` calls.
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === STRIPE_WEBHOOK_PATH) {
+    if (req.path === ZIINA_WEBHOOK_PATH) {
       express.raw({ type: 'application/json', limit: JSON_BODY_LIMIT })(req, res, next);
     } else {
       express.json({ limit: JSON_BODY_LIMIT })(req, res, next);

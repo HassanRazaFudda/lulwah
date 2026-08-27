@@ -304,6 +304,35 @@ const orderPaymentSchema = new Schema<OrderPaymentSubdoc>(
 );
 
 // ---------------------------------------------------------------------------
+// Refunds — plan.md §8.8. Immutable audit trail, same "append, never edit"
+// convention as `statusHistory` above (§8.7.4) — see `@lulwah/contracts`'
+// `OrderRefund` (`order.ts`) for the full rationale on this shape,
+// reproduced here field-for-field so `order.mapper.ts` is a straight copy.
+// ---------------------------------------------------------------------------
+
+export interface OrderRefundSubdoc {
+  _id: Types.ObjectId;
+  amountFils: number;
+  reason: string | undefined;
+  status: 'pending' | 'completed' | 'failed';
+  gatewayRefundId: string | null;
+  byUserId: Types.ObjectId;
+  at: Date;
+}
+
+const orderRefundSchema = new Schema<OrderRefundSubdoc>(
+  {
+    amountFils: { type: Number, required: true, min: 0 },
+    reason: { type: String },
+    status: { type: String, enum: ['pending', 'completed', 'failed'], required: true },
+    gatewayRefundId: { type: String, default: null },
+    byUserId: { type: Schema.Types.ObjectId, required: true },
+    at: { type: Date, required: true, default: () => new Date() },
+  },
+  { timestamps: false },
+);
+
+// ---------------------------------------------------------------------------
 // Internal admin notes — `POST /admin/orders/:id/notes` (plan.md §9.7),
 // distinct from `statusHistory[].note`'s customer-status-change annotations.
 // ---------------------------------------------------------------------------
@@ -358,6 +387,7 @@ export interface OrderDoc {
   shipments: OrderShipmentSubdoc[];
 
   payment: OrderPaymentSubdoc;
+  refunds: Types.DocumentArray<OrderRefundSubdoc>;
 
   customerNote: string | undefined;
   tags: string[];
@@ -414,6 +444,7 @@ const orderSchema = new Schema<OrderDoc>(
     shipments: { type: [orderShipmentSchema], default: [] },
 
     payment: { type: orderPaymentSchema, required: true },
+    refunds: { type: [orderRefundSchema], default: [] },
 
     customerNote: { type: String },
     tags: { type: [String], default: [] },
