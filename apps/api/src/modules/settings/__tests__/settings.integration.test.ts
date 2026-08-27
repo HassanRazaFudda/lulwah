@@ -177,8 +177,8 @@ describe('GET /api/v1/admin/settings', () => {
     const res = await request(app).get('/api/v1/admin/settings').set('Authorization', `Bearer ${token}`);
     expect(res.body.data.settings.paymentGateway).toEqual({
       provider: 'ziina',
-      apiKeyConfigured: Boolean(env.STRIPE_SECRET_KEY),
-      webhookSecretConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
+      apiKeyConfigured: Boolean(env.ZIINA_API_KEY),
+      webhookSecretConfigured: Boolean(env.ZIINA_WEBHOOK_SECRET),
     });
   });
 });
@@ -230,8 +230,8 @@ describe('PATCH /api/v1/admin/settings', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.settings.paymentGateway).toEqual({
       provider: 'ziina',
-      apiKeyConfigured: Boolean(env.STRIPE_SECRET_KEY),
-      webhookSecretConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
+      apiKeyConfigured: Boolean(env.ZIINA_API_KEY),
+      webhookSecretConfigured: Boolean(env.ZIINA_WEBHOOK_SECRET),
     });
     const raw = await SettingsModel.findOne({}).lean();
     expect(raw).not.toHaveProperty('paymentGateway');

@@ -9,19 +9,12 @@ import type { SettingsDoc, SettingsHydratedDoc } from './settings.model.js';
  * never accepted on `PATCH` (`settings.dto.ts`'s `AdminUpdateSettingsInput`
  * has no field for it) — there is no code path anywhere in this module
  * that could persist a real key.
- *
- * The project is mid-migration from Stripe to Ziina as its card gateway
- * (a parallel P3 workstream owns the `env.ts` rename — see this module's
- * own report for why this worktree still sees the old var names). Swap
- * the two `env.STRIPE_*` reads below for `env.ZIINA_API_KEY`/
- * `env.ZIINA_WEBHOOK_SECRET` once that rename merges — `provider` already
- * reads `'ziina'` on the wire today.
  */
 function paymentGatewayStatus(): Settings['paymentGateway'] {
   return {
     provider: 'ziina',
-    apiKeyConfigured: Boolean(env.STRIPE_SECRET_KEY),
-    webhookSecretConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
+    apiKeyConfigured: Boolean(env.ZIINA_API_KEY),
+    webhookSecretConfigured: Boolean(env.ZIINA_WEBHOOK_SECRET),
   };
 }
 
