@@ -38,6 +38,7 @@ export const PERMISSIONS = [
   'settings.write',
   'users.read',
   'users.write',
+  'audit.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -62,6 +63,18 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'reports.read',
     'settings.read',
     'users.read',
+    // An audit trail of every admin's mutating actions is itself sensitive
+    // (it can reveal, e.g., a customer's address/phone that a support
+    // agent touched, or the internal reasoning in a discount edit), so
+    // this is deliberately NOT handed to every operational role the way
+    // `products.read`/`orders.read` are — `catalog`/`order_ops`/
+    // `warehouse`/`support`/`content`/`finance` all stay without it,
+    // limited to their own remit's data, not everyone else's. `manager`
+    // gets it because holding a team accountable for its own actions
+    // (who changed that price, who force-transitioned that order) is
+    // exactly what the manager role is for, one level under `super_admin`
+    // who needs it unconditionally.
+    'audit.read',
   ],
   catalog: ['products.read', 'products.write', 'inventory.read', 'inventory.write', 'discounts.read', 'content.read', 'content.write', 'reports.read'],
   order_ops: ['products.read', 'inventory.read', 'orders.read', 'orders.status.update', 'discounts.read', 'customers.read', 'reports.read'],

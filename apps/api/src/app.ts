@@ -23,6 +23,8 @@ import { createPaymentRouter } from './modules/payment/payment.routes.js';
 import { createSettingsRouter } from './modules/settings/settings.routes.js';
 import { createContentRouter } from './modules/content/content.routes.js';
 import { createCustomerRouter } from './modules/customer/customer.routes.js';
+import { createAuditRouter } from './modules/audit/audit.routes.js';
+import { auditLogMiddleware } from './modules/audit/audit-log.middleware.js';
 
 /** The one route that must never go through the global JSON body parser —
  *  see this file's doc comment on `ZIINA_WEBHOOK_PATH`. */
@@ -90,6 +92,16 @@ export function createApp({ rateLimitStore, reservationStore, idempotencyStore }
     sendSuccess(res, { status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Audit capture (plan.md §11.1) — mounted ONCE, ahead of every admin
+  // router below, rather than edited into each one's controllers. Wraps
+  // every mutating (`POST`/`PATCH`/`PUT`/`DELETE`) `/admin/*` request
+  // regardless of which module owns it; see `audit-log.middleware.ts`'s
+  // doc comment for the full design (and its honest before/after
+  // tradeoff). Self-filtering by path/method, so mounting it before the
+  // routers — rather than after, or duplicated per-router — is just the
+  // one place it needs to be to see every admin request exactly once.
+  app.use(API_PREFIX, auditLogMiddleware());
+
   app.use(API_PREFIX, createIdentityRouter({ rateLimitStore }));
   app.use(API_PREFIX, createCatalogRouter());
   app.use(API_PREFIX, createInventoryRouter());
@@ -101,6 +113,7 @@ export function createApp({ rateLimitStore, reservationStore, idempotencyStore }
   app.use(API_PREFIX, createSettingsRouter());
   app.use(API_PREFIX, createContentRouter());
   app.use(API_PREFIX, createCustomerRouter());
+  app.use(API_PREFIX, createAuditRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet

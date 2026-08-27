@@ -18,7 +18,15 @@ import { baseConfig } from '@lulwah/config/eslint.config.js';
 // — no `except`, so no ambiguity about what it's relative to. With only
 // one module today that list is empty (nothing to forbid yet); it fills
 // in correctly the moment a second module name is added to MODULES.
-const MODULES = ['identity', 'catalog', 'inventory', 'cart', 'pricing', 'content'];
+// NOTE: `checkout`/`order`/`payment`/`customer`/`settings` are real modules
+// not yet in this list — each landed without this rule being extended to
+// cover it, so retroactively adding them here is left as a follow-up (it
+// could surface pre-existing cross-module imports in those modules that
+// were never checked against this rule, which is a separate cleanup from
+// this merge). Only resolving the two names this specific merge actually
+// contributed (`content`, `audit`) to keep this fix scoped to the conflict
+// at hand.
+const MODULES = ['identity', 'catalog', 'inventory', 'cart', 'pricing', 'content', 'audit'];
 
 const moduleBoundaryZones = MODULES.map((moduleName) => ({
   target: `./src/modules/${moduleName}/**/*`,
