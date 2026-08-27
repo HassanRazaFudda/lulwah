@@ -325,6 +325,43 @@ describe('guest COD checkout — full flow', () => {
   });
 });
 
+describe('logged-in customer checkout attaches their identity to the order', () => {
+  it('a logged-in customer placing an order gets order.userId set, and the order appears under GET /me/orders (found and fixed as part of P3 — attachUserIfPresent() previously did not exist, so req.user was always undefined on every checkout route)', async () => {
+    const { app } = buildApp();
+    const adminToken = (await registerAndLogin(app, 'super_admin')).token;
+    const { variantId } = await seedVariantWithStock(app, adminToken, 10, 24_900);
+    const customer = await registerAndLogin(app, 'customer');
+
+    const agent = request.agent(app);
+    const cartId = (await agent.post('/api/v1/cart').set('Authorization', `Bearer ${customer.token}`).send({})).body.data.cartId as string;
+    await agent.post(`/api/v1/cart/${cartId}/items`).set('Authorization', `Bearer ${customer.token}`).send({ variantId, quantity: 1 });
+
+    const sessionRes = await agent.post('/api/v1/checkout/session').set('Authorization', `Bearer ${customer.token}`).send({ cartId });
+    expect(sessionRes.status).toBe(201);
+    const sessionId = sessionRes.body.data.sessionId as string;
+
+    await agent.post(`/api/v1/checkout/session/${sessionId}/address`).set('Authorization', `Bearer ${customer.token}`).send(inlineShippingAddress());
+    await agent.post(`/api/v1/checkout/session/${sessionId}/shipping`).set('Authorization', `Bearer ${customer.token}`).send({});
+
+    pinNextOtp(551122);
+    await agent.post(`/api/v1/checkout/session/${sessionId}/payment-intent`).set('Authorization', `Bearer ${customer.token}`).send({ method: 'cod' });
+    await agent.post('/api/v1/checkout/cod/verify-otp').set('Authorization', `Bearer ${customer.token}`).send({ sessionId, code: '551122' });
+    const placeRes = await agent
+      .post(`/api/v1/checkout/session/${sessionId}/place`)
+      .set('Authorization', `Bearer ${customer.token}`)
+      .set('Idempotency-Key', `logged-in-${sessionId}`)
+      .send({});
+    expect(placeRes.status).toBe(201);
+    expect(placeRes.body.data.order.userId).toBe(customer.userId);
+    expect(placeRes.body.data.order.guestEmail).toBeNull();
+
+    const orderNumber = placeRes.body.data.order.orderNumber as string;
+    const meRes = await request(app).get(`/api/v1/me/orders/${orderNumber}`).set('Authorization', `Bearer ${customer.token}`);
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.data.order.id).toBe(placeRes.body.data.order.id);
+  });
+});
+
 describe('guest order tracking', () => {
   async function placeAGuestOrder(app: Express, adminToken: string): Promise<{ orderNumber: string; email: string }> {
     const { sessionId } = await checkoutUpToPaymentIntent(app, adminToken, 10);
@@ -448,8 +485,27 @@ describe('admin order status transitions', () => {
 
     const noteRes = await request(app).post(`/api/v1/admin/orders/${orderId}/notes`).set('Authorization', `Bearer ${admin.token}`).send({ note: 'Customer called to confirm address.' });
     expect(noteRes.status).toBe(201);
-    // The note is never part of the wire `Order` shape's own fields.
-    expect(noteRes.body.data.order.internalNotes).toBeUndefined();
+    // Fixed in P3 (see `AdminOrder`'s doc comment in `@lulwah/contracts`):
+    // the admin-facing response now actually returns the note just
+    // written, not just persists it invisibly.
+    expect(noteRes.body.data.order.internalNotes).toHaveLength(1);
+    expect(noteRes.body.data.order.internalNotes[0]).toMatchObject({ note: 'Customer called to confirm address.' });
+
+    // A second admin GET reflects the same note (proves it's actually
+    // readable back, not just present on the one response that wrote it).
+    const getRes = await request(app).get(`/api/v1/admin/orders/${orderId}`).set('Authorization', `Bearer ${admin.token}`);
+    expect(getRes.body.data.order.internalNotes).toHaveLength(1);
+
+    // Still never on the customer-facing shape — `checkoutUpToPaymentIntent`
+    // is a guest checkout (no Authorization header on the session/address/
+    // shipping calls, `adminToken` there is only for seeding the product),
+    // so the public tracking view (`toPublicTrackingView`, a structurally
+    // separate, reduced shape that has no `internalNotes` field to omit)
+    // is the real customer-facing round-trip to check here.
+    const orderNumber = placeRes.body.data.order.orderNumber as string;
+    const trackRes = await request(app).get('/api/v1/orders/track').query({ orderNumber, emailOrPhone: 'shopper@example.com' });
+    expect(trackRes.status).toBe(200);
+    expect(trackRes.body.data.order.internalNotes).toBeUndefined();
 
     const stored = await OrderModel.findById(orderId).lean();
     expect(stored?.internalNotes).toHaveLength(1);

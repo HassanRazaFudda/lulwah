@@ -1,9 +1,10 @@
-import type { Order } from '@lulwah/contracts';
+import type { AdminOrder, Order } from '@lulwah/contracts';
 import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
 
 /** `invoiceNumber`/`checkoutSessionId`/`idempotencyKey`/`internalNotes`
  *  never cross into the public `Order` DTO — see `order.model.ts`'s doc
- *  comment. */
+ *  comment. Admin-facing callers that need `internalNotes` use
+ *  `toAdminOrderDto()` below instead. */
 export function toOrderDto(doc: OrderDoc | OrderHydratedDoc): Order {
   return {
     id: doc._id.toString(),
@@ -118,6 +119,18 @@ export function toOrderDto(doc: OrderDoc | OrderHydratedDoc): Order {
     deliveredAt: doc.deliveredAt,
     cancelledAt: doc.cancelledAt,
     cancelReason: doc.cancelReason,
+  };
+}
+
+/** Admin-only view — everything `toOrderDto` returns, plus `internalNotes`
+ *  (plan.md §11.1). Used exclusively by the `/admin/orders*` service
+ *  functions; `/me/orders*` and `/orders/track` must keep using
+ *  `toOrderDto`/`toPublicTrackingView` so a customer never sees staff
+ *  notes about their own order. */
+export function toAdminOrderDto(doc: OrderDoc | OrderHydratedDoc): AdminOrder {
+  return {
+    ...toOrderDto(doc),
+    internalNotes: doc.internalNotes.map((n) => ({ note: n.note, byUserId: n.byUserId.toString(), at: n.at })),
   };
 }
 

@@ -232,3 +232,32 @@ export const Order = z.object({
   cancelReason: z.string().nullable(),
 });
 export type Order = z.infer<typeof Order>;
+
+/** One staff-authored note — `POST /admin/orders/:id/notes`, plan.md §11.1
+ *  "internal notes." Append-only, like `statusHistory` (§8.7.4). */
+export const OrderInternalNote = z.object({
+  note: z.string(),
+  byUserId: objectId,
+  at: z.coerce.date(),
+});
+export type OrderInternalNote = z.infer<typeof OrderInternalNote>;
+
+/**
+ * Admin-only extension of `Order` — adds `internalNotes`, which
+ * `toOrderDto`/the base `Order` schema deliberately never carry (see
+ * `order.model.ts`'s doc comment: a customer must never see staff notes
+ * about their own order). Returned only by the `/admin/orders*` endpoints,
+ * never by `/me/orders*` or the public `/orders/track` view — those keep
+ * using plain `Order`/`PublicOrderTrackingView`.
+ *
+ * Found and fixed as part of P3: `POST /admin/orders/:id/notes` always
+ * wrote a real note to the database, but no admin endpoint ever returned
+ * it back out, so the admin UI could only show notes it had itself posted
+ * in the current browser session — a note wasn't actually readable after
+ * a page refresh, or by a second staff member, despite being durably
+ * persisted.
+ */
+export const AdminOrder = Order.extend({
+  internalNotes: z.array(OrderInternalNote),
+});
+export type AdminOrder = z.infer<typeof AdminOrder>;

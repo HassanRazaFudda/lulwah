@@ -149,6 +149,40 @@ export function requireAuth() {
   };
 }
 
+/**
+ * Optional-auth variant of `requireAuth()` — attaches `req.user` when a
+ * valid `Authorization: Bearer` token is present, but never rejects the
+ * request when it's absent or invalid. For routes that support both
+ * guest and logged-in flows (checkout, plan.md §15.6: "no forced account
+ * creation") and want to attach a logged-in customer's identity to what
+ * they create (e.g. `Order.userId`) without gating the whole flow behind
+ * login. Mirrors `requireAuth()`'s verification exactly — same JWT
+ * check, same claims shape — the only difference is what happens when
+ * there's nothing to verify or verification fails: `next()` either way,
+ * `req.user` simply stays `undefined`.
+ */
+export function attachUserIfPresent() {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const header = req.header('authorization');
+    if (!header?.startsWith('Bearer ')) {
+      next();
+      return;
+    }
+    try {
+      const decoded = jwt.verify(header.slice('Bearer '.length), env.JWT_ACCESS_SECRET);
+      const claims = AccessTokenClaims.parse(decoded);
+      req.user = { id: claims.sub, role: claims.role, permissions: claims.permissions, sessionId: claims.sessionId };
+    } catch {
+      // Invalid/expired token on an optional-auth route: proceed as a
+      // guest rather than failing the request — same posture as an
+      // absent header. A genuinely expired session should re-login
+      // through the normal `requireAuth()`-gated routes, not have its
+      // guest checkout blocked.
+    }
+    next();
+  };
+}
+
 /** Throws `AUTH_FORBIDDEN` if `user` lacks `permission`. Exported so
  *  services can call it a second time on top of the route-level
  *  `requirePermission` middleware — plan.md §10.2: "Enforced by

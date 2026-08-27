@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import type { AddressSnapshot, DiscountType, Order, OrderStatus, PaymentMethod, Size } from '@lulwah/contracts';
+import type { AddressSnapshot, AdminOrder, DiscountType, Order, OrderStatus, PaymentMethod, Size } from '@lulwah/contracts';
 import { AppError } from '../../shared/errors.js';
 import { notifyStub } from '../../shared/notify.js';
 import { SYSTEM_ACTOR_ID } from '../../config/constants.js';
@@ -13,7 +13,7 @@ import * as paymentService from '../payment/payment.service.js';
 import * as repo from './order.repository.js';
 import type { AdminOrderListFilter, CreateOrderInput } from './order.repository.js';
 import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
-import { toOrderDto, toPublicTrackingView } from './order.mapper.js';
+import { toAdminOrderDto, toOrderDto, toPublicTrackingView } from './order.mapper.js';
 import type { PublicOrderTrackingView } from './order.mapper.js';
 import { assertValidOrderStatusTransition } from './order.transitions.js';
 import { orderEvents } from './order.events.js';
@@ -318,7 +318,7 @@ async function applyTransition(order: OrderHydratedDoc, to: OrderStatus, opts: T
  *  `super_admin` may force any transition outside `order.transitions.ts`'s
  *  table (audited, with the mandatory reason `assertValidOrderStatusTransition`
  *  enforces) — every other role is constrained to it. */
-export async function updateOrderStatus(actor: AuthenticatedUser, orderId: string, input: UpdateOrderStatusInput): Promise<Order> {
+export async function updateOrderStatus(actor: AuthenticatedUser, orderId: string, input: UpdateOrderStatusInput): Promise<AdminOrder> {
   assertPermission(actor, 'orders.status.update');
   const order = await repo.findOrderById(orderId);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
@@ -331,7 +331,7 @@ export async function updateOrderStatus(actor: AuthenticatedUser, orderId: strin
     trackingNumber: input.trackingNumber,
     carrier: input.carrier,
   });
-  return toOrderDto(updated);
+  return toAdminOrderDto(updated);
 }
 
 /**
@@ -466,29 +466,34 @@ orderEvents.subscribe('order.status_changed', async ({ orderId, orderNumber, to,
 // Reads — admin (plan.md §9.7) + customer-facing (`/me`, guest tracking).
 // ---------------------------------------------------------------------------
 
-export async function adminListOrders(actor: AuthenticatedUser, filter: AdminOrderListFilter, page: number, limit: number): Promise<{ orders: Order[]; total: number }> {
+export async function adminListOrders(actor: AuthenticatedUser, filter: AdminOrderListFilter, page: number, limit: number): Promise<{ orders: AdminOrder[]; total: number }> {
   assertPermission(actor, 'orders.read');
   const { orders, total } = await repo.adminListOrders(filter, page, limit);
-  return { orders: orders.map(toOrderDto), total };
+  return { orders: orders.map(toAdminOrderDto), total };
 }
 
-export async function adminGetOrder(actor: AuthenticatedUser, id: string): Promise<Order> {
+export async function adminGetOrder(actor: AuthenticatedUser, id: string): Promise<AdminOrder> {
   assertPermission(actor, 'orders.read');
   const order = await repo.findOrderById(id);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
-  return toOrderDto(order);
+  return toAdminOrderDto(order);
 }
 
 /** `POST /admin/orders/:id/notes` — plan.md §9.7. Internal-only, never
  *  visible to the customer (see `order.model.ts`'s `internalNotes` doc
- *  comment). */
-export async function addAdminNote(actor: AuthenticatedUser, id: string, note: string): Promise<Order> {
+ *  comment). Returns `AdminOrder` (not `Order`) so the note just written
+ *  is actually readable in the response — see `AdminOrder`'s own doc
+ *  comment in `@lulwah/contracts` for the P3 bug this fixes: previously
+ *  every admin order-read endpoint used the customer-facing `toOrderDto`,
+ *  which strips `internalNotes` entirely, so a note posted here could
+ *  never be read back through any endpoint. */
+export async function addAdminNote(actor: AuthenticatedUser, id: string, note: string): Promise<AdminOrder> {
   assertPermission(actor, 'orders.status.update');
   const order = await repo.findOrderById(id);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
   order.internalNotes.push({ note, byUserId: new Types.ObjectId(actor.id), at: new Date() });
   await repo.save(order);
-  return toOrderDto(order);
+  return toAdminOrderDto(order);
 }
 
 /**
@@ -538,7 +543,7 @@ export async function addAdminNote(actor: AuthenticatedUser, id: string, note: s
  * moment Ziina accepts the request. Documented as a known gap, not silently
  * assumed correct.
  */
-export async function refundOrder(actor: AuthenticatedUser, orderId: string, input: AdminRefundOrderInput): Promise<Order> {
+export async function refundOrder(actor: AuthenticatedUser, orderId: string, input: AdminRefundOrderInput): Promise<AdminOrder> {
   assertPermission(actor, 'refunds.write');
   const order = await repo.findOrderById(orderId);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
@@ -574,7 +579,7 @@ export async function refundOrder(actor: AuthenticatedUser, orderId: string, inp
   }
 
   await repo.save(order);
-  return toOrderDto(order);
+  return toAdminOrderDto(order);
 }
 
 /**
