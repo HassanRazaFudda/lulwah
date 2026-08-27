@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 import type { Order, PaymentMethod } from '@lulwah/contracts';
-import { env } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import { CHECKOUT_RESERVATION_TTL_MS } from '../../config/constants.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
@@ -17,6 +16,8 @@ import type { ApplyDiscountsResult, CartLineSnapshot } from '../pricing/discount
 import * as orderService from '../order/order.service.js';
 import type { CreateOrderFromCheckoutItemInput } from '../order/order.service.js';
 import * as paymentService from '../payment/payment.service.js';
+import * as settingsService from '../settings/settings.service.js';
+import type { SettingsSnapshot } from '../settings/settings.service.js';
 import * as repo from './checkout.repository.js';
 import type { CheckoutSessionDoc, CheckoutSessionHydratedDoc } from './checkout.model.js';
 import { toCheckoutSessionResponse } from './checkout.mapper.js';
@@ -30,14 +31,16 @@ import type { IdempotencyStore } from './idempotency-store.js';
  * .repository.ts` only persists.
  */
 
-function computeInclusiveTax(taxableFils: number): number {
+function computeInclusiveTax(taxableFils: number, taxRate: number): number {
   if (taxableFils <= 0) return 0;
   // Duplicated from `cart.service.ts`'s private (unexported) helper of the
   // same name/body rather than imported — three lines, and importing a
   // service module's internal helper across a module boundary would be a
   // worse coupling than the duplication itself (plan.md §5.3: only
-  // *exported* functions cross a module boundary).
-  return Math.round(taxableFils - taxableFils / (1 + env.VAT_RATE));
+  // *exported* functions cross a module boundary). `taxRate` is now a
+  // parameter (was `env.VAT_RATE` directly) so this stays a pure function
+  // — the DB-backed read happens once per caller, not once per line item.
+  return Math.round(taxableFils - taxableFils / (1 + taxRate));
 }
 
 async function requireOpenSession(sessionId: string): Promise<CheckoutSessionHydratedDoc> {
@@ -73,7 +76,8 @@ function assertSessionOwnership(session: CheckoutSessionHydratedDoc, actor: Auth
 // data on the wire).
 // ---------------------------------------------------------------------------
 
-async function computeSessionPricing(session: CheckoutSessionHydratedDoc, actor: AuthenticatedUser | null): Promise<ApplyDiscountsResult> {
+async function computeSessionPricing(session: CheckoutSessionHydratedDoc, actor: AuthenticatedUser | null, settings?: SettingsSnapshot): Promise<ApplyDiscountsResult> {
+  const resolvedSettings = settings ?? (await settingsService.getSettingsSnapshot());
   const productIds = [...new Set(session.items.map((i) => i.productId.toString()))];
   const products = await productService.getProductsByIds(productIds);
   const productById = new Map(products.map((p) => [p.id, p]));
@@ -116,9 +120,9 @@ async function computeSessionPricing(session: CheckoutSessionHydratedDoc, actor:
   const discountFils = Math.min(discountResult.orderDiscountFils, subtotalFils);
   const shippingBeforeDiscountFils = session.shippingMethod?.priceFils ?? 0;
   const shippingFils = Math.max(0, shippingBeforeDiscountFils - discountResult.shippingDiscountFils);
-  const codFeeFils = session.paymentMethod === 'cod' ? env.COD_FEE_FILS : 0;
+  const codFeeFils = session.paymentMethod === 'cod' ? resolvedSettings.codFeeFils : 0;
   const taxableFils = Math.max(0, subtotalFils - discountFils + shippingFils);
-  const taxFils = computeInclusiveTax(taxableFils);
+  const taxFils = computeInclusiveTax(taxableFils, resolvedSettings.taxRate);
   const grandTotalFils = Math.max(0, subtotalFils - discountFils + shippingFils + codFeeFils);
 
   session.subtotalFils = subtotalFils;
@@ -236,7 +240,7 @@ export async function setShipping(actor: AuthenticatedUser | null, sessionId: st
   assertSessionOwnership(session, actor);
   if (!session.shippingAddress) throw new AppError('CHECKOUT_ADDRESS_INVALID', 400, { messageEn: 'Add a shipping address first.' });
 
-  const quote = quoteShipping(session.shippingAddress.emirate, session.subtotalFils);
+  const quote = await quoteShipping(session.shippingAddress.emirate, session.subtotalFils);
   session.shippingMethod = { id: quote.id, name: quote.name, carrier: quote.carrier, etaMinDays: quote.etaMinDays, etaMaxDays: quote.etaMaxDays, priceFils: quote.priceFils };
 
   await computeSessionPricing(session, actor);
@@ -256,12 +260,13 @@ export async function createPaymentIntent(actor: AuthenticatedUser | null, sessi
     throw new AppError('SERVICE_UNAVAILABLE', 503, { messageEn: 'This payment method is not available yet.' });
   }
 
+  const settings = await settingsService.getSettingsSnapshot();
   session.paymentMethod = method;
   session.codVerifiedAt = null;
-  await computeSessionPricing(session, actor);
+  await computeSessionPricing(session, actor, settings);
 
-  if (method === 'cod' && session.grandTotalFils > env.COD_MAX_ORDER_FILS) {
-    throw new AppError('COD_LIMIT_EXCEEDED', 409, { messageEn: 'This order total is too high for cash on delivery. Please pay by card instead.', details: { maxFils: env.COD_MAX_ORDER_FILS } });
+  if (method === 'cod' && session.grandTotalFils > settings.codMaxOrderFils) {
+    throw new AppError('COD_LIMIT_EXCEEDED', 409, { messageEn: 'This order total is too high for cash on delivery. Please pay by card instead.', details: { maxFils: settings.codMaxOrderFils } });
   }
 
   const email = actor ? (await identityService.me(actor.id).catch(() => null))?.email ?? null : (session.guestEmail ?? null);
@@ -369,14 +374,19 @@ export async function place(
 
     // Apply discounts one final time (plan.md §8.3/§9.5) — the freshest
     // possible read, right before the snapshot that becomes permanent.
-    const discountResult = await computeSessionPricing(session, actor);
+    // Settings fetched once here (not inside the per-item loop below) —
+    // `computeInclusiveTax` stays a pure function taking `taxRate` as a
+    // parameter, so this is one DB read for the whole `place()` call, not
+    // one per line item.
+    const settings = await settingsService.getSettingsSnapshot();
+    const discountResult = await computeSessionPricing(session, actor, settings);
     await repo.save(session);
 
     const items: CreateOrderFromCheckoutItemInput[] = session.items.map((item) => {
       const variantId = item.variantId.toString();
       const lineDiscountFils = discountResult.lineDiscounts.get(variantId) ?? 0;
       const lineTotalBeforeTax = item.unitPriceFils * item.quantity - lineDiscountFils;
-      const lineTaxFils = computeInclusiveTax(Math.max(0, lineTotalBeforeTax));
+      const lineTaxFils = computeInclusiveTax(Math.max(0, lineTotalBeforeTax), settings.taxRate);
       return {
         productId: item.productId.toString(),
         variantId,
@@ -407,6 +417,7 @@ export async function place(
       shippingFils: session.shippingFils,
       codFeeFils: session.codFeeFils,
       taxFils: session.taxFils,
+      taxRate: settings.taxRate,
       grandTotalFils: session.grandTotalFils,
       discounts: session.discounts.map((d) => ({ discountId: d.discountId.toString(), code: d.code, type: d.type, amountFils: d.amountFils, appliedTo: d.appliedTo, ...(d.itemId ? { itemId: d.itemId.toString() } : {}) })),
       shippingAddress: { label: session.shippingAddress.label, firstName: session.shippingAddress.firstName, lastName: session.shippingAddress.lastName, phone: session.shippingAddress.phone, emirate: session.shippingAddress.emirate, city: session.shippingAddress.city, area: session.shippingAddress.area, buildingName: session.shippingAddress.buildingName, ...(session.shippingAddress.apartment ? { apartment: session.shippingAddress.apartment } : {}), ...(session.shippingAddress.street ? { street: session.shippingAddress.street } : {}), landmark: session.shippingAddress.landmark, makani: session.shippingAddress.makani, poBox: session.shippingAddress.poBox, country: session.shippingAddress.country, geo: session.shippingAddress.geo },

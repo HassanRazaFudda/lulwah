@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
-import { env } from '../../shared/env.js';
 import { AppError, notFoundError } from '../../shared/errors.js';
 import { CART_COOKIE_TTL_MS, CART_MAX_LINES, CART_MAX_QTY_PER_LINE, CART_RESERVATION_TTL_MS, CHECKOUT_RESERVATION_TTL_MS } from '../../config/constants.js';
 import * as repo from './cart.repository.js';
@@ -17,6 +16,7 @@ import * as inventoryService from '../inventory/inventory.service.js';
 import * as identityService from '../identity/identity.service.js';
 import * as pricingService from '../pricing/pricing.service.js';
 import type { ApplyDiscountsResult, CartLineSnapshot } from '../pricing/discount-engine.js';
+import * as settingsService from '../settings/settings.service.js';
 
 /**
  * ALL cart business rules live here, framework-free (no `express`).
@@ -78,9 +78,9 @@ async function releaseAll(store: ReservationStore, cartId: string, variantId: st
 // Run on every read AND every mutation, never trusting a stored total.
 // ---------------------------------------------------------------------------
 
-function computeInclusiveTax(taxableFils: number): number {
+function computeInclusiveTax(taxableFils: number, taxRate: number): number {
   if (taxableFils <= 0) return 0;
-  return Math.round(taxableFils - taxableFils / (1 + env.VAT_RATE));
+  return Math.round(taxableFils - taxableFils / (1 + taxRate));
 }
 
 export interface RecalculateResult {
@@ -120,10 +120,11 @@ async function recalculate(cart: CartHydratedDoc): Promise<RecalculateResult> {
   const variantIds = [...new Set(cart.items.map((i) => i.variantId.toString()))];
   const productIds = [...new Set(cart.items.map((i) => i.productId.toString()))];
 
-  const [variants, inventoryItems, products] = await Promise.all([
+  const [variants, inventoryItems, products, settings] = await Promise.all([
     variantService.getVariantsByIds(variantIds),
     inventoryService.getInventoryForVariants(variantIds),
     productService.getProductsByIds(productIds),
+    settingsService.getSettingsSnapshot(),
   ]);
   const variantById = new Map(variants.map((v) => [v.id, v]));
   const inventoryByVariantId = new Map(inventoryItems.map((i) => [i.variantId, i]));
@@ -202,7 +203,7 @@ async function recalculate(cart: CartHydratedDoc): Promise<RecalculateResult> {
   const codFeeFils = 0; // resolved once a payment method is chosen at checkout
   const discountFils = Math.min(discountResult.orderDiscountFils, subtotalFils);
   const taxableFils = Math.max(0, subtotalFils - discountFils + shippingFils);
-  const taxFils = computeInclusiveTax(taxableFils);
+  const taxFils = computeInclusiveTax(taxableFils, settings.taxRate);
   const grandTotalFils = Math.max(0, subtotalFils - discountFils + shippingFils + codFeeFils);
 
   cart.totals = { subtotalFils, discountFils, shippingFils, codFeeFils, taxFils, grandTotalFils };
