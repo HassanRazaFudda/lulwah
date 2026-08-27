@@ -13,3 +13,4 @@ export * from './cart.js';
 export * from './order.js';
 export * from './discount.js';
 export * from './settings.js';
+export * from './content.js';

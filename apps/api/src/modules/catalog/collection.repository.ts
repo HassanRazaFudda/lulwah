@@ -10,17 +10,24 @@ import { toMediaRefSubdoc } from './media.mapper.js';
  *  see `brand.repository.ts`'s equivalent comment. */
 export type CreateCollectionInput = Pick<CollectionDoc, 'name' | 'slug' | 'type'> &
   Partial<
-    Pick<CollectionDoc, 'nameAr' | 'subtitle' | 'descriptionEn' | 'descriptionAr' | 'launchAt' | 'endAt' | 'status' | 'layout' | 'sortOrder' | 'isFeatured'>
+    Pick<
+      CollectionDoc,
+      'nameAr' | 'subtitle' | 'descriptionEn' | 'descriptionAr' | 'rules' | 'launchAt' | 'endAt' | 'isTeaserVisible' | 'status' | 'layout' | 'sortOrder' | 'isFeatured'
+    >
   > &
-  Partial<{ brandId: string | null; productIds: string[]; heroImage: MediaRef | null }>;
+  Partial<{ brandId: string | null; productIds: string[]; heroImage: MediaRef | null; heroImageMobile: MediaRef | null }>;
 
 export type UpdateCollectionInput = PartialWithUndefined<CreateCollectionInput>;
 
 const NOT_DELETED = { deletedAt: null };
 
 export async function createCollection(input: CreateCollectionInput): Promise<CollectionHydratedDoc> {
-  const { heroImage, ...rest } = input;
-  return CollectionModel.create({ ...rest, ...(heroImage !== undefined ? { heroImage: toMediaRefSubdoc(heroImage) } : {}) });
+  const { heroImage, heroImageMobile, ...rest } = input;
+  return CollectionModel.create({
+    ...rest,
+    ...(heroImage !== undefined ? { heroImage: toMediaRefSubdoc(heroImage) } : {}),
+    ...(heroImageMobile !== undefined ? { heroImageMobile: toMediaRefSubdoc(heroImageMobile) } : {}),
+  });
 }
 
 export async function findCollectionBySlug(slug: string): Promise<CollectionHydratedDoc | null> {
@@ -49,10 +56,14 @@ export async function listCollections(
 }
 
 export async function updateCollection(id: string, input: UpdateCollectionInput): Promise<CollectionHydratedDoc | null> {
-  const { heroImage, ...rest } = input;
+  const { heroImage, heroImageMobile, ...rest } = input;
   return CollectionModel.findOneAndUpdate(
     { _id: id, ...NOT_DELETED },
-    { ...rest, ...(heroImage !== undefined ? { heroImage: toMediaRefSubdoc(heroImage) } : {}) },
+    {
+      ...rest,
+      ...(heroImage !== undefined ? { heroImage: toMediaRefSubdoc(heroImage) } : {}),
+      ...(heroImageMobile !== undefined ? { heroImageMobile: toMediaRefSubdoc(heroImageMobile) } : {}),
+    },
     { returnDocument: 'after' },
   ).exec();
 }
