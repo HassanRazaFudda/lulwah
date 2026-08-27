@@ -4,12 +4,33 @@ import { AppError, notFoundError } from '../../shared/errors.js';
 import { assertPermission } from '../identity/identity.policy.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
 import * as repo from './collection.repository.js';
+import * as productRepo from './product.repository.js';
 import { toCollectionDto } from './collection.mapper.js';
+import { buildAutomatedProductFilter } from './collection.rules.js';
 import { catalogEvents } from './catalog.events.js';
 import type { AdminCreateCollectionInput, AdminUpdateCollectionInput } from './collection.dto.js';
+import type { CollectionHydratedDoc } from './collection.model.js';
 
 function isDuplicateSlugError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 11000;
+}
+
+/** How many products an automated collection resolves to at most — a
+ *  sensible display cap (matches the PLP's own page-size ballpark), not a
+ *  hard product-catalog limit. */
+const AUTOMATED_COLLECTION_MAX_PRODUCTS = 200;
+
+/** `type: 'automated'` collections don't store a curated `productIds` —
+ *  membership is computed live from `rules[]` every time the collection is
+ *  read, via the exact same facet-filter machinery `GET /products` uses
+ *  (`collection.rules.ts`). Manual collections just return their stored,
+ *  drag-ordered array unchanged. */
+async function resolveCollectionDto(doc: CollectionHydratedDoc): Promise<Collection> {
+  const dto = toCollectionDto(doc);
+  if (doc.type !== 'automated') return dto;
+  const filter = buildAutomatedProductFilter(doc.rules);
+  const { products } = await productRepo.listProducts(filter, 'newest', 1, AUTOMATED_COLLECTION_MAX_PRODUCTS);
+  return { ...dto, productIds: products.map((p) => p._id.toString()) };
 }
 
 /** plan.md §9.2 `GET /collections` — public listing, always `status: active`. */
@@ -21,7 +42,7 @@ export async function listPublicCollections(page: number, limit: number): Promis
 export async function getCollectionBySlug(slug: string): Promise<Collection> {
   const doc = await repo.findCollectionBySlug(slug);
   if (!doc || doc.status === 'draft') throw notFoundError('Collection not found.');
-  return toCollectionDto(doc);
+  return resolveCollectionDto(doc);
 }
 
 export async function adminListCollections(
@@ -39,7 +60,7 @@ export async function adminGetCollection(actor: AuthenticatedUser, id: string): 
   assertPermission(actor, 'products.read');
   const doc = await repo.findCollectionById(id);
   if (!doc) throw notFoundError('Collection not found.');
-  return toCollectionDto(doc);
+  return resolveCollectionDto(doc);
 }
 
 /** Fires `collection.launched` (plan.md §5.3) the moment a collection's
