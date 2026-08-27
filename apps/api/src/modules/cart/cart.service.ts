@@ -236,6 +236,24 @@ export async function getCart(cartId: string): Promise<CartResponse> {
   return toCartResponse(cart, itemFlags);
 }
 
+/**
+ * `customer` module's exclusive read for plan.md §11.1's "current cart
+ * contents" panel (plan.md §5.3: never `CartModel` directly). Returns
+ * `null` rather than throwing when the customer has no active cart — no
+ * cart is the ordinary state for most customers, not an error condition
+ * the way an unknown `cartId` passed to `getCart` above is. A narrow,
+ * deliberate extension of this module — same category as
+ * `extendReservationForCheckout`/`convertCart` above being added for
+ * `checkout`'s sake one phase ago.
+ */
+export async function getActiveCartForUser(userId: string): Promise<CartResponse | null> {
+  const cart = await repo.findActiveCartByUserId(userId);
+  if (!cart) return null;
+  const { itemFlags } = await recalculate(cart);
+  await repo.save(cart);
+  return toCartResponse(cart, itemFlags);
+}
+
 export async function addItem(store: ReservationStore, cartId: string, input: { variantId: string; quantity: number }): Promise<CartResponse> {
   const cart = await requireCart(cartId);
 

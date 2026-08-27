@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import type { QueryFilter, SortOrder } from 'mongoose';
 import { CounterModel, OrderModel } from './order.model.js';
 import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
@@ -114,4 +115,73 @@ export async function listOrdersForUser(userId: string, page: number, limit: num
     OrderModel.countDocuments(query).exec(),
   ]);
   return { orders, total };
+}
+
+// ---------------------------------------------------------------------------
+// Customer aggregates — `customer` module's exclusive read for plan.md
+// §11.1's Customers list/detail (spend, last order, COD risk). Aggregation
+// pipelines, not `OrderModel.find()` + JS reduction, so the sum/count/max
+// happen in MongoDB rather than pulling every order document over the wire.
+// ---------------------------------------------------------------------------
+
+export interface CustomerOrderStatsRaw {
+  orderCount: number;
+  totalSpentFils: number;
+  lastOrderAt: Date | null;
+}
+
+/** Orders that count toward a customer's spend/order-count — every status
+ *  except the ones that never became (or never stayed) a real sale:
+ *  `pending_payment` (payment not yet confirmed), `cancelled`, `failed`.
+ *  Deliberately does NOT net out `returned`/`refunded` orders from the
+ *  total — those still represent value the customer transacted at the
+ *  time; a stricter LTV metric that subtracts refunds is future work, not
+ *  built here (see `order.service.ts#getCustomerOrderStats`'s doc
+ *  comment). */
+const SPEND_COUNTED_STATUSES: OrderDoc['status'][] = [
+  'confirmed',
+  'processing',
+  'stitching',
+  'ready_to_ship',
+  'shipped',
+  'out_for_delivery',
+  'delivered',
+  'returned',
+  'refunded',
+];
+
+/** Bulk form — one aggregate query for an entire admin list page (or the
+ *  bounded sort-scan batch `customer.service.ts` uses when sorting by
+ *  spend/last-order) instead of N+1 single-customer queries. Missing users
+ *  (no counted orders at all) simply have no entry in the returned map —
+ *  callers default them to zero/`null`. */
+export async function getOrderStatsForUsers(userIds: string[]): Promise<Map<string, CustomerOrderStatsRaw>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await OrderModel.aggregate<{ _id: Types.ObjectId; orderCount: number; totalSpentFils: number; lastOrderAt: Date }>([
+    { $match: { userId: { $in: userIds.map((id) => new Types.ObjectId(id)) }, status: { $in: SPEND_COUNTED_STATUSES } } },
+    { $group: { _id: '$userId', orderCount: { $sum: 1 }, totalSpentFils: { $sum: '$grandTotalFils' }, lastOrderAt: { $max: '$placedAt' } } },
+  ]).exec();
+  return new Map(rows.map((r) => [r._id.toString(), { orderCount: r.orderCount, totalSpentFils: r.totalSpentFils, lastOrderAt: r.lastOrderAt }]));
+}
+
+export interface CustomerCodRiskCounts {
+  codOrdersPlaced: number;
+  codOrdersCancelled: number;
+}
+
+/** plan.md §11.1 "COD risk flags" — see `@lulwah/contracts`' `CustomerCodRisk`
+ *  doc comment for what this is (and isn't). One aggregate query grouped
+ *  by whether the order was cancelled, rather than two separate counts. */
+export async function getCodRiskForUser(userId: string): Promise<CustomerCodRiskCounts> {
+  const rows = await OrderModel.aggregate<{ _id: boolean; count: number }>([
+    { $match: { userId: new Types.ObjectId(userId), 'payment.method': 'cod' } },
+    { $group: { _id: { $eq: ['$status', 'cancelled'] }, count: { $sum: 1 } } },
+  ]).exec();
+  let codOrdersPlaced = 0;
+  let codOrdersCancelled = 0;
+  for (const row of rows) {
+    codOrdersPlaced += row.count;
+    if (row._id) codOrdersCancelled += row.count;
+  }
+  return { codOrdersPlaced, codOrdersCancelled };
 }

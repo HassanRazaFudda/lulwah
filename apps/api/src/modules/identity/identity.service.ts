@@ -2,11 +2,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-import type { LoginInput, RegisterInput, User, UserRole } from '@lulwah/contracts';
+import type { AdminCustomerProfile, LoginInput, RegisterInput, UpdateCustomerInput, User, UserRole } from '@lulwah/contracts';
 import { env } from '../../shared/env.js';
 import { AppError, notFoundError } from '../../shared/errors.js';
 import * as repo from './identity.repository.js';
-import { toPublicUser } from './identity.mapper.js';
+import type { AdminCustomerFilter } from './identity.repository.js';
+import { toAdminCustomerProfile, toPublicUser } from './identity.mapper.js';
 import { identityEvents } from './identity.events.js';
 import { assertPermission, effectivePermissions } from './identity.policy.js';
 import type { AccessTokenPayload, AuthenticatedUser } from './identity.policy.js';
@@ -263,4 +264,41 @@ export async function updateUserRoleAsAdmin(actor: AuthenticatedUser, targetUser
   const updated = await repo.updateUserRole(targetUserId, role);
   if (!updated) throw notFoundError('User not found.');
   return toPublicUser(updated);
+}
+
+// --- customers (RBAC: 'customers.read'/'customers.write') — plan.md §11.1 --
+//
+// `customer` module's exclusive entry point into `identity`'s user
+// collection for the admin Customers screen (plan.md §5.3: never
+// `UserModel` directly). Always scoped to `role: 'customer'` — a staff
+// account is invisible through this surface even to an id guess, the same
+// "404, not leaked" posture `address.service.ts` uses for cross-customer
+// address access.
+
+export async function adminListCustomers(
+  actor: AuthenticatedUser,
+  filter: AdminCustomerFilter,
+  page: number,
+  limit: number,
+): Promise<{ customers: AdminCustomerProfile[]; total: number }> {
+  assertPermission(actor, 'customers.read');
+  const { docs, total } = await repo.findCustomersPage(filter, page, limit);
+  return { customers: docs.map(toAdminCustomerProfile), total };
+}
+
+export async function adminGetCustomerProfile(actor: AuthenticatedUser, id: string): Promise<AdminCustomerProfile> {
+  assertPermission(actor, 'customers.read');
+  const doc = await repo.findCustomerById(id);
+  if (!doc) throw notFoundError('Customer not found.');
+  return toAdminCustomerProfile(doc);
+}
+
+/** `PATCH /admin/customers/:id` — plan.md §11.1's tag editor + internal
+ *  notes panel. See `UpdateCustomerInput`'s own doc comment on why each
+ *  field replaces wholesale rather than merging. */
+export async function adminUpdateCustomer(actor: AuthenticatedUser, id: string, input: UpdateCustomerInput): Promise<AdminCustomerProfile> {
+  assertPermission(actor, 'customers.write');
+  const updated = await repo.updateCustomerTagsAndNotes(id, input);
+  if (!updated) throw notFoundError('Customer not found.');
+  return toAdminCustomerProfile(updated);
 }

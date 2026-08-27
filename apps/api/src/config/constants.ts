@@ -91,3 +91,18 @@ export const IDEMPOTENCY_LOCK_TTL_MS = 2 * 60_000;
  *  integration — `checkout`'s own scope, not a `shipping_zones` admin CRUD.
  *  AED 20 standard, waived above `env.FREE_SHIPPING_THRESHOLD_FILS`. */
 export const STANDARD_SHIPPING_FEE_FILS = 2_000;
+
+/**
+ * `customer` module — plan.md §11.1's Customers list "sort by spend/last
+ * order." Those two fields live on `order`, a different collection than
+ * `identity`'s `users`, so a true DB-level cross-collection sort+paginate
+ * isn't available without denormalizing spend onto `User.stats` (the
+ * fields plan.md §7.1 already reserves for exactly this, but nothing keeps
+ * them live yet — a real, documented gap, not silently faked). Instead,
+ * sorting by spend/last-order fetches up to this many matching customers,
+ * computes their real order stats in one bulk aggregate, sorts in memory,
+ * then paginates the sorted array — correct for any customer count this
+ * project will plausibly reach before a real launch, not indefinitely
+ * scalable. See `customer.service.ts#adminListCustomers`'s doc comment.
+ */
+export const CUSTOMER_LIST_SORT_SCAN_CAP = 2_000;

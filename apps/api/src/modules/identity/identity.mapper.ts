@@ -1,4 +1,4 @@
-import type { User } from '@lulwah/contracts';
+import type { AdminCustomerProfile, User } from '@lulwah/contracts';
 import type { UserDoc, UserHydratedDoc } from './identity.model.js';
 
 /**
@@ -42,4 +42,15 @@ export function toPublicUser(doc: UserDoc | UserHydratedDoc): User {
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
+}
+
+/** The `customer` module's admin-only superset of `toPublicUser` — adds
+ *  `notesInternal` (plan.md §7.1: "staff-only"), the one field this file's
+ *  own doc comment says must never round-trip to a client, EXCEPT through
+ *  this specific admin-only shape (`@lulwah/contracts`' `AdminCustomerProfile`
+ *  — see that file's doc comment for why it's a separate type rather than
+ *  an addition to the shared `User` schema every other consumer also
+ *  uses). */
+export function toAdminCustomerProfile(doc: UserDoc | UserHydratedDoc): AdminCustomerProfile {
+  return { ...toPublicUser(doc), notesInternal: doc.notesInternal };
 }

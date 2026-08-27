@@ -1,4 +1,4 @@
-import type { Types } from 'mongoose';
+import type { QueryFilter, Types } from 'mongoose';
 import { SessionModel, UserModel } from './identity.model.js';
 import type { SessionDoc, SessionHydratedDoc, SessionRevokedReason, UserDoc, UserHydratedDoc } from './identity.model.js';
 
@@ -104,6 +104,69 @@ export async function revokeFamily(family: string, reason: SessionRevokedReason)
 
 export async function revokeAllSessionsForUser(userId: string, reason: SessionRevokedReason): Promise<void> {
   await SessionModel.updateMany({ userId, revokedAt: null }, { revokedAt: new Date(), revokedReason: reason }).exec();
+}
+
+// ---------------------------------------------------------------------------
+// Customers — `customer` module's exclusive read/write into `users`
+// (plan.md §5.3: never `UserModel` directly). Always scoped to
+// `role: 'customer'` — this is the plan.md §11.1 "Customers" screen, not
+// "Users & roles"' staff-account list (`findUsersPage`/`updateUserRole`
+// above serve that one).
+// ---------------------------------------------------------------------------
+
+export interface AdminCustomerFilter {
+  search?: string | undefined;
+  tag?: string | undefined;
+  marketingConsent?: boolean | undefined;
+}
+
+/** plan.md doesn't specify per-channel marketing-consent filtering, so
+ *  "consented" (`true`) means opted into at least one of email/SMS/
+ *  WhatsApp, and "not consented" (`false`) means none — a documented,
+ *  single reasonable reading, not a literal transcription. `$and` (rather
+ *  than reusing a bare `$or` key twice) is what lets the consent filter
+ *  and the free-text search filter coexist in one query without one
+ *  silently overwriting the other. */
+function buildCustomerQuery(filter: AdminCustomerFilter): QueryFilter<UserDoc> {
+  const extraClauses: QueryFilter<UserDoc>[] = [];
+  if (filter.marketingConsent === true) {
+    extraClauses.push({ $or: [{ 'marketing.email': true }, { 'marketing.sms': true }, { 'marketing.whatsapp': true }] });
+  } else if (filter.marketingConsent === false) {
+    extraClauses.push({ 'marketing.email': false, 'marketing.sms': false, 'marketing.whatsapp': false });
+  }
+  if (filter.search) {
+    const regex = new RegExp(filter.search.trim(), 'i');
+    extraClauses.push({ $or: [{ firstName: regex }, { lastName: regex }, { email: regex }, { 'phone.number': regex }] });
+  }
+
+  const query: QueryFilter<UserDoc> = { role: 'customer' };
+  if (filter.tag) query.tags = filter.tag;
+  if (extraClauses.length > 0) query.$and = extraClauses;
+  return query;
+}
+
+export async function findCustomersPage(filter: AdminCustomerFilter, page: number, limit: number): Promise<{ docs: UserHydratedDoc[]; total: number }> {
+  const query = buildCustomerQuery(filter);
+  const [docs, total] = await Promise.all([
+    UserModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .exec(),
+    UserModel.countDocuments(query).exec(),
+  ]);
+  return { docs, total };
+}
+
+export async function findCustomerById(id: string): Promise<UserHydratedDoc | null> {
+  return UserModel.findOne({ _id: id, role: 'customer' }).exec();
+}
+
+export async function updateCustomerTagsAndNotes(id: string, input: { tags?: string[] | undefined; notesInternal?: string | undefined }): Promise<UserHydratedDoc | null> {
+  const update: Partial<Pick<UserDoc, 'tags' | 'notesInternal'>> = {};
+  if (input.tags !== undefined) update.tags = input.tags;
+  if (input.notesInternal !== undefined) update.notesInternal = input.notesInternal;
+  return UserModel.findOneAndUpdate({ _id: id, role: 'customer' }, update, { returnDocument: 'after' }).exec();
 }
 
 // Otp — stub schema only (see identity.model.ts); the `/auth/otp/*` and
