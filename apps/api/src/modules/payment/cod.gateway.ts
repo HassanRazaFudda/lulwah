@@ -38,13 +38,13 @@ export class CodGateway implements PaymentGateway {
    *  below are COD-specific and called directly by `payment.service.ts`
    *  (and, through it, `checkout`'s `/checkout/cod/verify-otp` route) rather
    *  than through the generic interface, since OTP verification has no
-   *  equivalent in `StripeGateway`. */
+   *  equivalent in `ZiinaGateway`. */
   async createIntent(params: CreateIntentParams): Promise<CreateIntentResult> {
     if (!params.customerPhone) {
       throw new AppError('VALIDATION_FAILED', 400, { messageEn: 'A phone number is required for cash on delivery.', field: 'phone' });
     }
     const { intentId } = await this.requestOtp(params.reference, params.customerPhone);
-    return { intentId, clientSecret: null, status: 'requires_action' };
+    return { intentId, redirectUrl: null, status: 'requires_action' };
   }
 
   /** No real capture step exists for COD (see this class's doc comment) —

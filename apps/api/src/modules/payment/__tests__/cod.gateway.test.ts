@@ -70,7 +70,7 @@ describe('CodGateway', () => {
   it('createIntent succeeds with a phone and reports otp-required status', async () => {
     const gateway = new CodGateway();
     const result = await gateway.createIntent({ reference: 'session-2', amountFils: 10_000, currency: 'AED', method: 'cod', customerEmail: null, customerPhone: '+971501234567' });
-    expect(result.clientSecret).toBeNull();
+    expect(result.redirectUrl).toBeNull();
     expect(result.status).toBe('requires_action');
   });
 

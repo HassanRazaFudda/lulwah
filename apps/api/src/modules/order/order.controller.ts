@@ -4,7 +4,7 @@ import { AppError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
 import * as service from './order.service.js';
-import { AdminAddOrderNoteInput, AdminListOrdersQuery, MeOrdersQuery, TrackOrderQuery, UpdateOrderStatusInput } from './order.dto.js';
+import { AdminAddOrderNoteInput, AdminListOrdersQuery, AdminRefundOrderInput, MeOrdersQuery, TrackOrderQuery, UpdateOrderStatusInput } from './order.dto.js';
 
 /** Parse+validate (Zod) → call service → shape response. No business logic
  *  (plan.md §5.4). */
@@ -38,6 +38,13 @@ export async function adminAddNote(req: Request, res: Response): Promise<void> {
   const actor = requireAuthedUser(req);
   const input = AdminAddOrderNoteInput.parse(req.body);
   const order = await service.addAdminNote(actor, objectId.parse(req.params.id), input.note);
+  sendSuccess(res, { order }, undefined, 201);
+}
+
+export async function adminRefund(req: Request, res: Response): Promise<void> {
+  const actor = requireAuthedUser(req);
+  const input = AdminRefundOrderInput.parse(req.body ?? {});
+  const order = await service.refundOrder(actor, objectId.parse(req.params.id), input);
   sendSuccess(res, { order }, undefined, 201);
 }
 

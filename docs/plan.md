@@ -52,9 +52,9 @@ Custom e‑commerce platform: storefront (Next.js) + REST API (Node.js/Express/M
 | Field | Value |
 |---|---|
 | Document | `plan.md` — single source of truth for scope, architecture and decisions |
-| Version | 1.2 |
+| Version | 1.3 |
 | Status | **Decisions locked.** Anything not locked is listed in §31 "Open questions" with a default already chosen. |
-| Changelog | **1.2** (2026-08-12) — dependency versions refreshed to what is actually current/LTS at build start, since 1.1 had drifted behind real releases. Node 22→**24 LTS**, Next.js 15→**16.3+**, React 19→**19.2+**, MongoDB 7→**8.3+**, Mongoose 8→**9.9+**, Redis 7→**8.10+**, Meilisearch 1.11→**1.48+**, Tailwind v4→**4.3+**. TypeScript pinned at **6.0** rather than the newly-released 7.0 — see the note in §4.1, revisit once 7.x has a stable programmatic API. Affects §4.1, §4.2, §4.3, §36.5. **1.1** — infrastructure moved from managed cloud (Vercel/Atlas/Upstash/Cloudinary) to **self-hosted Docker on one Contabo VPS**. Affects §4.3, §5.1, §5.6, §7.14 (Atlas Search → Meilisearch), §18, §25, §26, §29, §30, and adds §36. |
+| Changelog | **1.3** (2026-08-25) — primary card gateway switched from Stripe to **Ziina** (client decision: UAE-native payment app, dominant with UAE SMBs/consumers over Stripe). Ziina is a hosted-redirect gateway (no client-side SDK/Elements — see §20), which changes the payment-intent response shape (`redirect_url` instead of a client secret) and removes a separate capture step. Affects §4.1, §5.1, §9.5, §9.6, §15.6, §18.6, §19, §20, §24, §28, §29, §30.1, §31‑Q3/Q15. Full API contract recorded in `docs/ziina-integration-notes.md`. **1.2** (2026-08-12) — dependency versions refreshed to what is actually current/LTS at build start, since 1.1 had drifted behind real releases. Node 22→**24 LTS**, Next.js 15→**16.3+**, React 19→**19.2+**, MongoDB 7→**8.3+**, Mongoose 8→**9.9+**, Redis 7→**8.10+**, Meilisearch 1.11→**1.48+**, Tailwind v4→**4.3+**. TypeScript pinned at **6.0** rather than the newly-released 7.0 — see the note in §4.1, revisit once 7.x has a stable programmatic API. Affects §4.1, §4.2, §4.3, §36.5. **1.1** — infrastructure moved from managed cloud (Vercel/Atlas/Upstash/Cloudinary) to **self-hosted Docker on one Contabo VPS**. Affects §4.3, §5.1, §5.6, §7.14 (Atlas Search → Meilisearch), §18, §25, §26, §29, §30, and adds §36. |
 | Audience | Engineering, design, client stakeholders |
 | Language | English (so any developer can pick it up). Client-facing summaries can be Urdu. |
 
@@ -340,7 +340,7 @@ Every choice below is final for R1–R2. Version numbers are the floor; patch up
 | File storage | **Contabo Object Storage** (S3-compatible) + **imgproxy** | Originals live off the VM disk so they survive a rebuild; imgproxy does transforms on the fly; Cloudflare caches the result. Falls back to a local Docker volume if object storage is not purchased. |
 | Email | **Resend** (transactional) + **Klaviyo** (marketing, R2) | |
 | SMS / WhatsApp | **Unifonic** (UAE-local, good deliverability) with Twilio fallback | UAE SMS needs a registered sender ID; Unifonic handles TDRA registration. |
-| Payments | **Stripe** primary (card, Apple Pay, Google Pay, 3DS2) · **Tabby + Tamara** (R2 BNPL) · **COD** in-house | See §20 and §31‑Q3. |
+| Payments | **Ziina** primary (card, Apple Pay, Google Pay via Ziina's hosted payment page) · **Tabby + Tamara** (R2 BNPL) · **COD** in-house | See §20 and §31‑Q3. |
 | Logging | **Pino** → structured JSON → Better Stack | |
 | Errors | **Sentry** (both apps) | |
 | API docs | **OpenAPI 3.1 generated from Zod** (`zod-to-openapi`) + Scalar UI | Docs can never drift from code. |
@@ -424,7 +424,7 @@ no auto-scaling, no managed failover, **one machine is a single point of failure
                                      │
         ┌────────────────┬───────────┼───────────┬──────────────┐
         ▼                ▼           ▼           ▼              ▼
-  Contabo Object    Stripe      Resend      Unifonic      restic backups
+  Contabo Object    Ziina       Resend      Unifonic      restic backups
   Storage (S3)      Tabby       (email)     (SMS/WA)      → B2 / Object St.
   originals+media                                          nightly, off-box
 ```
@@ -1251,7 +1251,7 @@ POST   /cart/:cartId/merge            after login
 POST   /checkout/session              validate stock, lock prices, extend reservations
 POST   /checkout/session/:id/address
 POST   /checkout/session/:id/shipping
-POST   /checkout/session/:id/payment-intent   → Stripe client secret | Tabby session | COD
+POST   /checkout/session/:id/payment-intent   → Ziina hosted-page redirect URL | Tabby session | COD
 POST   /checkout/session/:id/place            Idempotency-Key header REQUIRED
 POST   /checkout/cod/verify-otp
 ```
@@ -1259,7 +1259,7 @@ POST   /checkout/cod/verify-otp
 ### 9.6 Webhooks (public, signature-verified, idempotent)
 
 ```
-POST /webhooks/stripe        signature: stripe-signature
+POST /webhooks/ziina         signature: X-Hmac-Signature (HMAC-SHA256 over raw body)
 POST /webhooks/tabby         hmac
 POST /webhooks/tamara        hmac
 POST /webhooks/aramex        shared secret + IP allowlist
@@ -1706,7 +1706,7 @@ Single page, three collapsible steps, no chrome except the wordmark and a securi
 
 1. **Contact** — email + UAE phone (with a `+971` mask and validation)
 2. **Delivery** — saved addresses or a new one. Fields in UAE order: full name, phone, **emirate (select)**, **area (autocomplete)**, building/villa, apartment/floor, street, landmark, Makani (optional). Shipping method with price and ETA.
-3. **Payment** — Card (Stripe Elements, 3DS2) · Apple Pay / Google Pay (shown only when available, at the top) · Tabby / Tamara (R2, with the instalment amount shown) · **Cash on delivery** (fee and cap stated; triggers an OTP to the phone before the order is placed).
+3. **Payment** — Card, Apple Pay, Google Pay (Ziina's hosted payment page — redirect out, redirect back; 3DS2 is handled on Ziina's side) · Tabby / Tamara (R2, with the instalment amount shown) · **Cash on delivery** (fee and cap stated; triggers an OTP to the phone before the order is placed).
 
 Right column: sticky order summary with editable quantities, coupon field, and the full money breakdown.
 Rules: no forced account creation · autofill and `autocomplete` attributes correct on every field · inline validation on blur, never on keystroke · the "Place order" button is disabled while submitting and the request carries an idempotency key · any error keeps every entered value.
@@ -1786,13 +1786,13 @@ Order number + email/phone → the same timeline component, the shipment details
 **Tactics, in priority order**
 
 1. Server Components by default; `'use client'` only where truly interactive. This is the largest single lever.
-2. Route-level code splitting; GSAP plugins, Three.js, the lightbox, the review widget and Stripe Elements are all dynamically imported.
+2. Route-level code splitting; GSAP plugins, Three.js, the lightbox and the review widget are all dynamically imported. (Card payment has no client-side SDK to split — Ziina is a server-initiated redirect to its own hosted page, §20.)
 3. Fonts: self-hosted WOFF2, subset (Latin + Arabic), `font-display: swap`, preload only the two faces used above the fold, `size-adjust` to prevent CLS.
 4. Images: imgproxy AVIF with WebP fallback, responsive `sizes`, dominant-colour placeholder, explicit width/height, `priority` on exactly one image per page. Each derivative is generated once and then served from the Cloudflare edge — the VPS never re-encodes the same image twice.
 5. Cache: Cloudflare on public GETs, ISR on pages, Redis on hot product/collection reads, TanStack Query on the client.
 6. Mongo: lean queries, projections (never `SELECT *`), the compound indexes in §7.14, denormalised counters instead of `$lookup` in list views.
 7. Third-party scripts: **all** via GTM, loaded `afterInteractive`; the chat widget only on interaction; no script blocks the main thread before LCP.
-8. Preconnect to the media origin and the API origin; DNS-prefetch to Stripe.
+8. Preconnect to the media origin and the API origin.
 9. Prefetch the PDP route on product-card hover/viewport entry.
 10. `content-visibility: auto` on below-the-fold sections.
 
@@ -1810,7 +1810,7 @@ Order number + email/phone → the same timeline component, the shipment details
 | CSRF | SameSite=Lax cookies + a double-submit token on state-changing BFF routes |
 | Rate limiting | Redis sliding window (§9.8) + Cloudflare rules on `/auth/*` and `/checkout/*` |
 | Secrets | Root-owned `/srv/lulwah/.env` (mode `600`), injected by Compose, never in git; a leaked key rotates within 1 hour per runbook (§36.4) |
-| PII | Passwords hashed, OTPs hashed, card data **never touches our servers** (Stripe Elements tokenises in the browser); PII redacted from logs by a Pino serializer allowlist |
+| PII | Passwords hashed, OTPs hashed, card data **never touches our servers** (Ziina's hosted payment page collects the card off our domain entirely — stricter than client-side tokenisation, since we never even load a card form); PII redacted from logs by a Pino serializer allowlist |
 | Payments | PCI-DSS SAQ-A scope only. Webhook signatures verified. Amounts re-verified server-side against the order before capture. |
 | Uploads | Presigned S3 uploads to object storage, MIME + magic-byte check, 10 MB cap, re-encoded with Sharp to strip EXIF/payloads. imgproxy runs with a signed-URL key so it cannot be abused as an open image proxy. |
 | Admin | Separate subdomain, 2FA, IP-change re-auth, 8-hour sessions, every mutation audited |
@@ -1825,14 +1825,14 @@ Order number + email/phone → the same timeline component, the shipment details
 
 | Method | Provider | Notes |
 |---|---|---|
-| Card (Visa/Mastercard/Amex) | **Stripe** | 3DS2 mandatory in UAE; Payment Intents; AED settlement |
-| Apple Pay / Google Pay | Stripe Payment Request Button | Very high mobile conversion in UAE — placed **above** the card form |
+| Card (Visa/Mastercard/Amex) | **Ziina** | UAE-native payment app, dominant with UAE SMBs and consumers; hosted payment page (redirect out, redirect back), 3DS handled on Ziina's side, AED settlement. See `docs/ziina-integration-notes.md` for the full API contract. |
+| Apple Pay / Google Pay | Ziina's hosted payment page | Offered natively on Ziina's own checkout page — no separate integration needed |
 | **Cash on delivery** | In-house | ~35–50% of UAE fashion orders. AED 10 fee, AED 2,000 cap, phone OTP verification before placing, risk screening, cash reconciliation report in admin |
 | Tabby (pay in 4) | Tabby (R2) | Dominant BNPL in UAE; shows "4 × AED 62.25" on PDP and cart — measurably lifts AOV |
 | Tamara | Tamara (R2) | Second BNPL, mainly KSA-facing but used in UAE |
 | Bank transfer | Manual (R2) | For high-value bridal orders; admin marks paid |
 
-**Alternate gateway:** if Stripe onboarding is blocked by the trade licence, use **Telr** or **Checkout.com** — the `PaymentGateway` interface (`createIntent`, `capture`, `refund`, `verifyWebhook`) is provider-agnostic, so switching is one adapter, not a rewrite.
+**Alternate gateway:** if Ziina onboarding is ever blocked, use **Telr**, **Checkout.com**, or reinstate **Stripe** — the `PaymentGateway` interface (`createIntent`, `capture`, `refund`, `verifyWebhook`) is provider-agnostic, so switching is one adapter, not a rewrite. Ziina has no separate capture step (a payment intent moves `pending` → `completed` directly, funds captured at that point) — `capture()` on `ZiinaGateway` is a status-passthrough, not a real authorize/capture split.
 
 **VAT:** 5%, prices displayed inclusive. Invoice shows net, VAT and gross, the store TRN and a sequential tax-invoice number — a legal requirement in the UAE.
 
@@ -1921,7 +1921,7 @@ Every commerce event carries `item_id, item_name, item_brand, item_category (pat
 
 **The 12 Playwright journeys (must be green to deploy):**
 1. Browse home → category → filter by unstitched + lawn → open PDP
-2. Guest: add to cart → checkout → card payment (Stripe test) → confirmation
+2. Guest: add to cart → checkout → card payment (Ziina test mode) → confirmation
 3. Guest: COD with OTP verification
 4. Register → login → add address → order → view in account
 5. Apply a valid coupon; apply an invalid one and see the specific reason
@@ -2130,7 +2130,7 @@ Assumed team: **1 tech lead / full-stack · 1 frontend · 1 backend · 1 designe
 |---|---|---|---|
 | **P0 — Foundation** | 1 | Monorepo, CI, envs, Docker, design tokens, primitives, API skeleton, auth module, seed script | A developer clones and runs the whole stack in one command; a PR deploys a preview |
 | **P1 — Catalogue** | 2–4 | Catalog + inventory modules, admin product editor, media, taxonomy seed, PLP + facets + search, PDP, header/footer/mega menu | 60 real products live on staging, browsable and filterable |
-| **P2 — Commerce** | 5–7 | Cart, discount engine, checkout, Stripe, COD + OTP, order module, order confirmation, emails/SMS | A real AED 1 order completes end to end on staging with both card and COD |
+| **P2 — Commerce** | 5–7 | Cart, discount engine, checkout, Ziina, COD + OTP, order module, order confirmation, emails/SMS | A real AED 1 order completes end to end on staging with both card and COD |
 | **P3 — Operations** | 8–10 | Full admin: order console, **status flags + timeline**, shipments, refunds, discounts builder, customers, CMS/homepage builder, reports, RBAC, audit log | The client's manager runs a full day of simulated operations unaided |
 | **🚀 R1 LAUNCH** | **10–11** | Content load, SEO, analytics, load test, security review, UAT, soft launch | The 12 Playwright journeys green; Lighthouse ≥ 90; backup restore drill passed |
 | **P4 — Experience** | 12–14 | GSAP system in full, the Dupatta WebGL, page transitions, Flip PLP→PDP, lookbook, journal, reviews, wishlist sync, recommendations | Design QA signs off against the §13.2 banned list |
@@ -2148,7 +2148,7 @@ Assumed team: **1 tech lead / full-stack · 1 frontend · 1 backend · 1 designe
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| 1 | Payment gateway onboarding delayed by trade-licence paperwork | High | Blocks launch | Start Stripe/Telr application in **week 1**. Ship COD-only if needed; the gateway is one adapter. |
+| 1 | Payment gateway onboarding delayed by trade-licence paperwork | High | Blocks launch | Start Ziina application in **week 1**. Ship COD-only if needed; the gateway is one adapter. |
 | 2 | Product photography late or inconsistent | High | The whole design depends on imagery | Lock a shooting spec in week 2 (3:4, white seamless, 4 angles + 1 fabric macro + 1 on-model). Provide a fallback typographic card design. |
 | 3 | Client supplies product data as photos on WhatsApp | High | Catalogue chaos | Ship the CSV importer in P1 with a dry-run preview and a filled template; train the client's data entry person in week 4. |
 | 4 | Oversell during a drop | Medium | Angry customers, refunds | Redis reservation with locks (§8.4); load-tested before every drop. |
@@ -2187,7 +2187,7 @@ Assumed team: **1 tech lead / full-stack · 1 frontend · 1 backend · 1 designe
 | GSAP Business licence (annual, amortised) | — | ~$12 |
 | **Infrastructure total** | | **≈ $86–138 / month** |
 
-Plus transaction fees: Stripe ~2.9% + AED 1 · Tabby/Tamara 4–7% of order value.
+Plus transaction fees: Ziina (merchant rate confirmed at onboarding — typically lower than international-card gateways for a UAE-domestic account) · Tabby/Tamara 4–7% of order value.
 
 **SMS is now the largest line item, not servers.** Worth revisiting: send order updates over WhatsApp (much cheaper per message in the UAE) and reserve SMS for OTP only. That single change can cut the bill by half.
 
@@ -2211,7 +2211,7 @@ The saving is real (~$350/month, ~$4,200/year). The cost is engineering time and
 |---|---|---|---|
 | Q1 | Confirm the exact brand list at launch and whether Lulwah is an authorised reseller (affects brand pages and legal copy) | Build with 3 brands seeded, structure supports N | Client · week 2 |
 | Q2 | Is inventory owned (stocked in UAE) or dropshipped from Pakistan? | **Owned stock in UAE**, 2–4 day delivery | Client · week 2 |
-| Q3 | Which payment gateway does the trade licence support — Stripe, Telr, Checkout.com? | Build against Stripe; the adapter interface makes a switch a 2-day job | Client · week 4 |
+| Q3 | ~~Which payment gateway does the trade licence support?~~ **Resolved: Ziina** (client decision, see Q15). Build against Ziina; the adapter interface makes a future switch a 2-day job. | Build against Ziina | Client · week 4 |
 | Q4 | Is custom stitching actually offered, and by whom (in-house tailor / partner)? | Built in R2, feature-flagged **off** until confirmed | Client · week 10 |
 | Q5 | Free-shipping threshold and COD fee — AED 300 / AED 10? | As stated, editable in Admin → Settings | Client · week 5 |
 | Q6 | Arabic at launch or R2? | **R2**, feature-flagged | Client · week 8 |
@@ -2223,7 +2223,7 @@ The saving is real (~$350/month, ~$4,200/year). The cost is engineering time and
 | Q12 | Physical store(s) in UAE — do we need a store locator and click-and-collect? | No store locator in R1 | Client · week 6 |
 | Q13 | **VPS region** — Mumbai, Singapore or EU? Mumbai is ~3× faster to Dubai; EU is the neutral/GDPR-familiar choice. Also worth confirming the client is comfortable with UAE customer data residing in India (permitted under UAE PDPL with safeguards, but a business call). | **Mumbai**, with Cloudflare in front | Client · week 1 |
 | Q14 | Is a second VPS acceptable later for warm standby / HA (~$7/mo)? | Single box at launch; revisit at month 4 or 300 orders/month | Client · week 12 |
-| Q15 | §20 names Stripe as the primary card gateway, but **Ziina** (UAE-native payment app/wallet) has significant adoption with UAE SMBs and may be worth adding alongside or instead of Stripe. Flagged during build, not yet evaluated against §20's `PaymentGateway` interface (`createIntent`/`capture`/`refund`/`verifyWebhook`) or UAE trade-licence/settlement requirements. | **Defer** — R1 ships against Stripe as planned; evaluate Ziina in the P4/P5 phase alongside the Tabby/Tamara BNPL integrations (§20, §28), not before | Client · pre-P4 |
+| Q15 | §20 originally named Stripe as the primary card gateway; client confirmed **Ziina** (UAE-native payment app/wallet) is the gateway to build against, given its dominant adoption with UAE SMBs and consumers over Stripe. | **Decided (2026-08-25): Ziina is primary**, built in P3 against `PaymentGateway` (`createIntent`/`capture`/`refund`/`verifyWebhook`) as a hosted-redirect adapter — see `docs/ziina-integration-notes.md`. Real API key/onboarding still pending from the client; code ships complete but unverified against a live Ziina account until then, same posture P2 held for Stripe. | Client · resolved |
 
 ---
 

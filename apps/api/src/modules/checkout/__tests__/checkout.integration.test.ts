@@ -191,7 +191,7 @@ describe('guest COD checkout — full flow', () => {
     pinNextOtp(482913);
     const intentRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
     expect(intentRes.status).toBe(201);
-    expect(intentRes.body.data).toEqual({ method: 'cod', clientSecret: null, otpRequired: true });
+    expect(intentRes.body.data).toEqual({ method: 'cod', redirectUrl: null, otpRequired: true });
 
     // Wrong code first — must be rejected, and must count against the 3-attempt cap.
     const wrongOtp = await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '000000' });
@@ -298,7 +298,7 @@ describe('guest COD checkout — full flow', () => {
     expect(res.body.error.code).toBe('COD_LIMIT_EXCEEDED');
   });
 
-  it('card payment intent creation 503s cleanly — no Stripe account is configured in this environment', async () => {
+  it('card payment intent creation 503s cleanly — no Ziina account is configured in this environment', async () => {
     const { app } = buildApp();
     const adminToken = (await registerAndLogin(app, 'super_admin')).token;
     const { sessionId } = await checkoutUpToPaymentIntent(app, adminToken, 10);
@@ -454,5 +454,95 @@ describe('admin order status transitions', () => {
     const stored = await OrderModel.findById(orderId).lean();
     expect(stored?.internalNotes).toHaveLength(1);
     expect(stored?.internalNotes[0]?.note).toBe('Customer called to confirm address.');
+  });
+});
+
+describe('admin order refund (plan.md §8.8)', () => {
+  /** COD's `paymentStatus` only flips to `paid` on delivery (see
+   *  `order.service.ts`'s `order.delivered` listener) — a refund requires
+   *  a captured payment to exist, so this drives a COD order all the way
+   *  there (forcing `confirmed -> delivered` directly as `super_admin`,
+   *  the documented escape hatch, since it's not in the transition table). */
+  async function placeAndDeliverCodOrder(app: Express, admin: { token: string }): Promise<{ orderId: string; grandTotalFils: number }> {
+    const { sessionId } = await checkoutUpToPaymentIntent(app, admin.token, 10);
+    pinNextOtp(918273);
+    await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
+    await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '918273' });
+    const placeRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/place`).set('Idempotency-Key', `refund-${sessionId}`).send({});
+    const orderId = placeRes.body.data.order.id as string;
+    expect(placeRes.body.data.order.status).toBe('confirmed');
+
+    const deliverRes = await request(app)
+      .patch(`/api/v1/admin/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ status: 'delivered', note: 'Test: force to delivered for refund coverage.', notifyCustomer: false });
+    expect(deliverRes.status).toBe(200);
+    expect(deliverRes.body.data.order.paymentStatus).toBe('paid');
+
+    return { orderId, grandTotalFils: deliverRes.body.data.order.grandTotalFils as number };
+  }
+
+  it('a full refund (amountFils omitted) refunds everything paid, records an immutable refund entry, and flips paymentStatus to refunded', async () => {
+    const { app } = buildApp();
+    const admin = await registerAndLogin(app, 'super_admin');
+    const { orderId, grandTotalFils } = await placeAndDeliverCodOrder(app, admin);
+
+    const refundRes = await request(app).post(`/api/v1/admin/orders/${orderId}/refund`).set('Authorization', `Bearer ${admin.token}`).send({ reason: 'Customer changed their mind.' });
+    expect(refundRes.status).toBe(201);
+    const order = refundRes.body.data.order;
+    expect(order.refundedFils).toBe(grandTotalFils);
+    expect(order.balanceDueFils).toBe(0); // unaffected by the refund — see order.service.ts#refundOrder's doc comment
+    expect(order.paymentStatus).toBe('refunded');
+    expect(order.refunds).toHaveLength(1);
+    expect(order.refunds[0]).toMatchObject({ amountFils: grandTotalFils, status: 'completed', reason: 'Customer changed their mind.' });
+    expect(order.refunds[0].gatewayRefundId).toEqual(expect.stringContaining('cod_refund_'));
+
+    // Nothing left to refund — rejected, not silently accepted as a $0 no-op.
+    const secondRefund = await request(app).post(`/api/v1/admin/orders/${orderId}/refund`).set('Authorization', `Bearer ${admin.token}`).send({});
+    expect(secondRefund.status).toBe(409);
+    expect(secondRefund.body.error.code).toBe('CONFLICT');
+  });
+
+  it('a partial refund updates refundedFils and sets paymentStatus to partially_refunded, without disturbing balanceDueFils', async () => {
+    const { app } = buildApp();
+    const admin = await registerAndLogin(app, 'super_admin');
+    const { orderId, grandTotalFils } = await placeAndDeliverCodOrder(app, admin);
+    const partial = Math.floor(grandTotalFils / 2);
+
+    const refundRes = await request(app).post(`/api/v1/admin/orders/${orderId}/refund`).set('Authorization', `Bearer ${admin.token}`).send({ amountFils: partial });
+    expect(refundRes.status).toBe(201);
+    const order = refundRes.body.data.order;
+    expect(order.refundedFils).toBe(partial);
+    // A refund is symmetric — it reduces both what was owed and what was
+    // paid by the same amount, so it cancels out of "owed minus paid"
+    // entirely (see order.service.ts#refundOrder's own doc comment).
+    // balanceDueFils stays whatever it was at payment capture (0, already
+    // fully paid) — refunds are tracked via refundedFils/paymentStatus,
+    // not by this field going negative.
+    expect(order.balanceDueFils).toBe(0);
+    expect(order.paymentStatus).toBe('partially_refunded');
+  });
+
+  it('rejects with 409 CONFLICT when the order has no captured payment yet, and 403 for an actor missing refunds.write', async () => {
+    const { app } = buildApp();
+    const admin = await registerAndLogin(app, 'super_admin');
+    const { sessionId } = await checkoutUpToPaymentIntent(app, admin.token, 10);
+    pinNextOtp(102938);
+    await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
+    await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '102938' });
+    const placeRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/place`).set('Idempotency-Key', `refund-unpaid-${sessionId}`).send({});
+    const orderId = placeRes.body.data.order.id as string;
+    // Still `confirmed`, never delivered — COD's paymentStatus is still 'unpaid'.
+
+    const conflictRes = await request(app).post(`/api/v1/admin/orders/${orderId}/refund`).set('Authorization', `Bearer ${admin.token}`).send({});
+    expect(conflictRes.status).toBe(409);
+    expect(conflictRes.body.error.code).toBe('CONFLICT');
+
+    // `catalog` role has no `refunds.write` (see identity.policy.ts's ROLE_PERMISSIONS).
+    await UserModel.updateOne({ _id: admin.userId }, { role: 'catalog' });
+    const catalogLogin = await request(app).post('/api/v1/auth/login').send({ email: admin.email, password: 'correct-horse-battery-staple' });
+    const catalogToken = catalogLogin.body.data.accessToken as string;
+    const forbiddenRes = await request(app).post(`/api/v1/admin/orders/${orderId}/refund`).set('Authorization', `Bearer ${catalogToken}`).send({});
+    expect(forbiddenRes.status).toBe(403);
   });
 });

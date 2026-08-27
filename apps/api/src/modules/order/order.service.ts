@@ -10,6 +10,7 @@ import * as identityService from '../identity/identity.service.js';
 import * as inventoryService from '../inventory/inventory.service.js';
 import * as pricingService from '../pricing/pricing.service.js';
 import * as productService from '../catalog/product.service.js';
+import * as paymentService from '../payment/payment.service.js';
 import * as repo from './order.repository.js';
 import type { AdminOrderListFilter, CreateOrderInput } from './order.repository.js';
 import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
@@ -17,7 +18,7 @@ import { toOrderDto, toPublicTrackingView } from './order.mapper.js';
 import type { PublicOrderTrackingView } from './order.mapper.js';
 import { assertValidOrderStatusTransition } from './order.transitions.js';
 import { orderEvents } from './order.events.js';
-import type { UpdateOrderStatusInput } from './order.dto.js';
+import type { AdminRefundOrderInput, UpdateOrderStatusInput } from './order.dto.js';
 
 /**
  * ALL order business rules live here, framework-free (no `express` — plan.md
@@ -112,8 +113,8 @@ export interface CreateOrderFromCheckoutInput {
  *
  * COD orders auto-advance to `confirmed` immediately (see the doc comment
  * on the `if (input.paymentMethod === 'cod')` branch below) — every other
- * method waits for its payment confirmation (a Stripe webhook) to make
- * that same transition.
+ * method waits for its payment confirmation (a Ziina webhook, plan.md §20)
+ * to make that same transition.
  *
  * `created: false` on the return value means this call was itself a
  * retried request that raced past `checkout`'s Redis-side idempotency
@@ -291,7 +292,20 @@ async function applyTransition(order: OrderHydratedDoc, to: OrderStatus, opts: T
   if (to === 'delivered') await orderEvents.publish('order.delivered', { orderId });
   await orderEvents.publish('order.status_changed', { orderId, orderNumber: order.orderNumber, from, to, notifyCustomer: opts.notifyCustomer });
 
-  return order;
+  // A real bug this module's own refund-endpoint test caught: `order
+  // .confirmed`/`order.delivered`'s listeners (above) each fetch their OWN
+  // copy of the order and persist further field writes on it (invoice
+  // number; COD's `paymentStatus -> 'paid'` on delivery) — writes that
+  // never touch this function's own in-memory `order`. The database was
+  // always correct; only the DTO this function returned (and therefore
+  // `PATCH /admin/orders/:id/status`'s HTTP response body) was stale,
+  // which matters for exactly the case `order.service.ts#refundOrder`
+  // cares about: a caller deciding whether an order is refundable from
+  // the status-transition response it just received. Cheap to re-fetch
+  // (a single indexed findOne by `_id`) rather than threading every
+  // listener's field writes back through this function by hand.
+  const fresh = await repo.findOrderById(orderId);
+  return fresh ?? order;
 }
 
 /** `PATCH /admin/orders/:id/status` — plan.md §9.7, the status flag
@@ -316,7 +330,7 @@ export async function updateOrderStatus(actor: AuthenticatedUser, orderId: strin
 }
 
 /**
- * `payment` module's exclusive entry point for its Stripe webhook handler
+ * `payment` module's exclusive entry point for its Ziina webhook handler
  * (plan.md §5.3, §9.6) — never `OrderModel` directly. Records the card
  * charge's outcome on `payment`/money fields (which the generic
  * `applyTransition` doesn't know how to touch — a webhook is the one place
@@ -344,17 +358,17 @@ export async function recordCardPaymentResult(paymentIntentId: string, result: '
     order.balanceDueFils = 0;
     if (chargeId) order.payment.transactionIds.push(chargeId);
     await repo.save(order);
-    const updated = await applyTransition(order, 'confirmed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Stripe payment confirmed.', notifyCustomer: true });
+    const updated = await applyTransition(order, 'confirmed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Card payment confirmed (Ziina).', notifyCustomer: true });
     return toOrderDto(updated);
   }
 
   order.paymentStatus = 'failed';
   await repo.save(order);
-  const updated = await applyTransition(order, 'failed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Stripe payment failed.', notifyCustomer: true });
+  const updated = await applyTransition(order, 'failed', { actorId: SYSTEM_ACTOR_ID, isSuperAdminForce: false, note: 'Card payment failed (Ziina).', notifyCustomer: true });
   return toOrderDto(updated);
 }
 
-/** Internal system-driven transition — `payment` module's Stripe webhook
+/** Internal system-driven transition — `payment` module's Ziina webhook
  *  handler calls this to move a card order `pending_payment → confirmed`
  *  (payment succeeded) or `pending_payment → failed` (payment failed),
  *  attributed to `SYSTEM_ACTOR_ID` (plan.md's own sentinel for exactly
@@ -468,6 +482,92 @@ export async function addAdminNote(actor: AuthenticatedUser, id: string, note: s
   const order = await repo.findOrderById(id);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
   order.internalNotes.push({ note, byUserId: new Types.ObjectId(actor.id), at: new Date() });
+  await repo.save(order);
+  return toOrderDto(order);
+}
+
+/**
+ * `POST /admin/orders/:id/refund` — plan.md §8.8. Requires `refunds.write`
+ * (already declared in `identity.policy.ts`'s `PERMISSIONS` list — route-
+ * level `requireOrderRefund()` gates it too, this is the service-layer
+ * re-check plan.md §10.2 asks every permission-gated action to have).
+ *
+ * Resolves "amount omitted = full refund" here (not in `payment.service
+ * .ts` or the gateway) because this is the one layer that actually has
+ * `order.paidFils`/`refundedFils` to compute "what's still refundable"
+ * from — `payment.service.ts#refundOrder`/`PaymentGateway#refund` both
+ * always receive a concrete integer, so neither needed a "no amount means
+ * full" branch of their own.
+ *
+ * Money/`paymentStatus` bookkeeping (judgment call, since plan.md doesn't
+ * spell out the exact formula): `refundedFils` accumulates every non-
+ * `failed` refund. `balanceDueFils` (a `SignedFils` — see
+ * `packages/contracts/src/money.ts`) is deliberately left untouched by a
+ * refund — a first attempt at this recomputed it as
+ * `grandTotalFils - paidFils - refundedFils`, but that double-counts the
+ * refund: a refund symmetrically reduces both what was effectively *owed*
+ * (`grandTotalFils - refundedFils`) and what was effectively *paid*
+ * (`paidFils - refundedFils`) by the same amount, so it cancels out of
+ * "owed minus paid" entirely — `(grandTotalFils - refundedFils) -
+ * (paidFils - refundedFils)` is just `grandTotalFils - paidFils`, refunds
+ * or not. `balanceDueFils` stays whatever it was set to at payment capture
+ * (0, once fully paid — see `recordCardPaymentResult`/the `order.delivered`
+ * listener above) for the same reason a $50 refund on a fully-paid order
+ * doesn't leave the customer owing (or being owed) anything further once
+ * the refund transfer itself has happened: the money already moved via
+ * the gateway call above, `refundedFils`/`paymentStatus` are what record
+ * that it did. `SignedFils` stays the field's type regardless (an
+ * existing capability — e.g. a manual overpayment adjustment elsewhere —
+ * not one this function needs to newly exercise). `paymentStatus` follows
+ * `refundedFils` against `paidFils` (not `grandTotalFils` — a partially-
+ * paid order can't be "fully refunded" by refunding only what it actually
+ * paid).
+ *
+ * A gateway response of `status: 'failed'` is still recorded in
+ * `order.refunds[]` (the immutable audit trail — a failed attempt is real
+ * history, not discarded) but never touches the money fields above. There
+ * is no Ziina webhook for refund-status changes (only
+ * `payment_intent.status.updated` is documented) and this build doesn't
+ * poll `GET /refund/{id}`, so a gateway `'pending'` response is treated the
+ * same as `'completed'` here — the money is considered on its way back the
+ * moment Ziina accepts the request. Documented as a known gap, not silently
+ * assumed correct.
+ */
+export async function refundOrder(actor: AuthenticatedUser, orderId: string, input: AdminRefundOrderInput): Promise<Order> {
+  assertPermission(actor, 'refunds.write');
+  const order = await repo.findOrderById(orderId);
+  if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+
+  if (order.paymentStatus !== 'paid' && order.paymentStatus !== 'partially_refunded') {
+    throw new AppError('CONFLICT', 409, { messageEn: 'This order has no captured payment to refund.' });
+  }
+
+  const refundableFils = order.paidFils - order.refundedFils;
+  const amountFils = input.amountFils ?? refundableFils;
+  if (amountFils <= 0 || amountFils > refundableFils) {
+    throw new AppError('CONFLICT', 409, {
+      messageEn: 'Refund amount must be greater than zero and cannot exceed the amount still refundable.',
+      details: { refundableFils },
+    });
+  }
+
+  const result = await paymentService.refundOrder({ method: order.payment.method, gateway: order.payment.gateway, intentId: order.payment.intentId }, amountFils, input.reason);
+  const status: 'pending' | 'completed' | 'failed' = result.status === 'failed' ? 'failed' : result.status === 'pending' ? 'pending' : 'completed';
+
+  order.refunds.push({
+    amountFils,
+    reason: input.reason,
+    status,
+    gatewayRefundId: result.refundId,
+    byUserId: new Types.ObjectId(actor.id),
+    at: new Date(),
+  } as OrderDoc['refunds'][number]);
+
+  if (status !== 'failed') {
+    order.refundedFils += amountFils;
+    order.paymentStatus = order.refundedFils >= order.paidFils ? 'refunded' : 'partially_refunded';
+  }
+
   await repo.save(order);
   return toOrderDto(order);
 }
