@@ -244,6 +244,16 @@ export async function me(userId: string): Promise<User> {
   return toPublicUser(userDoc);
 }
 
+/** `report` module's Customers report — a plain internal bulk read
+ *  (no `actor`/permission check, matching `catalog`'s `getBrandsByIds`/
+ *  `getVariantsByIds`: this is `identity`'s exported seam for another
+ *  module, not an HTTP-facing endpoint of its own). */
+export async function getUsersByIds(ids: readonly string[]): Promise<User[]> {
+  if (ids.length === 0) return [];
+  const docs = await repo.findUsersByIds(ids);
+  return docs.map(toPublicUser);
+}
+
 // --- admin (RBAC demonstration — plan.md §10.2) -----------------------------
 
 export async function listUsers(

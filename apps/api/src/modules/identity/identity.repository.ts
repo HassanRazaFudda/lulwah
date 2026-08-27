@@ -27,6 +27,13 @@ export async function findUserById(id: string): Promise<UserHydratedDoc | null> 
   return UserModel.findById(id).exec();
 }
 
+/** `report` module's Customers report (plan.md §11.1's LTV list needs a
+ *  name/email per `userId` an `orders` aggregation already grouped by) —
+ *  same bulk-by-ids seam as `catalog/brand.service.ts#getBrandsByIds`. */
+export async function findUsersByIds(ids: readonly string[]): Promise<UserHydratedDoc[]> {
+  return UserModel.find({ _id: { $in: ids } }).exec();
+}
+
 export async function countUsers(): Promise<number> {
   return UserModel.countDocuments().exec();
 }

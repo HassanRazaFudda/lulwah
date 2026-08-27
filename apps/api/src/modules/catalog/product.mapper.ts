@@ -114,6 +114,7 @@ export function toVariantDto(doc: VariantDoc | VariantHydratedDoc): Variant {
     mediaIds: doc.mediaIds,
     isActive: doc.isActive,
     sortOrder: doc.sortOrder,
+    createdAt: doc.createdAt,
   };
 }
 

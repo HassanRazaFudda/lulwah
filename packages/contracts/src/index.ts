@@ -16,3 +16,4 @@ export * from './settings.js';
 export * from './content.js';
 export * from './customer.js';
 export * from './audit.js';
+export * from './report.js';

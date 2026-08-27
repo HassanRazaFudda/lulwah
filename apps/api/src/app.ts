@@ -25,6 +25,7 @@ import { createContentRouter } from './modules/content/content.routes.js';
 import { createCustomerRouter } from './modules/customer/customer.routes.js';
 import { createAuditRouter } from './modules/audit/audit.routes.js';
 import { auditLogMiddleware } from './modules/audit/audit-log.middleware.js';
+import { createReportRouter } from './modules/report/report.routes.js';
 
 /** The one route that must never go through the global JSON body parser —
  *  see this file's doc comment on `ZIINA_WEBHOOK_PATH`. */
@@ -114,6 +115,7 @@ export function createApp({ rateLimitStore, reservationStore, idempotencyStore }
   app.use(API_PREFIX, createContentRouter());
   app.use(API_PREFIX, createCustomerRouter());
   app.use(API_PREFIX, createAuditRouter());
+  app.use(API_PREFIX, createReportRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet
