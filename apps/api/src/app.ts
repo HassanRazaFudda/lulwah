@@ -20,6 +20,7 @@ import { createOrderRouter } from './modules/order/order.routes.js';
 import { createCheckoutRouter } from './modules/checkout/checkout.routes.js';
 import type { IdempotencyStore } from './modules/checkout/idempotency-store.js';
 import { createPaymentRouter } from './modules/payment/payment.routes.js';
+import { createSettingsRouter } from './modules/settings/settings.routes.js';
 
 /** The one route that must never go through the global JSON body parser —
  *  see this file's doc comment on `STRIPE_WEBHOOK_PATH`. */
@@ -94,6 +95,7 @@ export function createApp({ rateLimitStore, reservationStore, idempotencyStore }
   app.use(API_PREFIX, createOrderRouter({ rateLimitStore }));
   app.use(API_PREFIX, createCheckoutRouter({ reservationStore, idempotencyStore }));
   app.use(API_PREFIX, createPaymentRouter());
+  app.use(API_PREFIX, createSettingsRouter());
 
   // Anything under /api/v1 that no router claimed still gets the §9.1
   // envelope, never Express's default HTML 404 — modules not built yet

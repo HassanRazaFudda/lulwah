@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 import type { AddressSnapshot, DiscountType, Order, OrderStatus, PaymentMethod, Size } from '@lulwah/contracts';
-import { env } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import { notifyStub } from '../../shared/notify.js';
 import { SYSTEM_ACTOR_ID } from '../../config/constants.js';
@@ -92,6 +91,12 @@ export interface CreateOrderFromCheckoutInput {
   shippingFils: number;
   codFeeFils: number;
   taxFils: number;
+  /** plan.md §31 Q5: the VAT rate is now DB-backed via `settings`, not a
+   *  hardcoded `env.VAT_RATE` — `checkout.service.ts#place` reads it once
+   *  from `settings.service.ts#getSettingsSnapshot` and passes it straight
+   *  through here rather than `order` taking its own dependency on
+   *  `settings` for a single scalar it doesn't otherwise need. */
+  taxRate: number;
   grandTotalFils: number;
   discounts: CreateOrderFromCheckoutDiscountInput[];
   shippingAddress: AddressSnapshot;
@@ -157,7 +162,7 @@ export async function createOrderFromCheckout(input: CreateOrderFromCheckoutInpu
     shippingFils: input.shippingFils,
     codFeeFils: input.codFeeFils,
     taxFils: input.taxFils,
-    taxRate: env.VAT_RATE,
+    taxRate: input.taxRate,
     taxInclusive: true,
     grandTotalFils: input.grandTotalFils,
     paidFils: 0,
