@@ -43,6 +43,15 @@ export async function findDiscountById(id: string): Promise<DiscountHydratedDoc 
   return DiscountModel.findOne({ _id: id, ...NOT_DELETED }).exec();
 }
 
+/** `report` module's Discounts report — bulk name/code/type/status lookup
+ *  for the discount ids an `orders.discounts[]` aggregation already
+ *  grouped by. Same bulk-by-ids seam as `catalog/brand.service.ts
+ *  #getBrandsByIds`; deliberately includes soft-deleted rows (a discount
+ *  can be deleted after it was used — the report still needs its name). */
+export async function findDiscountsByIds(ids: readonly string[]): Promise<DiscountHydratedDoc[]> {
+  return DiscountModel.find({ _id: { $in: ids } }).exec();
+}
+
 export async function findDiscountByCode(code: string): Promise<DiscountHydratedDoc | null> {
   return DiscountModel.findOne({ code: code.toUpperCase(), ...NOT_DELETED }).exec();
 }

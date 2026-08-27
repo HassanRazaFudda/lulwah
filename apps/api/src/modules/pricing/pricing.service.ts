@@ -46,6 +46,16 @@ export async function adminGetDiscount(actor: AuthenticatedUser, id: string): Pr
   return toDiscountDto(doc);
 }
 
+/** `report` module's Discounts report — a plain internal bulk read (no
+ *  `actor`, matching `catalog`'s `getBrandsByIds`/`getVariantsByIds`: this
+ *  is `pricing`'s exported seam for another module, not its own
+ *  HTTP-facing endpoint). */
+export async function getDiscountsByIds(ids: readonly string[]): Promise<Discount[]> {
+  if (ids.length === 0) return [];
+  const docs = await repo.findDiscountsByIds(ids);
+  return docs.map(toDiscountDto);
+}
+
 export async function createDiscount(actor: AuthenticatedUser, input: AdminCreateDiscountInput): Promise<Discount> {
   assertPermission(actor, 'discounts.write');
   if (input.mode === 'code' && !input.code) {

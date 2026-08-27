@@ -32,6 +32,21 @@ export async function getVariantById(id: string): Promise<Variant | null> {
   return doc ? toVariantDto(doc) : null;
 }
 
+/**
+ * `report` module's Discounts/Inventory reports (plan.md §11.1's "margin
+ * impact" / "stock value") — a SEPARATE bulk read from `getVariantsByIds`
+ * above, deliberately: that one is documented as `cart`'s cost-blind
+ * entry point (`costPriceFils` must never reach a customer-facing flow).
+ * Reports are an admin-only surface (route-gated by `reports.read`), so
+ * this uses `toAdminVariantDto` instead — same real `costPriceFils` the
+ * admin product editor's Pricing tab already shows.
+ */
+export async function getVariantsWithCostByIds(ids: readonly string[]): Promise<Variant[]> {
+  if (ids.length === 0) return [];
+  const docs = await variantRepo.findVariantsByIds(ids);
+  return docs.map(toAdminVariantDto);
+}
+
 async function requireProduct(productId: string) {
   const product = await productRepo.findProductById(productId);
   if (!product) throw notFoundError('Product not found.');

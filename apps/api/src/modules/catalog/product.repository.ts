@@ -220,3 +220,22 @@ export async function listAllActiveProductIds(): Promise<string[]> {
   const rows = await ProductModel.find({ status: 'active', ...NOT_DELETED }, { _id: 1 }).lean().exec();
   return rows.map((row) => row._id.toString());
 }
+
+/** `report` module's Products report — plan.md §11.1's "never-sold" list.
+ *  `soldCount` is already the exact internal counter `order.service.ts`
+ *  increments on confirmation (see this model's doc comment); a product
+ *  with `soldCount: 0` has never sold a single unit, lifetime, full stop
+ *  — no date window applies to "never sold" the way it does to a
+ *  best/worst-sellers window. Small, narrow addition in the same spirit
+ *  as `incrementSoldCount` itself, kept here rather than making `report`
+ *  read `ProductModel` directly (plan.md §5.3). */
+export async function findNeverSoldActiveProducts(limit: number): Promise<ProductHydratedDoc[]> {
+  return ProductModel.find({ status: 'active', soldCount: 0, ...NOT_DELETED })
+    .sort({ createdAt: 1 })
+    .limit(limit)
+    .exec();
+}
+
+export async function countNeverSoldActiveProducts(): Promise<number> {
+  return ProductModel.countDocuments({ status: 'active', soldCount: 0, ...NOT_DELETED }).exec();
+}

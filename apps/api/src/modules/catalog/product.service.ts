@@ -250,6 +250,17 @@ export async function incrementSoldCount(productId: string, quantity: number): P
   await productRepo.incrementSoldCount(productId, quantity);
 }
 
+/**
+ * `report` module's Products report (plan.md §11.1's "never-sold" list) —
+ * same exported-seam pattern as `getProductsByIds`/`getInventoryForVariants`:
+ * a plain internal read `report` calls instead of touching `ProductModel`
+ * directly (plan.md §5.3).
+ */
+export async function getNeverSoldProducts(limit: number): Promise<{ products: Product[]; total: number }> {
+  const [docs, total] = await Promise.all([productRepo.findNeverSoldActiveProducts(limit), productRepo.countNeverSoldActiveProducts()]);
+  return { products: docs.map(toProductDto), total };
+}
+
 /** Recomputes `priceRange` from the product's own active variants — called
  *  by `variant.service.ts` after any variant create/update/delete that
  *  could move the min/max (plan.md §7.5: "recomputed on write"). Falls

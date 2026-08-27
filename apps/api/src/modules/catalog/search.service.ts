@@ -1,4 +1,4 @@
-import type { Product } from '@lulwah/contracts';
+import type { Product, SearchQueryRow } from '@lulwah/contracts';
 import { logger } from '../../shared/logger.js';
 import { meiliSearchIndexPort } from '../../integrations/meilisearch/search-index-port.js';
 import type { SearchIndexPort } from '../../integrations/meilisearch/search-index-port.js';
@@ -7,6 +7,8 @@ import * as brandRepo from './brand.repository.js';
 import * as categoryRepo from './category.repository.js';
 import * as productRepo from './product.repository.js';
 import * as variantRepo from './variant.repository.js';
+import * as searchQueryRepo from './search-query.repository.js';
+import type { SearchQueryAggregateRow } from './search-query.repository.js';
 import { toProductDto } from './product.mapper.js';
 
 function escapeRegExp(input: string): string {
@@ -79,6 +81,19 @@ export interface SearchProductsResult {
   source: 'meilisearch' | 'mongo_fallback';
 }
 
+/** Fire-and-forget: the Reports screen's Search category (plan.md §11.1)
+ *  needs real query data, but logging must never be able to slow down or
+ *  break `GET /search` itself (same "search must never 500" rule §7.14
+ *  states for the search backend itself — applied here to its own
+ *  logging). Never awaited by the caller; failures are swallowed, not
+ *  thrown. Blank queries are already filtered out by `searchProducts`
+ *  before this is reached. */
+function logSearchQueryFireAndForget(query: string, resultCount: number, source: SearchProductsResult['source']): void {
+  searchQueryRepo.logSearchQuery({ query, resultCount, source }).catch((err: unknown) => {
+    logger.warn({ err }, 'search query logging failed (non-fatal — plan.md §11.1 report data will just be missing this one)');
+  });
+}
+
 /** plan.md §9.2 `GET /search` + §7.14's explicit rule: "If Meilisearch is
  *  unreachable the API falls back to a Mongo regex query on `title` +
  *  `articleCode` — degraded, but search never returns a 500." */
@@ -88,20 +103,42 @@ export async function searchProducts(query: string, limit: number, port: SearchI
 
   try {
     const ids = await port.search(trimmed, limit);
-    if (ids.length === 0) return { products: [], source: 'meilisearch' };
+    if (ids.length === 0) {
+      logSearchQueryFireAndForget(trimmed, 0, 'meilisearch');
+      return { products: [], source: 'meilisearch' };
+    }
     const docs = await productRepo.findProductsByIds(ids);
     const byId = new Map(docs.map((doc) => [doc._id.toString(), doc]));
     // Preserve Meilisearch's own ranking order, not Mongo's natural order.
     const ordered = ids
       .map((id) => byId.get(id))
       .filter((doc): doc is NonNullable<typeof doc> => doc !== undefined && doc.status === 'active');
+    logSearchQueryFireAndForget(trimmed, ordered.length, 'meilisearch');
     return { products: ordered.map((doc) => toProductDto(doc)), source: 'meilisearch' };
   } catch (err) {
     logger.warn({ err }, 'meilisearch search failed — falling back to Mongo regex (plan.md §7.14)');
     const regex = new RegExp(escapeRegExp(trimmed), 'i');
     const docs = await productRepo.searchProductsMongoFallback(regex, limit);
+    logSearchQueryFireAndForget(trimmed, docs.length, 'mongo_fallback');
     return { products: docs.map((doc) => toProductDto(doc)), source: 'mongo_fallback' };
   }
+}
+
+function toSearchQueryRow(row: SearchQueryAggregateRow): SearchQueryRow {
+  return { query: row.sampleQuery, searchCount: row.searchCount, avgResultCount: row.avgResultCount, lastSearchedAt: row.lastSearchedAt };
+}
+
+/** `report` module's Search report (plan.md §11.1) — `catalog`'s exported
+ *  seam over the `search_queries` log this file writes to above, so
+ *  `report` never touches `SearchQueryLogModel` directly (plan.md §5.3). */
+export async function getTopSearchQueries(dateFrom: Date | undefined, dateTo: Date | undefined, limit: number): Promise<SearchQueryRow[]> {
+  const rows = await searchQueryRepo.aggregateTopQueries(dateFrom, dateTo, limit);
+  return rows.map(toSearchQueryRow);
+}
+
+export async function getZeroResultSearchQueries(dateFrom: Date | undefined, dateTo: Date | undefined, limit: number): Promise<SearchQueryRow[]> {
+  const rows = await searchQueryRepo.aggregateZeroResultQueries(dateFrom, dateTo, limit);
+  return rows.map(toSearchQueryRow);
 }
 
 /** `pnpm reindex` (`scripts/reindex.ts`) — a full rebuild from Mongo,

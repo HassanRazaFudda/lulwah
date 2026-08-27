@@ -159,5 +159,10 @@ export const Variant = z.object({
   mediaIds: z.array(z.string()),
   isActive: z.boolean(),
   sortOrder: z.number().int(),
+  // Added for the `report` module's Inventory report (plan.md §11.1
+  // "ageing") — the one field this schema was missing to answer "how
+  // long has this variant existed" without `report` reading
+  // `VariantModel` directly (plan.md §5.3).
+  createdAt: z.coerce.date(),
 });
 export type Variant = z.infer<typeof Variant>;
