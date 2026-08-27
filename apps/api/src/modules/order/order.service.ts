@@ -609,6 +609,61 @@ export async function getMyOrderByNumber(userId: string, orderNumber: string): P
   return toOrderDto(order);
 }
 
+// ---------------------------------------------------------------------------
+// Customer aggregates — `customer` module's exclusive read for plan.md
+// §11.1's Customers list/detail (plan.md §5.3: never `OrderModel`
+// directly).
+// ---------------------------------------------------------------------------
+
+export interface CustomerOrderStats {
+  orderCount: number;
+  totalSpentFils: number;
+  avgOrderValueFils: number;
+  lastOrderAt: Date | null;
+}
+
+function toCustomerOrderStats(raw: { orderCount: number; totalSpentFils: number; lastOrderAt: Date | null } | undefined): CustomerOrderStats {
+  const orderCount = raw?.orderCount ?? 0;
+  const totalSpentFils = raw?.totalSpentFils ?? 0;
+  return {
+    orderCount,
+    totalSpentFils,
+    avgOrderValueFils: orderCount > 0 ? Math.round(totalSpentFils / orderCount) : 0,
+    lastOrderAt: raw?.lastOrderAt ?? null,
+  };
+}
+
+/** plan.md §7.1's `User.stats` fields exist for exactly this shape
+ *  (`orderCount`/`totalSpentFils`/`avgOrderValueFils`/`lastOrderAt`), but
+ *  nothing keeps them live yet (see `identity.model.ts`'s own doc comment:
+ *  "nothing writes to them yet") — so this computes them live from real
+ *  order data on every call rather than trusting a stale persisted zero.
+ *  See `order.repository.ts#getOrderStatsForUsers`'s doc comment for
+ *  exactly which order statuses count as "spend". */
+export async function getCustomerOrderStats(actor: AuthenticatedUser, userId: string): Promise<CustomerOrderStats> {
+  assertPermission(actor, 'orders.read');
+  const stats = await repo.getOrderStatsForUsers([userId]);
+  return toCustomerOrderStats(stats.get(userId));
+}
+
+/** Bulk form of the above — one aggregate query for a whole admin list
+ *  page (or a bounded sort-scan batch) instead of N+1. */
+export async function getCustomerOrderStatsBulk(actor: AuthenticatedUser, userIds: string[]): Promise<Map<string, CustomerOrderStats>> {
+  assertPermission(actor, 'orders.read');
+  const stats = await repo.getOrderStatsForUsers(userIds);
+  return new Map(userIds.map((id) => [id, toCustomerOrderStats(stats.get(id))]));
+}
+
+/** plan.md §11.1's "COD risk flags" — see `@lulwah/contracts`' `CustomerCodRisk`
+ *  doc comment for why this is a real-data-derived signal, not a
+ *  fabricated score. `taggedRisky` is not this function's concern (it
+ *  reads `User.tags`, not `Order` — `customer.service.ts` folds it in). */
+export async function getCustomerCodRisk(actor: AuthenticatedUser, userId: string): Promise<{ codOrdersPlaced: number; codOrdersCancelled: number; cancelledRate: number }> {
+  assertPermission(actor, 'orders.read');
+  const { codOrdersPlaced, codOrdersCancelled } = await repo.getCodRiskForUser(userId);
+  return { codOrdersPlaced, codOrdersCancelled, cancelledRate: codOrdersPlaced > 0 ? codOrdersCancelled / codOrdersPlaced : 0 };
+}
+
 /** `GET /orders/track` — plan.md §8.7.5. No login: the order number plus
  *  the email/phone on file together stand in for authentication. Rate-
  *  limited at the router (`order.routes.ts`, reusing `shared/rate-limit.ts`)
