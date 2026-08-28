@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@lulwah/ui';
-import { ConfirmDialog } from '../ConfirmDialog';
 import { DiscountStatusPill } from '../DiscountStatusPill';
 import { PageHeader } from '../PageHeader';
 import { Panel } from '../Panel';
 import { Skeleton } from '../Skeleton';
-import { ToastStack, useToastState } from '../Toast';
+import { TypedConfirmDialog } from '../TypedConfirmDialog';
 import { EditorTabs } from '../product-editor/EditorTabs';
 import type { TabDef } from '../product-editor/EditorTabs';
 import { discountToDraft, emptyDiscountDraft } from '../../lib/discount-draft';
@@ -20,6 +19,7 @@ import {
   useToggleDiscountMutation,
   useUpdateDiscountMutation,
 } from '../../lib/queries/discounts';
+import { pushToast } from '../../lib/stores/toast-store';
 import { BasicsTab } from './BasicsTab';
 import { BulkCodeGenerator } from './BulkCodeGenerator';
 import { ConditionsScheduleTab } from './ConditionsScheduleTab';
@@ -52,7 +52,6 @@ export function DiscountBuilder({ discountId }: { discountId?: string }) {
   const updateDiscount = useUpdateDiscountMutation();
   const deleteDiscount = useDeleteDiscountMutation();
   const toggleDiscount = useToggleDiscountMutation();
-  const { toasts, push, dismiss } = useToastState();
 
   const [activeTab, setActiveTab] = useState<TabId>('basics');
   const [draft, setDraft] = useState<DiscountDraft>(() => emptyDiscountDraft());
@@ -81,7 +80,7 @@ export function DiscountBuilder({ discountId }: { discountId?: string }) {
   const handleToggle = () => {
     if (!discountId) return;
     toggleDiscount.mutate(discountId, {
-      onError: () => push(`Couldn't change ${discount?.name ?? 'this discount'}'s status. Please try again.`, 'danger'),
+      onError: () => pushToast('error', `Couldn't change ${discount?.name ?? 'this discount'}'s status. Please try again.`),
     });
   };
 
@@ -89,11 +88,11 @@ export function DiscountBuilder({ discountId }: { discountId?: string }) {
     if (!discountId) return;
     deleteDiscount.mutate(discountId, {
       onSuccess: () => {
-        push('Discount deleted.', 'success');
+        pushToast('success', 'Discount deleted.');
         router.push('/discounts');
       },
       onError: () => {
-        push("Couldn't delete this discount. Please try again.", 'danger');
+        pushToast('error', "Couldn't delete this discount. Please try again.");
         setConfirmingDelete(false);
       },
     });
@@ -169,17 +168,15 @@ export function DiscountBuilder({ discountId }: { discountId?: string }) {
         {activeTab === 'bulk-codes' && draft.mode === 'code' ? <BulkCodeGenerator draft={draft} /> : null}
       </Panel>
 
-      <ConfirmDialog
+      <TypedConfirmDialog
         open={confirmingDelete}
         title="Delete discount"
         description="This permanently removes the discount from every list and can't be undone from this screen."
-        confirmText={discount?.code ?? discount?.name ?? ''}
+        confirmLabel={discount?.code ?? discount?.name ?? ''}
         onConfirm={handleDelete}
         onCancel={() => setConfirmingDelete(false)}
         isPending={deleteDiscount.isPending}
       />
-
-      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

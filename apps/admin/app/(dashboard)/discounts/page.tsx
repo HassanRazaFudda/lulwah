@@ -12,7 +12,7 @@ import type { DataTableColumn, DataTableSort } from '../../../components/DataTab
 import { DiscountStatusPill } from '../../../components/DiscountStatusPill';
 import { PageHeader } from '../../../components/PageHeader';
 import { Skeleton } from '../../../components/Skeleton';
-import { ToastStack, useToastState } from '../../../components/Toast';
+import { pushToast } from '../../../lib/stores/toast-store';
 import { useAdminDiscountsQuery, useToggleDiscountMutation } from '../../../lib/queries/discounts';
 
 /**
@@ -85,7 +85,6 @@ export default function DiscountsPage() {
   const [statusFilter, setStatusFilter] = useState<DiscountStatus | 'all'>('all');
   const [modeFilter, setModeFilter] = useState<DiscountMode | 'all'>('all');
   const [sort, setSort] = useState<DataTableSort | null>({ columnId: 'updatedAt', direction: 'desc' });
-  const { toasts, push, dismiss } = useToastState();
 
   const { data: discounts, isLoading } = useAdminDiscountsQuery({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -105,7 +104,7 @@ export default function DiscountsPage() {
 
   const handleToggle = (d: Discount) => {
     toggleDiscount.mutate(d.id, {
-      onError: () => push(`Couldn't change "${d.name}"'s status. Please try again.`, 'danger'),
+      onError: () => pushToast('error', `Couldn't change "${d.name}"'s status. Please try again.`),
     });
   };
 
@@ -219,8 +218,6 @@ export default function DiscountsPage() {
           emptyMessage="No discounts match these filters."
         />
       )}
-
-      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
