@@ -1,0 +1,8 @@
+# Force LF regardless of the checkout machine's OS/git config — this repo
+# is developed on Windows but `apps/api`'s Dockerfile and `scripts/*.sh`
+# both run on Linux (the Contabo VPS, plan.md §36). A shell script checked
+# out with CRLF line endings has a broken shebang (`#!/usr/bin/env bash\r`
+# is not a valid interpreter path) and fails outright on Linux — this is
+# the fix, not a style preference.
+*.sh text eol=lf
+Dockerfile text eol=lf
