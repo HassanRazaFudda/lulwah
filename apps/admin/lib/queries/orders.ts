@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
-import { Order, OrderStatus, PaymentStatus } from '@lulwah/contracts';
+import { AdminOrder, OrderStatus, PaymentStatus } from '@lulwah/contracts';
 import type { OrderStatusHistoryEntry } from '@lulwah/contracts';
 import { apiRequest } from '../api-client';
 import { getSessionUser } from '../auth-session';
@@ -8,12 +8,12 @@ import { buildQueryString } from './query-utils';
 
 /**
  * Order data-fetching layer — `GET/PATCH /admin/orders*`, `POST
- * /admin/orders/:id/notes` (plan.md §9.7, `apps/api/src/modules/order/
- * order.routes.ts`). Same `use*Query`/`use*Mutation` shape
- * `queries/products.ts`/`queries/inventory.ts` already establish, now
- * pointed at the real `order` module that merged to `master` in this phase
- * (see `docs/implemented-plan.md` §4.6) instead of `lib/queries.ts`'s old
- * placeholder-array implementation.
+ * /admin/orders/:id/notes`, `POST /admin/orders/:id/refund` (plan.md §9.7,
+ * §8.8, `apps/api/src/modules/order/order.routes.ts`). Same `use*Query`/
+ * `use*Mutation` shape `queries/products.ts`/`queries/inventory.ts` already
+ * establish, now pointed at the real `order` module that merged to
+ * `master` in this phase (see `docs/implemented-plan.md` §4.6) instead of
+ * `lib/queries.ts`'s old placeholder-array implementation.
  *
  * Unlike the Products screen's stitchingType/brand filters (see
  * `queries/products.ts`'s doc comment on why those stayed client-side),
@@ -31,10 +31,19 @@ import { buildQueryString } from './query-utils';
  * forwarded. `order.repository.ts`'s own sort is a fixed `createdAt: -1`;
  * the Orders list page's client-side sort-by-date/total stays as a
  * within-the-fetched-page reorder, same as it always was.
+ *
+ * All five `/admin/orders*` endpoints return `AdminOrder`, not the plain
+ * `Order` this file typed everything as before this P3 fix (see
+ * `AdminOrder`'s own doc comment in `@lulwah/contracts`' `order.ts`) — the
+ * admin-only extension carrying `internalNotes`, which a customer-facing
+ * `/me/orders*`/`/orders/track` response never does. Every schema/hook
+ * below is typed accordingly now, which is what makes
+ * `useAddOrderNoteMutation` a genuine round trip instead of the
+ * session-local workaround it used to need.
  */
 
-const AdminOrderListResponse = z.object({ orders: z.array(Order) });
-const OrderResponse = z.object({ order: Order });
+const AdminOrderListResponse = z.object({ orders: z.array(AdminOrder) });
+const OrderResponse = z.object({ order: AdminOrder });
 
 const ORDERS_QUERY_KEY = ['admin', 'orders'] as const;
 const orderQueryKey = (id: string) => ['admin', 'order', id] as const;
@@ -104,10 +113,10 @@ export interface UpdateOrderStatusVars {
 }
 
 interface UpdateOrderStatusContext {
-  previousOrder: Order | undefined;
+  previousOrder: AdminOrder | undefined;
 }
 
-function optimisticNextOrder(order: Order, vars: UpdateOrderStatusVars): Order {
+function optimisticNextOrder(order: AdminOrder, vars: UpdateOrderStatusVars): AdminOrder {
   const entry: OrderStatusHistoryEntry = {
     from: order.status,
     to: vars.nextStatus,
@@ -141,7 +150,7 @@ function optimisticNextOrder(order: Order, vars: UpdateOrderStatusVars): Order {
 export function useUpdateOrderStatusMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation<Order, Error, UpdateOrderStatusVars, UpdateOrderStatusContext>({
+  return useMutation<AdminOrder, Error, UpdateOrderStatusVars, UpdateOrderStatusContext>({
     mutationFn: ({ orderId, nextStatus, note, notifyCustomer, trackingNumber, carrier }) =>
       apiRequest(`/admin/orders/${orderId}/status`, OrderResponse, {
         method: 'PATCH',
@@ -149,9 +158,9 @@ export function useUpdateOrderStatusMutation() {
       }).then((r) => r.order),
     onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: orderQueryKey(vars.orderId) });
-      const previousOrder = queryClient.getQueryData<Order>(orderQueryKey(vars.orderId));
+      const previousOrder = queryClient.getQueryData<AdminOrder>(orderQueryKey(vars.orderId));
       if (previousOrder) {
-        queryClient.setQueryData<Order>(orderQueryKey(vars.orderId), optimisticNextOrder(previousOrder, vars));
+        queryClient.setQueryData<AdminOrder>(orderQueryKey(vars.orderId), optimisticNextOrder(previousOrder, vars));
       }
       return { previousOrder };
     },
@@ -169,22 +178,115 @@ export function useUpdateOrderStatusMutation() {
 
 /**
  * `POST /admin/orders/:id/notes` — plan.md §9.7. This writes for real (the
- * note is durably persisted on `Order.internalNotes` in Mongo — confirmed
- * live, see the task report), but `order.mapper.ts#toOrderDto` deliberately
- * never puts `internalNotes` on the wire `Order` DTO (see that file's and
- * `order.model.ts`'s own doc comments — it's an internal-only Mongoose
- * field), and there is no `GET` for notes either. So a note posted through
- * this mutation cannot be read back through any endpoint this app can call.
- * `OrderDetailPage` keeps its own session-local list of successfully-posted
- * notes for display and says so in the UI, rather than pretending this is a
- * full round-trip — see this task's report for why fixing the DTO itself is
- * out of scope (`apps/api` is done/merged, not to be touched here).
+ * note is durably persisted on `Order.internalNotes` in Mongo) and, as of
+ * the P3 `AdminOrder` fix this file now consumes, reads back for real too:
+ * `order.service.ts#addAdminNote` returns the updated `AdminOrder` — the
+ * note just written, included — so `onSuccess` writes that response
+ * straight into the query cache rather than refetching or keeping a
+ * parallel session-local list. A second staff member loading this same
+ * order, or this one after a refresh, sees the identical note: a genuine
+ * round trip, not a per-browser echo (the workaround this hook used to
+ * need — see git history / `docs/implemented-plan.md` §6.4 for the gap
+ * this closes).
  */
 export function useAddOrderNoteMutation(orderId: string) {
-  return useMutation({
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminOrder, Error, string>({
     mutationFn: (note: string) =>
       apiRequest(`/admin/orders/${orderId}/notes`, OrderResponse, { method: 'POST', body: { note } }).then(
         (r) => r.order,
       ),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderQueryKey(orderId), order);
+      void queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_KEY });
+    },
+  });
+}
+
+export interface RefundOrderVars {
+  orderId: string;
+  amountFils: number;
+  reason?: string | undefined;
+}
+
+interface RefundOrderContext {
+  previousOrder: AdminOrder | undefined;
+}
+
+/** Mirrors `order.service.ts#refundOrder`'s own money bookkeeping (see that
+ *  function's doc comment) closely enough for an optimistic preview: bump
+ *  `refundedFils`, flip `paymentStatus` to `refunded`/`partially_refunded`
+ *  the same way the server does (`refundedFils >= paidFils`), and append a
+ *  provisional `OrderRefund` entry. The entry's `status` is optimistically
+ *  `'pending'` — the mutation doesn't know yet whether the gateway will
+ *  resolve it `completed`/`pending`/`failed` — and its `id`/`gatewayRefundId`
+ *  are placeholders; `onSettled`'s refetch replaces all of it with the
+ *  server's real answer within one round trip either way. */
+function optimisticRefundedOrder(order: AdminOrder, vars: RefundOrderVars): AdminOrder {
+  const refundedFils = order.refundedFils + vars.amountFils;
+  return {
+    ...order,
+    refunds: [
+      ...order.refunds,
+      {
+        id: 'optimistic',
+        amountFils: vars.amountFils,
+        reason: vars.reason,
+        status: 'pending',
+        gatewayRefundId: null,
+        byUserId: getSessionUser()?.id ?? 'system',
+        at: new Date(),
+      },
+    ],
+    refundedFils,
+    paymentStatus: refundedFils >= order.paidFils ? 'refunded' : 'partially_refunded',
+  };
+}
+
+/**
+ * `POST /admin/orders/:id/refund` — plan.md §8.8, requires `refunds.write`.
+ * Same optimistic-update-with-rollback shape as
+ * `useUpdateOrderStatusMutation` above (plan.md §11.2 rule 2), and the same
+ * "server is the actual source of truth, client never re-derives the
+ * business rule to decide whether to allow the action" posture: this hook
+ * doesn't reject an over-large `amountFils` itself (the caller — the
+ * refund form on `OrderDetailPage` — computes and displays the real
+ * refundable balance from `order.paidFils - order.refundedFils` so the
+ * user can't easily construct an invalid request, but the actual limit is
+ * `order.service.ts#refundOrder`'s, enforced server-side as a `409
+ * CONFLICT` either way).
+ *
+ * `amountFils` is always sent explicit here (never omitted to mean "full
+ * refund") — the form always resolves a concrete number before calling
+ * this, since the UI's whole point is showing the staff member exactly
+ * what they're about to refund before they type a confirmation.
+ */
+export function useRefundOrderMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminOrder, Error, RefundOrderVars, RefundOrderContext>({
+    mutationFn: ({ orderId, amountFils, reason }) =>
+      apiRequest(`/admin/orders/${orderId}/refund`, OrderResponse, {
+        method: 'POST',
+        body: { amountFils, reason },
+      }).then((r) => r.order),
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: orderQueryKey(vars.orderId) });
+      const previousOrder = queryClient.getQueryData<AdminOrder>(orderQueryKey(vars.orderId));
+      if (previousOrder) {
+        queryClient.setQueryData<AdminOrder>(orderQueryKey(vars.orderId), optimisticRefundedOrder(previousOrder, vars));
+      }
+      return { previousOrder };
+    },
+    onError: (_err, vars, context) => {
+      if (context?.previousOrder) {
+        queryClient.setQueryData(orderQueryKey(vars.orderId), context.previousOrder);
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({ queryKey: orderQueryKey(vars.orderId) });
+      void queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_KEY });
+    },
   });
 }

@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Order, OrderStatus, PaymentStatus } from '@lulwah/contracts';
+import type { AdminOrder, OrderStatus, PaymentStatus } from '@lulwah/contracts';
 import { formatDate, formatMoney } from '@lulwah/utils';
+import { Button } from '@lulwah/ui';
 import { DataTable } from '../../../components/DataTable';
 import type { DataTableColumn, DataTableSort } from '../../../components/DataTable';
 import { PageHeader } from '../../../components/PageHeader';
 import { Skeleton } from '../../../components/Skeleton';
 import { StatusFlagPill } from '../../../components/StatusFlagPill';
+import { downloadCsvFile, toCsv } from '../../../lib/csv-export';
 import { ALL_ORDER_STATUSES, ORDER_STATUS_META } from '../../../lib/order-status';
 import { useAdminOrdersQuery } from '../../../lib/queries/orders';
 
-type SortAccessor = (order: Order) => string | number;
+type SortAccessor = (order: AdminOrder) => string | number;
 
 /** One accessor per sortable column — plugged into `DataTable`'s generic
  *  `onSortChange(columnId)` callback rather than baking sort logic into
@@ -28,7 +30,7 @@ const SORT_ACCESSORS: Record<string, SortAccessor> = {
 
 const PAYMENT_STATUSES: PaymentStatus[] = ['unpaid', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed'];
 
-function applySort(orders: Order[], sort: DataTableSort | null): Order[] {
+function applySort(orders: AdminOrder[], sort: DataTableSort | null): AdminOrder[] {
   if (!sort) return orders;
   const accessor = SORT_ACCESSORS[sort.columnId];
   if (!accessor) return orders;
@@ -38,6 +40,45 @@ function applySort(orders: Order[], sort: DataTableSort | null): Order[] {
 
 function isOrderStatus(value: string | null): value is OrderStatus {
   return value !== null && (ALL_ORDER_STATUSES as readonly string[]).includes(value);
+}
+
+const CSV_HEADER = [
+  'Order #',
+  'Date',
+  'Customer',
+  'Emirate',
+  'Items',
+  'Total (AED)',
+  'Payment method',
+  'Payment status',
+  'Status',
+  'Tags',
+];
+
+/** plan.md §11.1 Orders row: "Bulk: status change, print packing slips,
+ *  export CSV, tag." Of that list, only CSV export is built in this pass
+ *  (see this task's report for why the rest is a documented gap, not
+ *  silently skipped) — client-side, from the exact rows already on screen
+ *  (`visibleOrders`: the current server-side status/paymentStatus/search
+ *  filters plus the client-side date/total sort), so "export CSV" always
+ *  matches what the manager is actually looking at, not a separate
+ *  unfiltered dump. Money is exported as a plain decimal AED string (e.g.
+ *  `"1234.56"`), not the `formatMoney` display string (`"AED 1,234.56"`)
+ *  — the columns everywhere else on this page are for reading, this one
+ *  column is for a spreadsheet to sum. */
+function orderToCsvRow(order: AdminOrder): string[] {
+  return [
+    order.orderNumber,
+    formatDate(order.placedAt, 'en'),
+    `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
+    order.shippingAddress.emirate.replace(/_/g, ' '),
+    String(order.items.reduce((n, i) => n + i.quantity, 0)),
+    (order.grandTotalFils / 100).toFixed(2),
+    order.payment.method.replace(/_/g, ' '),
+    order.paymentStatus.replace(/_/g, ' '),
+    order.status.replace(/_/g, ' '),
+    order.tags.join('; '),
+  ];
 }
 
 /**
@@ -96,7 +137,13 @@ export default function OrdersPage() {
     });
   };
 
-  const columns: DataTableColumn<Order>[] = [
+  const handleExportCsv = () => {
+    const csv = toCsv([CSV_HEADER, ...visibleOrders.map(orderToCsvRow)]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsvFile(`lulwah-orders-${stamp}.csv`, csv);
+  };
+
+  const columns: DataTableColumn<AdminOrder>[] = [
     { id: 'orderNumber', header: 'Order #', cell: (o) => <span className="font-semibold text-ink">{o.orderNumber}</span> },
     { id: 'date', header: 'Date', sortable: true, cell: (o) => formatDate(o.placedAt, 'en') },
     { id: 'customer', header: 'Customer', cell: (o) => `${o.shippingAddress.firstName} ${o.shippingAddress.lastName}` },
@@ -124,7 +171,15 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col gap-16">
-      <PageHeader title="Orders" description={`${visibleOrders.length} order${visibleOrders.length === 1 ? '' : 's'}`} />
+      <PageHeader
+        title="Orders"
+        description={`${visibleOrders.length} order${visibleOrders.length === 1 ? '' : 's'}`}
+        actions={
+          <Button type="button" variant="secondary" onClick={handleExportCsv} disabled={visibleOrders.length === 0}>
+            Export CSV
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-8">
         <input
