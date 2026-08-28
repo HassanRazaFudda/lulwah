@@ -291,3 +291,275 @@ describe('admin RBAC (plan.md §10.2)', () => {
     expect(roleRes.body.data.user.role).toBe('catalog');
   });
 });
+
+/**
+ * Users & roles' previously-missing endpoints (docs/implemented-plan.md
+ * §6.10, §11 item 8; plan.md §11.1) — invite staff, deactivate, and
+ * session-list-with-revoke, all real against `identity`'s existing
+ * `Session`/refresh-token-rotation infrastructure. Force-2FA-reset is
+ * deliberately NOT built (no real TOTP/2FA system exists anywhere in this
+ * codebase to reset), so it has no coverage here — that stays the
+ * pre-existing, honestly-disabled admin UI control.
+ */
+let staffPhoneCounter = 520_000_000;
+function nextStaffPhone(): { countryCode: '+971'; number: string } {
+  staffPhoneCounter += 1;
+  return { countryCode: '+971', number: String(staffPhoneCounter) };
+}
+
+describe('Users & roles — invite / deactivate / sessions (plan.md §11.1)', () => {
+  async function registerSuperAdmin(app: Express): Promise<string> {
+    await request(app).post('/api/v1/auth/register').send(REGISTER_PAYLOAD);
+    await UserModel.updateOne({ email: REGISTER_PAYLOAD.email }, { role: 'super_admin' });
+    const loginRes = await request(app).post('/api/v1/auth/login').send(CREDENTIALS);
+    return loginRes.body.data.accessToken as string;
+  }
+
+  describe('POST /api/v1/admin/users/invite', () => {
+    it('creates a staff account with a role and returns a one-time temporary password that actually logs in', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'newstaff@example.com', firstName: 'New', lastName: 'Staff', phone: nextStaffPhone(), role: 'warehouse' });
+
+      expect(inviteRes.status).toBe(201);
+      expect(inviteRes.body.data.user.role).toBe('warehouse');
+      expect(inviteRes.body.data.user.status).toBe('active');
+      expect(typeof inviteRes.body.data.temporaryPassword).toBe('string');
+      expect((inviteRes.body.data.temporaryPassword as string).length).toBeGreaterThanOrEqual(8);
+      expect(inviteRes.body.data.user).not.toHaveProperty('passwordHash');
+
+      // The generated password genuinely logs the new hire in — not a
+      // cosmetic value that's never actually checked against anything.
+      const loginRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'newstaff@example.com', password: inviteRes.body.data.temporaryPassword });
+      expect(loginRes.status).toBe(200);
+      expect(loginRes.body.data.user.role).toBe('warehouse');
+    });
+
+    it('rejects role "customer" — staff invites are for staff roles, customers self-register', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const res = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'x@example.com', firstName: 'X', lastName: 'Y', phone: nextStaffPhone(), role: 'customer' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('rejects a duplicate email with 409 AUTH_EMAIL_EXISTS', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const payload = { email: 'dupe@example.com', firstName: 'A', lastName: 'B', phone: nextStaffPhone(), role: 'support' };
+      const first = await request(app).post('/api/v1/admin/users/invite').set('Authorization', `Bearer ${adminToken}`).send(payload);
+      expect(first.status).toBe(201);
+      const second = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ ...payload, phone: nextStaffPhone() });
+      expect(second.status).toBe(409);
+      expect(second.body.error.code).toBe('AUTH_EMAIL_EXISTS');
+    });
+
+    it('forbids a role without users.write (e.g. catalog) from inviting anyone (403)', async () => {
+      const app = buildApp();
+      await request(app).post('/api/v1/auth/register').send(REGISTER_PAYLOAD);
+      await UserModel.updateOne({ email: REGISTER_PAYLOAD.email }, { role: 'catalog' });
+      const loginRes = await request(app).post('/api/v1/auth/login').send(CREDENTIALS);
+      const token = loginRes.body.data.accessToken as string;
+
+      const res = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ email: 'z@example.com', firstName: 'Z', lastName: 'Z', phone: nextStaffPhone(), role: 'support' });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('PATCH /api/v1/admin/users/:id/status — deactivate/reactivate', () => {
+    it('suspending a user blocks their next login AND revokes their existing session immediately (not just eventually)', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'staffer@example.com', firstName: 'Staff', lastName: 'Er', phone: nextStaffPhone(), role: 'support' });
+      const targetId = inviteRes.body.data.user.id as string;
+      const temporaryPassword = inviteRes.body.data.temporaryPassword as string;
+
+      // Log the target in first, so there is a real pre-existing session to revoke.
+      const targetLogin = await request(app).post('/api/v1/auth/login').send({ email: 'staffer@example.com', password: temporaryPassword });
+      expect(targetLogin.status).toBe(200);
+      const targetCookie = extractCookie(targetLogin);
+
+      const suspendRes = await request(app)
+        .patch(`/api/v1/admin/users/${targetId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'suspended' });
+      expect(suspendRes.status).toBe(200);
+      expect(suspendRes.body.data.user.status).toBe('suspended');
+
+      // Login is now blocked outright, with a clear, distinct error.
+      const loginAfterSuspend = await request(app).post('/api/v1/auth/login').send({ email: 'staffer@example.com', password: temporaryPassword });
+      expect(loginAfterSuspend.status).toBe(403);
+      expect(loginAfterSuspend.body.error.code).toBe('AUTH_FORBIDDEN');
+
+      // Their pre-existing session is dead too — the whole point of
+      // revoking on suspend, not just blocking future logins.
+      const refreshAfterSuspend = await request(app).post('/api/v1/auth/refresh').set('Cookie', targetCookie);
+      expect(refreshAfterSuspend.status).toBe(401);
+
+      // Reactivating restores login.
+      const reactivateRes = await request(app)
+        .patch(`/api/v1/admin/users/${targetId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'active' });
+      expect(reactivateRes.status).toBe(200);
+      expect(reactivateRes.body.data.user.status).toBe('active');
+      const loginAfterReactivate = await request(app).post('/api/v1/auth/login').send({ email: 'staffer@example.com', password: temporaryPassword });
+      expect(loginAfterReactivate.status).toBe(200);
+    });
+
+    it('rejects "deleted" as a status value — only active/suspended are reachable through this endpoint (400)', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'notdeletable@example.com', firstName: 'N', lastName: 'D', phone: nextStaffPhone(), role: 'support' });
+      const targetId = inviteRes.body.data.user.id as string;
+
+      const res = await request(app)
+        .patch(`/api/v1/admin/users/${targetId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'deleted' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('rejects a role without users.write (e.g. catalog) from deactivating anyone (403)', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'someone@example.com', firstName: 'S', lastName: 'O', phone: nextStaffPhone(), role: 'support' });
+      const targetId = inviteRes.body.data.user.id as string;
+
+      await request(app)
+        .post('/api/v1/auth/register')
+        .send({ ...REGISTER_PAYLOAD, email: 'catalogger@example.com', phone: nextStaffPhone() });
+      await UserModel.updateOne({ email: 'catalogger@example.com' }, { role: 'catalog' });
+      const catalogLogin = await request(app).post('/api/v1/auth/login').send({ email: 'catalogger@example.com', password: REGISTER_PAYLOAD.password });
+      const catalogToken = catalogLogin.body.data.accessToken as string;
+
+      const res = await request(app)
+        .patch(`/api/v1/admin/users/${targetId}/status`)
+        .set('Authorization', `Bearer ${catalogToken}`)
+        .send({ status: 'suspended' });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('GET /api/v1/admin/users/:id/sessions + POST .../sessions/:sessionId/revoke', () => {
+    it('lists a real active session and revoking it blocks that specific session\'s own refresh', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'device@example.com', firstName: 'D', lastName: 'E', phone: nextStaffPhone(), role: 'support' });
+      const targetId = inviteRes.body.data.user.id as string;
+      const temporaryPassword = inviteRes.body.data.temporaryPassword as string;
+
+      const targetLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .set('User-Agent', 'integration-test-agent')
+        .send({ email: 'device@example.com', password: temporaryPassword });
+      const targetCookie = extractCookie(targetLogin);
+
+      const listRes = await request(app).get(`/api/v1/admin/users/${targetId}/sessions`).set('Authorization', `Bearer ${adminToken}`);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data.sessions).toHaveLength(1);
+      expect(listRes.body.data.sessions[0].userAgent).toBe('integration-test-agent');
+      const sessionId = listRes.body.data.sessions[0].id as string;
+
+      const revokeRes = await request(app)
+        .post(`/api/v1/admin/users/${targetId}/sessions/${sessionId}/revoke`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      expect(revokeRes.status).toBe(200);
+
+      // No longer in the active list.
+      const listAfterRevoke = await request(app).get(`/api/v1/admin/users/${targetId}/sessions`).set('Authorization', `Bearer ${adminToken}`);
+      expect(listAfterRevoke.body.data.sessions).toHaveLength(0);
+
+      // And the revoked session can no longer refresh.
+      const refreshRes = await request(app).post('/api/v1/auth/refresh').set('Cookie', targetCookie);
+      expect(refreshRes.status).toBe(401);
+    });
+
+    it('404s revoking a session id that does not belong to the targeted user (scoped, not a blind global lookup)', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const inviteA = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'a@example.com', firstName: 'A', lastName: 'A', phone: nextStaffPhone(), role: 'support' });
+      const inviteB = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'b@example.com', firstName: 'B', lastName: 'B', phone: nextStaffPhone(), role: 'support' });
+
+      await request(app).post('/api/v1/auth/login').send({ email: 'a@example.com', password: inviteA.body.data.temporaryPassword });
+
+      const sessionsA = await request(app).get(`/api/v1/admin/users/${inviteA.body.data.user.id}/sessions`).set('Authorization', `Bearer ${adminToken}`);
+      const sessionIdA = sessionsA.body.data.sessions[0].id as string;
+
+      // Attempt to revoke A's session while scoped to (mismatched) user B.
+      const res = await request(app)
+        .post(`/api/v1/admin/users/${inviteB.body.data.user.id}/sessions/${sessionIdA}/revoke`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      expect(res.status).toBe(404);
+    });
+
+    it('a role holding only users.read (manager) can list sessions but is forbidden from revoking (403)', async () => {
+      const app = buildApp();
+      const adminToken = await registerSuperAdmin(app);
+      const inviteRes = await request(app)
+        .post('/api/v1/admin/users/invite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ email: 'readonly-target@example.com', firstName: 'R', lastName: 'T', phone: nextStaffPhone(), role: 'support' });
+      const targetId = inviteRes.body.data.user.id as string;
+      const targetLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'readonly-target@example.com', password: inviteRes.body.data.temporaryPassword });
+      expect(targetLogin.status).toBe(200);
+
+      await request(app)
+        .post('/api/v1/auth/register')
+        .send({ ...REGISTER_PAYLOAD, email: 'manager@example.com', phone: nextStaffPhone() });
+      await UserModel.updateOne({ email: 'manager@example.com' }, { role: 'manager' });
+      const managerLogin = await request(app).post('/api/v1/auth/login').send({ email: 'manager@example.com', password: REGISTER_PAYLOAD.password });
+      const managerToken = managerLogin.body.data.accessToken as string;
+
+      const listRes = await request(app).get(`/api/v1/admin/users/${targetId}/sessions`).set('Authorization', `Bearer ${managerToken}`);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data.sessions).toHaveLength(1);
+
+      const sessionId = listRes.body.data.sessions[0].id as string;
+      const revokeRes = await request(app)
+        .post(`/api/v1/admin/users/${targetId}/sessions/${sessionId}/revoke`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({});
+      expect(revokeRes.status).toBe(403);
+    });
+  });
+});

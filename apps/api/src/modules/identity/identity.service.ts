@@ -12,6 +12,7 @@ import { identityEvents } from './identity.events.js';
 import { assertPermission, effectivePermissions } from './identity.policy.js';
 import type { AccessTokenPayload, AuthenticatedUser } from './identity.policy.js';
 import type { UserHydratedDoc } from './identity.model.js';
+import type { InviteStaffInput } from './identity.dto.js';
 
 /**
  * ALL identity business rules live here, framework-free (no `express`
@@ -167,6 +168,18 @@ export async function login(input: LoginInput, ctx: RequestContext): Promise<Aut
 
   if (!userDoc || !userDoc.passwordHash) throw invalidCredentials();
 
+  // A deactivated staff account (plan.md §11.1 "deactivate") must be
+  // blocked at login, not just at its next refresh — `refresh()` below
+  // already checks `status === 'active'`, but that only stops an
+  // *existing* session from renewing; without this check here, a
+  // deactivated user with a still-correct password could start a brand
+  // new session at any time.
+  if (userDoc.status !== 'active') {
+    throw new AppError('AUTH_FORBIDDEN', 403, {
+      messageEn: 'This account has been deactivated. Contact an administrator.',
+    });
+  }
+
   if (userDoc.lockedUntil && userDoc.lockedUntil.getTime() > Date.now()) {
     throw new AppError('AUTH_ACCOUNT_LOCKED', 423, {
       messageEn: 'Too many failed attempts. Please try again later.',
@@ -274,6 +287,137 @@ export async function updateUserRoleAsAdmin(actor: AuthenticatedUser, targetUser
   const updated = await repo.updateUserRole(targetUserId, role);
   if (!updated) throw notFoundError('User not found.');
   return toPublicUser(updated);
+}
+
+// --- Users & roles: invite / deactivate / sessions — plan.md §11.1's ------
+// previously-unbuilt gap (docs/implemented-plan.md §6.10, §11 item 8).
+// All three reuse the existing `users.write`/`users.read` permission
+// strings — no new permission was needed for any of them.
+
+export interface InviteStaffResult {
+  user: User;
+  /** One-time plaintext value — never persisted, never logged. Only its
+   *  argon2 hash (via the same `hashPassword` helper `register` uses) is
+   *  stored on the new `User` document. */
+  temporaryPassword: string;
+}
+
+/** A CSPRNG temporary password (`node:crypto`'s `randomBytes`, not
+ *  `Math.random` — the same posture `payment/cod.gateway.ts`'s OTP code
+ *  already established), base64url-encoded so it's safe to display and
+ *  copy-paste as plain text. 12 random bytes is comfortably longer than
+ *  `RegisterInput`'s own 8-character minimum. */
+function generateTemporaryPassword(): string {
+  return randomBytes(12).toString('base64url');
+}
+
+/**
+ * `POST /admin/users/invite` — plan.md §11.1: "Invite staff, assign role."
+ * No self-serve registration exists for staff, unlike customers
+ * (`register()` above) — an admin creates the account directly with a
+ * role attached, and the generated password is the one and only way the
+ * new hire gets in, handed to the inviting admin out of band (no real
+ * email-sending infrastructure exists — `shared/notify.ts`'s own doc
+ * comment — so this deliberately does not attempt to "send" anything).
+ */
+export async function inviteStaffUser(actor: AuthenticatedUser, input: InviteStaffInput): Promise<InviteStaffResult> {
+  assertPermission(actor, 'users.write');
+  if (input.role === 'customer') {
+    throw new AppError('VALIDATION_FAILED', 400, {
+      messageEn: 'Staff invites must use a staff role, not "customer" — customers self-register.',
+      field: 'role',
+    });
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  try {
+    const doc = await repo.createUser({
+      email: input.email.toLowerCase(),
+      phone: input.phone,
+      passwordHash,
+      provider: 'local',
+      firstName: input.firstName,
+      lastName: input.lastName,
+      role: input.role,
+    });
+    const user = toPublicUser(doc);
+    // Reuses `register()`'s own event — "a new User document now exists"
+    // is true either way, and no subscriber needs to distinguish the two
+    // paths yet; a dedicated `user.invited` event can be split out the
+    // moment one does.
+    identityEvents.publish('user.registered', { user });
+    return { user, temporaryPassword };
+  } catch (err) {
+    if (isDuplicateKeyError(err)) {
+      throw new AppError('AUTH_EMAIL_EXISTS', 409, {
+        messageEn: 'An account with this email already exists.',
+        field: 'email',
+      });
+    }
+    throw err;
+  }
+}
+
+/**
+ * `PATCH /admin/users/:id/status` — plan.md §11.1: "deactivate." Toggles
+ * between `active`/`suspended` only (see `identity.dto.ts
+ * #UpdateUserStatusInput`'s doc comment on why `'deleted'` is excluded).
+ * Suspending immediately revokes every currently-active session for that
+ * user — otherwise a still-valid access token would keep working for up
+ * to its own 15-minute TTL, and any refresh token they're still holding
+ * would otherwise still successfully rotate (`refresh()` above only
+ * blocks a *reactivation-needed* user at the point of rotation, which is
+ * "eventually blocked," not "blocked now"). Symmetric with `logoutAll()`'s
+ * own "revoke everything for this user" path.
+ */
+export async function updateUserStatusAsAdmin(actor: AuthenticatedUser, targetUserId: string, status: 'active' | 'suspended'): Promise<User> {
+  assertPermission(actor, 'users.write');
+  const updated = await repo.updateUserStatus(targetUserId, status);
+  if (!updated) throw notFoundError('User not found.');
+  if (status === 'suspended') {
+    await repo.revokeAllSessionsForUser(targetUserId, 'admin_revoked');
+  }
+  return toPublicUser(updated);
+}
+
+export interface AdminSessionSummary {
+  id: string;
+  createdAt: Date;
+  expiresAt: Date;
+  userAgent: string | null;
+  ip: string | null;
+}
+
+/** `GET /admin/users/:id/sessions` — plan.md §11.1: "session list."
+ *  Read-only, gated on `users.read` (the same permission the user list
+ *  itself uses) rather than `users.write` — viewing is not mutating. See
+ *  `identity.repository.ts#findActiveSessionsForUser`'s doc comment for
+ *  exactly what "one row" represents against a rotating-refresh-token
+ *  store. */
+export async function listUserSessions(actor: AuthenticatedUser, targetUserId: string): Promise<AdminSessionSummary[]> {
+  assertPermission(actor, 'users.read');
+  const docs = await repo.findActiveSessionsForUser(targetUserId);
+  return docs.map((s) => ({
+    id: s._id.toString(),
+    createdAt: s.createdAt,
+    expiresAt: s.expiresAt,
+    userAgent: s.userAgent,
+    ip: s.ip,
+  }));
+}
+
+/** `POST /admin/users/:id/sessions/:sessionId/revoke` — plan.md §11.1:
+ *  "with revoke." Revokes only the one targeted session row, not the
+ *  whole `family` — the next `refresh()` attempt against that (now
+ *  revoked) token will already be rejected via the existing
+ *  `session.revokedAt` check (as `AUTH_TOKEN_REUSED`, which force-revokes
+ *  the rest of that family too) — see that function's own doc comment. */
+export async function revokeUserSession(actor: AuthenticatedUser, targetUserId: string, sessionId: string): Promise<void> {
+  assertPermission(actor, 'users.write');
+  const session = await repo.findSessionByIdForUser(sessionId, targetUserId);
+  if (!session) throw notFoundError('Session not found.');
+  await repo.revokeSession(session._id, 'admin_revoked');
 }
 
 // --- customers (RBAC: 'customers.read'/'customers.write') — plan.md §11.1 --

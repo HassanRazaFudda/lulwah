@@ -46,7 +46,11 @@ export function createIdentityRouter({ rateLimitStore }: IdentityRouterDeps): Ro
 
   const admin = Router();
   admin.get('/users', requireAuth(), requirePermission('users.read'), controller.listUsers);
+  admin.post('/users/invite', requireAuth(), requirePermission('users.write'), controller.inviteStaff);
   admin.patch('/users/:id/role', requireAuth(), requirePermission('users.write'), controller.updateUserRole);
+  admin.patch('/users/:id/status', requireAuth(), requirePermission('users.write'), controller.updateUserStatus);
+  admin.get('/users/:id/sessions', requireAuth(), requirePermission('users.read'), controller.listUserSessions);
+  admin.post('/users/:id/sessions/:sessionId/revoke', requireAuth(), requirePermission('users.write'), controller.revokeUserSession);
   router.use('/admin', admin);
 
   // plan.md §9.4 — Address lives under `identity` (§5.3's module-ownership

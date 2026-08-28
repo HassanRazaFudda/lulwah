@@ -6,7 +6,7 @@ import { AppError } from '../../shared/errors.js';
 import { sendSuccess } from '../../shared/response.js';
 import * as service from './identity.service.js';
 import type { AuthResult, RequestContext } from './identity.service.js';
-import { AdminListUsersQuery, LoginInput, RegisterInput, UpdateUserRoleInput } from './identity.dto.js';
+import { AdminListUsersQuery, InviteStaffInput, LoginInput, RegisterInput, UpdateUserRoleInput, UpdateUserStatusInput } from './identity.dto.js';
 import type { AuthenticatedUser } from './identity.policy.js';
 
 /**
@@ -115,4 +115,39 @@ export async function updateUserRole(req: Request, res: Response): Promise<void>
   const input = UpdateUserRoleInput.parse(req.body);
   const user = await service.updateUserRoleAsAdmin(actor, targetUserId, input.role);
   sendSuccess(res, { user });
+}
+
+/** `POST /admin/users/invite` — plan.md §11.1's "Invite staff." */
+export async function inviteStaff(req: Request, res: Response): Promise<void> {
+  const actor = requireUser(req);
+  const input = InviteStaffInput.parse(req.body);
+  const { user, temporaryPassword } = await service.inviteStaffUser(actor, input);
+  sendSuccess(res, { user, temporaryPassword }, undefined, 201);
+}
+
+/** `PATCH /admin/users/:id/status` — plan.md §11.1's "deactivate." */
+export async function updateUserStatus(req: Request, res: Response): Promise<void> {
+  const actor = requireUser(req);
+  const targetUserId = objectId.parse(req.params.id);
+  const input = UpdateUserStatusInput.parse(req.body);
+  const user = await service.updateUserStatusAsAdmin(actor, targetUserId, input.status);
+  sendSuccess(res, { user });
+}
+
+/** `GET /admin/users/:id/sessions` — plan.md §11.1's "session list." */
+export async function listUserSessions(req: Request, res: Response): Promise<void> {
+  const actor = requireUser(req);
+  const targetUserId = objectId.parse(req.params.id);
+  const sessions = await service.listUserSessions(actor, targetUserId);
+  sendSuccess(res, { sessions });
+}
+
+/** `POST /admin/users/:id/sessions/:sessionId/revoke` — plan.md §11.1's
+ *  "with revoke." */
+export async function revokeUserSession(req: Request, res: Response): Promise<void> {
+  const actor = requireUser(req);
+  const targetUserId = objectId.parse(req.params.id);
+  const sessionId = objectId.parse(req.params.sessionId);
+  await service.revokeUserSession(actor, targetUserId, sessionId);
+  sendSuccess(res, {});
 }

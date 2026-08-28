@@ -15,7 +15,7 @@ import type { AdminOrderListFilter, CreateOrderInput } from './order.repository.
 import type { OrderDoc, OrderHydratedDoc } from './order.model.js';
 import { toAdminOrderDto, toOrderDto, toPublicTrackingView } from './order.mapper.js';
 import type { PublicOrderTrackingView } from './order.mapper.js';
-import { assertValidOrderStatusTransition } from './order.transitions.js';
+import { assertRoleMayMakeTransition, assertValidOrderStatusTransition } from './order.transitions.js';
 import { orderEvents } from './order.events.js';
 import type { AdminRefundOrderInput, UpdateOrderStatusInput } from './order.dto.js';
 
@@ -322,6 +322,15 @@ export async function updateOrderStatus(actor: AuthenticatedUser, orderId: strin
   assertPermission(actor, 'orders.status.update');
   const order = await repo.findOrderById(orderId);
   if (!order) throw new AppError('ORDER_NOT_FOUND', 404, { messageEn: 'Order not found.' });
+
+  // plan.md §10.2's `✏️*` footnote: `warehouse`/`support` hold the same
+  // `orders.status.update` permission string as `manager`/`order_ops`, but
+  // may only drive a restricted subset of the table — a distinction the
+  // permission string itself can't express, so it's enforced here, on top
+  // of (never instead of) the base table check `applyTransition` still
+  // runs below. No-op for every other role, `super_admin`'s force path
+  // included.
+  assertRoleMayMakeTransition(actor.role, order.status, input.status);
 
   const updated = await applyTransition(order, input.status, {
     actorId: actor.id,
