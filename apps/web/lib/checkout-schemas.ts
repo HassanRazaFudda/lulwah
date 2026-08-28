@@ -64,7 +64,7 @@ export type CheckoutSessionResponse = z.infer<typeof CheckoutSessionResponse>;
 
 export const PaymentIntentResponse = z.object({
   method: PaymentMethod,
-  clientSecret: z.string().nullable(),
+  redirectUrl: z.string().nullable(),
   otpRequired: z.boolean(),
 });
 export type PaymentIntentResponse = z.infer<typeof PaymentIntentResponse>;
