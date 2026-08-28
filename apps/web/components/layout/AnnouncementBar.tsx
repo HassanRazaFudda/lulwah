@@ -9,6 +9,17 @@ import { useTranslations } from 'next-intl';
  * the session. Emerald background, paper text, label type." Dismissal is
  * per-`sessionStorage`, not per-cookie — it should come back on the next
  * visit, just not for the rest of this session.
+ *
+ * `fixed` (not the plain in-flow block this used to be), pinned above
+ * `Header.tsx`, which is itself now `fixed` rather than `sticky` (see that
+ * file's own doc comment / implemented-plan.md §8.4). A `sticky`/`fixed`
+ * header needs whatever sits above it in the stacking order to be equally
+ * unaffected by scroll, or the header's fixed position stays put while
+ * this bar scrolls out from under it, leaving a gap of exposed page
+ * content between the viewport's top edge and the header. `SESSION_KEY`
+ * below is read by `Header.tsx` too (duplicated there with a
+ * cross-reference comment, not imported, since it's a single stable
+ * string) so the header can track whether this bar is still on screen.
  */
 const ROTATION_MS = 5000;
 const SESSION_KEY = 'lulwah-announcement-dismissed';
@@ -41,7 +52,7 @@ export function AnnouncementBar() {
 
   return (
     <div
-      className="relative flex items-center justify-center bg-zamurrad px-24 py-8 text-paper"
+      className="fixed inset-x-0 top-0 z-40 flex items-center justify-center bg-zamurrad px-24 py-8 text-paper"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       role="region"
