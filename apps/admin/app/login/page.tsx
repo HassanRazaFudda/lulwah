@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -24,6 +24,23 @@ function errorMessageProp(message: string | undefined): { errorMessage: string }
 const LoginResponse = z.object({ user: User, accessToken: z.string() });
 
 /**
+ * `?redirect=` is set by `api-client.ts#handleUnauthorized` (the admin's
+ * 401 guard — see that function's own doc comment) so a session that
+ * expired mid-visit returns the admin to the page they were on, not the
+ * dashboard root. Only ever trust a same-origin relative path from it —
+ * this value is attacker-controllable (anyone can craft
+ * `/login?redirect=https://evil.example`), so anything that isn't a bare
+ * `/`-rooted path (no scheme, no `//` — that second check is what stops
+ * a protocol-relative URL like `//evil.example` from slipping through as
+ * "starts with /") is rejected in favour of the safe default.
+ */
+function safeRedirectTarget(raw: string | null): string {
+  if (!raw) return '/';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/';
+  return raw;
+}
+
+/**
  * `POST /auth/login` (plan.md §9.3) is real now — see
  * `docs/implemented-plan.md`'s note that `apps/api`'s catalog/inventory
  * modules (and the `identity` module it depends on) shipped in this phase.
@@ -32,8 +49,9 @@ const LoginResponse = z.object({ user: User, accessToken: z.string() });
  * subsequent admin request — without this, the Products/Inventory screens
  * this task builds would 401 on every call.
  */
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     register,
@@ -58,7 +76,7 @@ export default function LoginPage() {
           lastName: result.user.lastName,
         },
       });
-      router.push('/');
+      router.push(safeRedirectTarget(searchParams.get('redirect')));
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to sign in.');
     }
@@ -96,5 +114,13 @@ export default function LoginPage() {
         </Button>
       </form>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

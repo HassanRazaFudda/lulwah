@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ErrorEnvelope, ResponseMeta } from '@lulwah/contracts';
-import { getAccessToken } from './auth-session';
+import { clearSession, getAccessToken } from './auth-session';
 
 /**
  * plan.md §25.3 "apps/admin" — the only API-reachability env var this app
@@ -35,6 +35,34 @@ export interface ApiRequestOptions {
  *  §9.1: `{ success: true, data, meta }` on success. */
 function successEnvelopeSchema<T extends z.ZodType>(dataSchema: T) {
   return z.object({ success: z.literal(true), data: dataSchema, meta: ResponseMeta.optional() });
+}
+
+/**
+ * `401` from `requireAuth()` (no token, or an invalid/expired one) means
+ * "not authenticated at all" — distinct from `403`'s "authenticated but
+ * missing the permission" (`isForbiddenError`, below), which correctly
+ * renders an in-page "you don't have access" state instead. A `401` has
+ * nothing to render in-page: the whole screen's data is unreachable, on
+ * every screen, for as long as the stale/missing token remains.
+ *
+ * Found live (not written speculatively): every screen 401ed after a
+ * token expired or was simply never set, with no redirect anywhere —
+ * `auth-session.ts`'s own doc comment already admitted this ("no
+ * redirect-on-401 guard... out of scope") from the very first phase that
+ * introduced sessions, and nothing since ever came back to it. This is
+ * the fix: clear the stale session and hard-navigate to `/login`,
+ * carrying the current path so `login/page.tsx` can return the admin to
+ * where they were instead of dumping them at the dashboard root.
+ * `window.location.href` (not the Next.js router) is deliberate — a
+ * full navigation guarantees every in-memory TanStack Query cache entry
+ * for the now-invalid session is gone too, not just the route.
+ */
+function handleUnauthorized(): void {
+  if (typeof window === 'undefined') return;
+  clearSession();
+  if (window.location.pathname === '/login') return;
+  const redirectTo = `${window.location.pathname}${window.location.search}`;
+  window.location.href = `/login?redirect=${encodeURIComponent(redirectTo)}`;
 }
 
 /**
@@ -83,6 +111,7 @@ export async function apiRequest<T>(
   const json: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     const parsedError = ErrorEnvelope.safeParse(json);
     if (parsedError.success) {
       throw new ApiClientError(parsedError.data.error.code, parsedError.data.error.message, response.status);
@@ -145,6 +174,7 @@ export async function apiRequestWithMeta<T>(
   const json: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     const parsedError = ErrorEnvelope.safeParse(json);
     if (parsedError.success) {
       throw new ApiClientError(parsedError.data.error.code, parsedError.data.error.message, response.status);
@@ -190,6 +220,7 @@ export async function apiRequestCsv(path: string, fallbackFilename: string): Pro
   }
 
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     const json: unknown = await response.json().catch(() => null);
     const parsedError = ErrorEnvelope.safeParse(json);
     if (parsedError.success) {
