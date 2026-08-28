@@ -1,9 +1,11 @@
 /**
- * Minimal placeholder rows for the screens the task scopes as "structurally
- * real page shells, minimal placeholder content" (Products, Inventory,
- * Discounts, Customers) — depth for this workstream goes into Orders
- * (plan.md §8.7 is the headline feature), not spread evenly across every
- * admin screen.
+ * Minimal placeholder rows for screens still scoped as "structurally real
+ * page shells, minimal placeholder content" when this file was written
+ * (originally Products, Inventory, Discounts, Customers) — depth for that
+ * workstream went into Orders (plan.md §8.7 is the headline feature), not
+ * spread evenly across every admin screen. Products, Inventory, and now
+ * Customers have since moved to real data (see their own
+ * `lib/queries/*.ts`); only Discounts still reads from here.
  */
 
 export interface PlaceholderProductRow {
@@ -78,24 +80,7 @@ export const PLACEHOLDER_DISCOUNTS: PlaceholderDiscountRow[] = [
   { code: 'WELCOME10', type: 'fixed_amount', status: 'scheduled', used: 0, limit: 1000 },
 ];
 
-export interface PlaceholderCustomerRow {
-  id: string;
-  name: string;
-  email: string;
-  orders: number;
-  totalSpentFils: number;
-  tags: string[];
-}
-
-export const PLACEHOLDER_CUSTOMERS: PlaceholderCustomerRow[] = [
-  { id: 'c1', name: 'Ayesha Khan', email: 'ayesha.khan@example.com', orders: 6, totalSpentFils: 184200, tags: ['vip'] },
-  { id: 'c2', name: 'Mahnoor Iqbal', email: 'mahnoor.iqbal@example.com', orders: 2, totalSpentFils: 45900, tags: [] },
-  {
-    id: 'c3',
-    name: 'Zara Sheikh',
-    email: 'zara.sheikh@example.com',
-    orders: 9,
-    totalSpentFils: 302100,
-    tags: ['wholesale'],
-  },
-];
+// Customers previously had a placeholder row shape here
+// (`PlaceholderCustomerRow`/`PLACEHOLDER_CUSTOMERS`) — removed now that
+// `app/(dashboard)/customers/page.tsx` reads real data from
+// `GET /admin/customers` (see `lib/queries/customers.ts`).
