@@ -2,11 +2,13 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
+import { AccessDenied } from '../../components/AccessDenied';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { Skeleton } from '../../components/Skeleton';
 import { StatTile } from '../../components/StatTile';
-import { useDashboardStatsQuery } from '../../lib/queries';
+import { isForbiddenError } from '../../lib/api-client';
+import { useDashboardSalesStats } from '../../lib/queries/dashboard';
 import { useAdminInventoryQuery } from '../../lib/queries/inventory';
 import { useAdminOrdersQuery } from '../../lib/queries/orders';
 import { useAdminProductsQuery } from '../../lib/queries/products';
@@ -28,16 +30,20 @@ const ACTION_STATUSES = [
 ];
 
 /**
- * plan.md §11.1 Dashboard row. The stat tiles (revenue/orders/AOV/
- * conversion) stay placeholder — no `reports`/analytics API module exists
- * yet (see `lib/queries.ts`'s doc comment). "Orders needing action" and
- * "Low stock" are real now: the `order` and `inventory` modules both merged
- * this phase, and both list endpoints already had exactly the server-side
- * filters (`status`, `lowStock`) this panel needs — no new API work
- * required, just pointing existing real hooks at this page.
+ * plan.md §11.1 Dashboard row. The four stat tiles (revenue/orders/AOV/
+ * units) are real now too, as of this pass — `useDashboardSalesStats`
+ * (`lib/queries/dashboard.ts`) computes them from two real
+ * `GET /admin/reports/sales` calls now that the `report` module exists
+ * (see that file's own doc comment for exactly how each tile is derived,
+ * and why "Conversion rate" was replaced with "Units sold" rather than
+ * faked — no analytics/GA4 integration exists anywhere in this repo to
+ * supply a real visit count). "Orders needing action" and "Low stock" were
+ * already real: the `order` and `inventory` modules both merged in an
+ * earlier phase, and both list endpoints already had exactly the
+ * server-side filters (`status`, `lowStock`) this panel needs.
  */
 export default function DashboardPage() {
-  const { data: statsData, isLoading: statsLoading } = useDashboardStatsQuery();
+  const { stats: statsData, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useDashboardSalesStats();
 
   // Hooks called unconditionally, one per fixed status — not a loop over a
   // dynamic list, so this stays within the rules of hooks.
@@ -62,12 +68,33 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-24">
-      <PageHeader title="Dashboard" description="Today · 7d · 30d — placeholder period, no date picker in this skeleton." />
+      <PageHeader title="Dashboard" description="Trailing 7 days, vs the 7 days before — no date-range picker on this dashboard yet." />
 
       <div className="grid grid-cols-2 gap-16 lg:grid-cols-4">
-        {statsLoading || !statsData
-          ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[96px]" />)
-          : statsData.map((stat) => <StatTile key={stat.id} {...stat} />)}
+        {statsError ? (
+          <div className="col-span-2 lg:col-span-4">
+            {isForbiddenError(statsError) ? (
+              <AccessDenied permission="reports.read" description="Dashboard sales stats are restricted." />
+            ) : (
+              <div className="flex flex-col items-start gap-8 border border-line bg-paper p-16">
+                <p className="text-body-sm text-danger">
+                  {statsError instanceof Error ? statsError.message : 'Failed to load dashboard stats.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchStats()}
+                  className="text-body-sm font-semibold text-zamurrad underline underline-offset-4"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
+        ) : statsLoading || !statsData ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[96px]" />)
+        ) : (
+          statsData.map((stat) => <StatTile key={stat.id} {...stat} />)
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-16 lg:grid-cols-2">
