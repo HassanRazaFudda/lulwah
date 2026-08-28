@@ -10,5 +10,11 @@ import preset from '@lulwah/config/tailwind-preset';
  */
 export default {
   presets: [preset],
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // `../../packages/ui/src` is not optional — see the identical fix and
+  // its full explanation in `apps/admin/tailwind.config.ts`. Same root
+  // cause, same fix, both apps: `@lulwah/ui`'s own Tailwind classes never
+  // got generated here either, since Tailwind v4's JIT scanner only
+  // generates CSS for a class it can find as a literal string somewhere
+  // in `content`, and this package was never in it.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', '../../packages/ui/src/**/*.{ts,tsx}'],
 } satisfies Config;
