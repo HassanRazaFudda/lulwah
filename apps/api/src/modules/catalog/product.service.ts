@@ -5,7 +5,7 @@ import { assertPermission } from '../identity/identity.policy.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
 import * as brandRepo from './brand.repository.js';
 import * as categoryRepo from './category.repository.js';
-import * as collectionRepo from './collection.repository.js';
+import { getCollectionProductIds } from './collection.service.js';
 import * as productRepo from './product.repository.js';
 import type { ProductListFilter, ProductSort } from './product.repository.js';
 import * as variantRepo from './variant.repository.js';
@@ -22,29 +22,47 @@ function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 11000;
 }
 
-async function resolveSlugId(kind: 'category' | 'brand' | 'collection', slug: string | undefined): Promise<string | undefined> {
+async function resolveSlugId(kind: 'category' | 'brand', slug: string | undefined): Promise<string | undefined> {
   if (!slug) return undefined;
   if (kind === 'category') return (await categoryRepo.findCategoryBySlug(slug))?._id.toString();
-  if (kind === 'brand') return (await brandRepo.findBrandBySlug(slug))?._id.toString();
-  return (await collectionRepo.findCollectionBySlug(slug))?._id.toString();
+  return (await brandRepo.findBrandBySlug(slug))?._id.toString();
+}
+
+/** `query.size` and `query.collection` are both real-id restrictions
+ *  resolved against a different repository (`variant`/`collection`) than
+ *  `ProductListFilter`'s other fields, so they're combined here into the
+ *  single `productIdsIn` intersection the repository's `$in` filter takes
+ *  — a request naming both (unusual, but a valid combination of two
+ *  independent `ListProductsQuery` fields) must match products satisfying
+ *  *both*, not whichever one happened to run last. */
+async function resolveProductIdsIn(query: ListProductsQuery): Promise<string[] | undefined> {
+  const constraints: string[][] = [];
+  if (query.size) constraints.push(await variantRepo.findProductIdsBySize(query.size));
+  if (query.collection) constraints.push(await getCollectionProductIds(query.collection));
+  if (constraints.length === 0) return undefined;
+  return constraints.reduce((intersection, ids) => {
+    const idSet = new Set(ids);
+    return intersection.filter((id) => idSet.has(id));
+  });
 }
 
 /** plan.md §9.2 `GET /products` — public listing, always `status: active`. */
 export async function listProducts(query: ListProductsQuery): Promise<{ products: Product[]; total: number }> {
-  const [categoryId, brandId, resolvedCollectionId] = await Promise.all([
+  const [categoryId, brandId, productIdsIn] = await Promise.all([
     resolveSlugId('category', query.category),
     resolveSlugId('brand', query.brand),
-    resolveSlugId('collection', query.collection),
+    resolveProductIdsIn(query),
   ]);
-
-  const productIdsIn = query.size ? await variantRepo.findProductIdsBySize(query.size) : undefined;
-  if (query.size && productIdsIn?.length === 0) return { products: [], total: 0 };
+  // A `size` and/or `collection` filter that resolved to zero real ids
+  // (an unresolvable collection slug included — see
+  // `collection.service.ts#getCollectionProductIds`'s own doc comment)
+  // means an honest zero-result query, not an unfiltered one.
+  if ((query.size || query.collection) && productIdsIn?.length === 0) return { products: [], total: 0 };
 
   const filter: ProductListFilter = {
     status: 'active',
     ...(categoryId ? { categoryId } : {}),
     ...(brandId ? { brandId } : {}),
-    ...(resolvedCollectionId ? { collectionId: resolvedCollectionId } : {}),
     ...(query.stitchingType ? { stitchingType: query.stitchingType } : {}),
     ...(query.fabric ? { fabric: query.fabric } : {}),
     ...(query.work ? { work: query.work } : {}),

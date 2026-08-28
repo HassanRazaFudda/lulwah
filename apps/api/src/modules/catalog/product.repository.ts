@@ -56,7 +56,12 @@ export interface ProductListFilter {
   status?: ProductDoc['status'];
   categoryId?: string;
   brandId?: string;
-  collectionId?: string;
+  // No `collectionId` field — `?collection=` filtering resolves through
+  // `productIdsIn` instead (see `product.service.ts#resolveProductIdsIn`
+  // and `collection.service.ts#getCollectionProductIds`'s doc comment for
+  // why: `Product.collectionIds`, the denormalized array this used to
+  // query, is never actually written by this codebase's real
+  // collection-curation workflow).
   stitchingType?: string;
   fabric?: string;
   work?: string;
@@ -87,7 +92,6 @@ function buildFilter(filter: ProductListFilter): QueryFilter<ProductDoc> {
   if (filter.status) query.status = filter.status;
   if (filter.categoryId) query.categoryIds = new Types.ObjectId(filter.categoryId);
   if (filter.brandId) query.brandId = new Types.ObjectId(filter.brandId);
-  if (filter.collectionId) query.collectionIds = new Types.ObjectId(filter.collectionId);
   if (filter.stitchingType) query.stitchingType = filter.stitchingType as ProductDoc['stitchingType'];
   if (filter.fabric) query.fabric = filter.fabric as ProductDoc['fabric'];
   if (filter.work) query.work = filter.work as unknown as ProductDoc['work'][number];

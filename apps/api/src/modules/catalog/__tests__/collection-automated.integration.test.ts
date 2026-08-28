@@ -153,3 +153,74 @@ describe('automated collections (plan.md §7.9)', () => {
     expect(publicRes.body.data.productIds).toEqual([productId]);
   });
 });
+
+/**
+ * Regression coverage for a real bug found live while wiring the
+ * storefront's home page to a CMS `collection_rail` section pointed at a
+ * real collection (`docs/implemented-plan.md` §8): `GET /products?collection=`
+ * used to filter on `Product.collectionIds`, a denormalized field nothing
+ * in this codebase's real collection-curation workflow (this admin
+ * endpoint, `Collection.productIds`) ever wrote — so it silently returned
+ * zero products for every real manual collection, always. Separately, an
+ * unresolvable collection slug silently dropped the filter entirely rather
+ * than returning zero results. Both are fixed in
+ * `product.service.ts#resolveProductIdsIn`/`collection.service.ts
+ * #getCollectionProductIds`.
+ */
+describe('GET /api/v1/products?collection= (plan.md §9.2)', () => {
+  it('returns exactly a manual collection\'s real, curated productIds — not zero, not everything', async () => {
+    const app = buildApp();
+    const token = await createAdminAndLogin(app);
+    const brandRes = await request(app).post('/api/v1/admin/brands').set('Authorization', `Bearer ${token}`).send({ name: 'Khaadi', slug: 'khaadi', countryOfOrigin: 'PK' });
+    const categoryRes = await request(app).post('/api/v1/admin/categories').set('Authorization', `Bearer ${token}`).send({ name: 'Lawn', slug: 'lawn' });
+    const brandId = brandRes.body.data.brand.id as string;
+    const categoryId = categoryRes.body.data.category.id as string;
+
+    const memberProductId = await createProduct(app, token, brandId, categoryId, { title: 'In The Collection' });
+    await createProduct(app, token, brandId, categoryId, { title: 'Not In The Collection' });
+
+    const collectionRes = await request(app)
+      .post('/api/v1/admin/collections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Eid Edit', slug: 'eid-edit-real', type: 'editorial', productIds: [memberProductId], status: 'active' });
+    expect(collectionRes.status).toBe(201);
+
+    const res = await request(app).get('/api/v1/products?collection=eid-edit-real');
+    expect(res.status).toBe(200);
+    expect(res.body.data.products.map((p: { id: string }) => p.id)).toEqual([memberProductId]);
+  });
+
+  it('returns an automated collection\'s live rule-matched products', async () => {
+    const app = buildApp();
+    const token = await createAdminAndLogin(app);
+    const brandRes = await request(app).post('/api/v1/admin/brands').set('Authorization', `Bearer ${token}`).send({ name: 'Khaadi', slug: 'khaadi', countryOfOrigin: 'PK' });
+    const categoryRes = await request(app).post('/api/v1/admin/categories').set('Authorization', `Bearer ${token}`).send({ name: 'Lawn', slug: 'lawn' });
+    const brandId = brandRes.body.data.brand.id as string;
+    const categoryId = categoryRes.body.data.category.id as string;
+
+    const lawnProductId = await createProduct(app, token, brandId, categoryId, { fabric: 'lawn', title: 'Lawn Suit' });
+    await createProduct(app, token, brandId, categoryId, { fabric: 'silk', title: 'Silk Suit' });
+
+    const collectionRes = await request(app)
+      .post('/api/v1/admin/collections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'All Lawn', slug: 'all-lawn-live', type: 'automated', rules: [{ field: 'fabric', operator: 'eq', value: 'lawn' }], status: 'active' });
+    expect(collectionRes.status).toBe(201);
+
+    const res = await request(app).get('/api/v1/products?collection=all-lawn-live');
+    expect(res.body.data.products.map((p: { id: string }) => p.id)).toEqual([lawnProductId]);
+  });
+
+  it('returns zero products for an unresolvable collection slug, never the unfiltered listing', async () => {
+    const app = buildApp();
+    const token = await createAdminAndLogin(app);
+    const brandRes = await request(app).post('/api/v1/admin/brands').set('Authorization', `Bearer ${token}`).send({ name: 'Khaadi', slug: 'khaadi', countryOfOrigin: 'PK' });
+    const categoryRes = await request(app).post('/api/v1/admin/categories').set('Authorization', `Bearer ${token}`).send({ name: 'Lawn', slug: 'lawn' });
+    await createProduct(app, token, brandRes.body.data.brand.id, categoryRes.body.data.category.id);
+
+    const res = await request(app).get('/api/v1/products?collection=does-not-exist-anywhere');
+    expect(res.status).toBe(200);
+    expect(res.body.data.products).toEqual([]);
+    expect(res.body.meta.total).toBe(0);
+  });
+});
