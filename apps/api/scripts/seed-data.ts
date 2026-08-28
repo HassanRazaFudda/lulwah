@@ -424,7 +424,7 @@ export const PRODUCTS: SeedProduct[] = [
     descriptionEn: "This year's signature print, unstitched shirt and trouser — one of the brand's most-repeated lawn motifs.",
   },
   {
-    title: 'Velvet Winter Shawl',
+    title: 'Velvet Winter Shawl, Naqshi Border',
     articleCode: 'SS-WIN-26-051',
     brandSlug: 'sana-safinaz',
     categorySlug: 'dupattas-shawls',
