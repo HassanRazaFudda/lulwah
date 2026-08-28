@@ -9,6 +9,7 @@ import { cx } from '@lulwah/ui';
 import { AnnouncementBar } from '@/components/layout/AnnouncementBar';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
+import { MainContent } from '@/components/layout/MainContent';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { routing } from '@/i18n/routing';
 import '@/styles/globals.css';
@@ -122,7 +123,7 @@ export default async function LocaleLayout({
               </a>
               <AnnouncementBar />
               <Header />
-              <main id="main-content">{children}</main>
+              <MainContent>{children}</MainContent>
               <Footer />
             </QueryProvider>
           </NextIntlClientProvider>
