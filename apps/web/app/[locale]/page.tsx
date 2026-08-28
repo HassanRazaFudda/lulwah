@@ -9,10 +9,19 @@ import { NewsletterSection } from '@/components/sections/NewsletterSection';
 import { OccasionTiles } from '@/components/sections/OccasionTiles';
 import { ShopByStitching } from '@/components/sections/ShopByStitching';
 import { UspBar } from '@/components/sections/UspBar';
-import { ProductCard } from '@/components/commerce/ProductCard';
+import { ProductCard, type ProductCardProps } from '@/components/commerce/ProductCard';
 import { Link } from '@/i18n/navigation';
 import type { AppLocale } from '@/i18n/routing';
-import { listBrands, listProducts } from '@/lib/catalog-client';
+import { listBrands, listCollections, listProducts } from '@/lib/catalog-client';
+import { getHomeSections } from '@/lib/content-client';
+import {
+  categoryGridVariant,
+  inferCollectionRailSort,
+  isHomeSectionType,
+  parseHomeSections,
+  pickLocale,
+  type TypedHomeSection,
+} from '@/lib/content-mappers';
 import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
 
 interface HomePageProps {
@@ -29,19 +38,182 @@ export async function generateMetadata({ params }: HomePageProps): Promise<Metad
 }
 
 /**
- * Home — plan.md §15.2: the section order below is explicitly locked
- * ("Sections are CMS-driven, but the launch composition is fixed"). A real
- * build reads `home_sections` from the CMS — that module doesn't exist yet,
- * so this still renders the fixed section order directly, but the two
- * catalogue-driven rails ("New arrivals", "Best sellers") now come from
- * real `GET /products` calls (`sort=newest` / `sort=bestselling`) instead
- * of `placeholder-data.ts`; every other section stays static/editorial per
- * the brief. Backgrounds alternate paper/pearl per §13.5 ("Two adjacent
- * sections never share a background"), and each wrapper carries the locked
- * vertical-rhythm gap (`clamp(64px, 9vw, 160px)`).
+ * Home — plan.md §15.2. Sections are now genuinely CMS-driven: `GET
+ * /content/home` (`apps/api/src/modules/content`, see
+ * `docs/implemented-plan.md` §4.7.3) returns the admin-configured, ordered,
+ * in-active-window `home_sections` list, and `CmsHomeComposition` below
+ * renders each one through the matching existing section component.
+ * `lib/content-mappers.ts#parseHomeSections` validates each section's loose
+ * `settings` record against its real typed schema (a malformed row is
+ * skipped, logged, never a 500) and `lib/content-client.ts#getHomeSections`
+ * does the actual fetch.
+ *
+ * **Fallback, explicit and documented**: no content editor may have built a
+ * homepage yet — a real, expected state (`docs/implemented-plan.md` §4.7.3/
+ * §6.8 both note this honestly), so a `GET /content/home` response with
+ * zero sections, or one whose sections are all either invalid or the
+ * R1-out-of-scope `journal_teaser` type, falls back to
+ * `DefaultHomeComposition` — the exact fixed §15.2 launch order this file
+ * rendered before this task, unchanged. This is not a silent behavior: the
+ * page always renders one or the other branch below, on purpose.
+ *
+ * **The two catalogue-driven rails**: `CollectionRailSectionSettings`
+ * (`packages/contracts/src/content.ts`) carries a `collectionId` for a
+ * specific collection, or `null` to mean "derive it live" — but the real
+ * settings shape has no field naming *which* `sort` a null-`collectionId`
+ * rail wants (there's no such field in the contract; "New arrivals" and
+ * "Best sellers" are both this exact section type). See
+ * `content-mappers.ts#inferCollectionRailSort`'s doc comment for the
+ * documented, `viewAllHref`-based rule used to tell them apart — the
+ * underlying data source is still the same real `listProducts({ sort:
+ * 'newest' | 'bestselling' })` call this page always used.
+ *
+ * `category_grid` sections dispatch between `ShopByStitching` and
+ * `OccasionTiles` by tile count — see
+ * `content-mappers.ts#categoryGridVariant`. `journal_teaser` sections are
+ * skipped outright: plan.md §15.2 item 10 scopes that to R2, and no journal
+ * exists anywhere in this codebase to render one against.
  */
 export default async function HomePage({ params }: HomePageProps) {
   const { locale } = await params;
+
+  const rawSections = await getHomeSections();
+  const typedSections = parseHomeSections(rawSections).filter((section) => section.type !== 'journal_teaser');
+
+  if (typedSections.length === 0) {
+    return <DefaultHomeComposition locale={locale} />;
+  }
+
+  return <CmsHomeComposition sections={typedSections} locale={locale} />;
+}
+
+// ---------------------------------------------------------------------------
+// CMS-driven composition — real `home_sections`, real order.
+// ---------------------------------------------------------------------------
+
+async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSection[]; locale: AppLocale }) {
+  const t = await getTranslations('home');
+
+  const collectionRailSections = sections.filter(isHomeSectionType('collection_rail'));
+  const brandStripSections = sections.filter(isHomeSectionType('brand_strip'));
+  const needsBrands = collectionRailSections.length > 0 || brandStripSections.length > 0;
+  const needsCollectionLookup = collectionRailSections.some((section) => section.settings.collectionId !== null);
+
+  const [brands, collections] = await Promise.all([
+    needsBrands ? listBrands() : Promise.resolve([]),
+    // A generous limit — resolving a CMS-referenced `collectionId` to its
+    // slug (`listProducts` takes slugs, not ids, per `catalog-client.ts`'s
+    // own doc comment) needs the full collection list, not just a first page.
+    needsCollectionLookup ? listCollections(100) : Promise.resolve([]),
+  ]);
+  const brandNameById = buildBrandNameById(brands);
+  const brandsById = new Map(brands.map((brand) => [brand.id, brand]));
+  const collectionSlugById = new Map(collections.map((collection) => [collection.id, collection.slug]));
+
+  const railItemsBySectionId = new Map<string, ProductCardProps[]>();
+  await Promise.all(
+    collectionRailSections.map(async (section) => {
+      const slug = section.settings.collectionId ? collectionSlugById.get(section.settings.collectionId) : undefined;
+      const result = slug
+        ? await listProducts({ collection: slug, limit: section.settings.limit })
+        : await listProducts({ sort: inferCollectionRailSort(section.settings.viewAllHref), limit: section.settings.limit });
+      railItemsBySectionId.set(
+        section.id,
+        result.products.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale)),
+      );
+    }),
+  );
+
+  // Two adjacent sections never share a background (plan.md §13.5) — this
+  // alternates paper/pearl across the section types that render as a plain
+  // wrapped block (`collection_rail`, `brand_strip`, the grid variant of
+  // `category_grid`). Types with their own inherent background (hero, the
+  // panel variant of `category_grid`, video_banner, usp_bar, newsletter)
+  // don't participate — they already visually differ from any neighbour.
+  let bgToggle = 0;
+  const nextBg = () => (bgToggle++ % 2 === 0 ? 'bg-paper' : 'bg-pearl');
+
+  return (
+    <>
+      {sections.map((section) => {
+        switch (section.type) {
+          case 'hero':
+            return <Hero key={section.id} settings={section.settings} locale={locale} />;
+
+          case 'collection_rail': {
+            const items = railItemsBySectionId.get(section.id) ?? [];
+            if (items.length === 0) return null;
+            const viewAllHref = section.settings.viewAllHref ?? undefined;
+            return (
+              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
+                <CollectionRail
+                  title={pickLocale(section.settings.titleEn, section.settings.titleAr, locale)}
+                  items={items}
+                  // `exactOptionalPropertyTypes` forbids passing an explicit
+                  // `undefined` for an optional prop — spread it in only
+                  // when there's a real value.
+                  {...(viewAllHref ? { viewAllHref, viewAllLabel: t('collectionRail.viewAllGeneric') } : {})}
+                />
+              </div>
+            );
+          }
+
+          case 'editorial_split':
+            return (
+              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
+                <EditorialSplit settings={section.settings} locale={locale} />
+              </div>
+            );
+
+          case 'brand_strip': {
+            const resolved = section.settings.brandIds
+              .map((id) => brandsById.get(id))
+              .filter((brand): brand is NonNullable<typeof brand> => brand !== undefined);
+            return (
+              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
+                <BrandStrip brands={resolved} locale={locale} />
+              </div>
+            );
+          }
+
+          case 'category_grid': {
+            const variant = categoryGridVariant(section.settings.tiles.length);
+            if (variant === 'none') return null;
+            const title = pickLocale(section.settings.titleEn, section.settings.titleAr, locale);
+            if (variant === 'panels') {
+              return <ShopByStitching key={section.id} tiles={section.settings.tiles} title={title} locale={locale} />;
+            }
+            return (
+              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
+                <OccasionTiles tiles={section.settings.tiles} title={title} locale={locale} />
+              </div>
+            );
+          }
+
+          case 'video_banner':
+            return <FullBleedBreak key={section.id} settings={section.settings} locale={locale} />;
+
+          case 'usp_bar':
+            return <UspBar key={section.id} settings={section.settings} locale={locale} />;
+
+          case 'newsletter':
+            return <NewsletterSection key={section.id} settings={section.settings} locale={locale} />;
+
+          default:
+            return null;
+        }
+      })}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Default composition — the original fixed §15.2 launch order, used only
+// when the CMS has nothing (renderable) configured yet. See this file's own
+// top-level doc comment for exactly when this branch applies.
+// ---------------------------------------------------------------------------
+
+async function DefaultHomeComposition({ locale }: { locale: AppLocale }) {
   const t = await getTranslations('home');
 
   const [newArrivalsResult, bestSellersResult, brands] = await Promise.all([

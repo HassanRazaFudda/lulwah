@@ -1,6 +1,17 @@
 import Image from 'next/image';
 import { getTranslations } from 'next-intl/server';
-import { Link } from '@/i18n/navigation';
+import type { HeroSectionSettings } from '@lulwah/contracts';
+import type { AppLocale } from '@/i18n/routing';
+import { pickLocale } from '@/lib/content-mappers';
+import { ContentLink } from './ContentLink';
+
+export interface HeroProps {
+  /** A CMS-configured `hero` home section (`GET /content/home`), when one
+   *  exists. Omitted renders the original static campaign hero — see
+   *  `app/[locale]/page.tsx`'s doc comment for exactly when that applies. */
+  settings?: HeroSectionSettings | null;
+  locale?: AppLocale;
+}
 
 /**
  * Home hero — plan.md §15.2 item 1 / §13.6's banned-list correction:
@@ -11,34 +22,40 @@ import { Link } from '@/i18n/navigation';
  * this hero) is R2-scoped and explicitly out of this workstream; per its
  * own spec it "falls back to a static campaign image + subtle CSS
  * parallax on low-end devices / prefers-reduced-motion" — this hero *is*
- * that static fallback, permanently, until the WebGL layer lands.
+ * that static fallback, permanently, until the WebGL layer lands. The same
+ * applies to `settings.videoUrl` when a CMS section supplies one — nothing
+ * in this codebase plays hero video yet, so only the still `media` is
+ * rendered; that's an honest scope limit, not an oversight.
  */
-export async function Hero() {
+export async function Hero({ settings, locale = 'en' }: HeroProps = {}) {
   const t = await getTranslations('home.hero');
+
+  const headline = settings ? pickLocale(settings.headlineEn, settings.headlineAr, locale) : t('title');
+  const linkLabel = settings ? pickLocale(settings.linkLabelEn, settings.linkLabelAr, locale) : t('cta');
+  const linkHref = settings?.linkHref ?? '/shop/new-in';
+  const imageSrc = settings?.media?.url ?? '/campaigns/lawn-26-vol1-hero.jpg';
 
   return (
     <section className="relative h-[100svh] min-h-[560px] w-full overflow-hidden bg-zamurrad-deep">
-      <Image
-        src="/campaigns/lawn-26-vol1-hero.jpg"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover opacity-90"
-      />
+      <Image src={imageSrc} alt="" fill priority sizes="100vw" className="object-cover opacity-90" />
       <div className="absolute inset-0 bg-gradient-to-t from-zamurrad-deep/80 via-zamurrad-deep/10 to-transparent" />
 
       <div className="relative flex h-full flex-col justify-end px-24 pb-64 lg:px-[clamp(24px,5vw,88px)] lg:pb-96">
-        <p className="font-body text-label font-semibold tracking-label text-gold uppercase">{t('eyebrow')}</p>
+        {/* `HeroSectionSettings` (packages/contracts/src/content.ts) carries
+            no eyebrow field — shown only for the static fallback, never
+            fabricated for CMS-driven content. */}
+        {!settings ? (
+          <p className="font-body text-label font-semibold tracking-label text-gold uppercase">{t('eyebrow')}</p>
+        ) : null}
         <h1 className="max-w-[16ch] font-display text-display-1 leading-[0.94] tracking-display text-paper">
-          {t('title')}
+          {headline}
         </h1>
-        <Link
-          href="/shop/new-in"
+        <ContentLink
+          href={linkHref}
           className="mt-24 inline-block w-fit font-body text-body font-medium text-paper underline decoration-1 underline-offset-4 hover:decoration-2"
         >
-          {t('cta')}
-        </Link>
+          {linkLabel}
+        </ContentLink>
       </div>
 
       {/* Scroll cue — "the pearl", §13.7's micro-signature travels a gold hairline elsewhere on the site; here it's simply the resting mark. */}

@@ -2,8 +2,8 @@
 
 import { useRef, useState, type UIEvent } from 'react';
 import { cx } from '@lulwah/ui';
-import { Link } from '@/i18n/navigation';
 import { ProductCard, type ProductCardProps } from '@/components/commerce/ProductCard';
+import { ContentLink } from './ContentLink';
 
 /**
  * plan.md §15.2 item 2, "New arrivals rail": horizontal scroll, ~3.4 cards
@@ -11,11 +11,18 @@ import { ProductCard, type ProductCardProps } from '@/components/commerce/Produc
  * itself is native CSS scroll-snap (free drag/swipe on touch and trackpad,
  * no JS); a client component only because the hairline progress bar needs
  * live `scrollLeft` to draw itself.
+ *
+ * Also the real renderer for the CMS's `collection_rail` home section type
+ * (both "New arrivals" and "Best sellers" are that same type — see
+ * `app/[locale]/page.tsx`'s doc comment) — `viewAllHref`/`viewAllLabel` are
+ * optional because `CollectionRailSectionSettings.viewAllHref` is nullable
+ * in the real contract; the link is simply omitted when absent rather than
+ * pointed at a fabricated href.
  */
 export interface CollectionRailProps {
   title: string;
-  viewAllHref: string;
-  viewAllLabel: string;
+  viewAllHref?: string;
+  viewAllLabel?: string;
   items: ProductCardProps[];
 }
 
@@ -33,12 +40,14 @@ export function CollectionRail({ title, viewAllHref, viewAllLabel, items }: Coll
     <section className="flex flex-col gap-24 px-24 lg:px-[clamp(24px,5vw,88px)]">
       <div className="flex items-baseline justify-between">
         <h2 className="font-display text-heading-1 tracking-display text-ink">{title}</h2>
-        <Link
-          href={viewAllHref}
-          className="font-body text-body text-ink underline decoration-1 underline-offset-4 hover:decoration-2"
-        >
-          {viewAllLabel}
-        </Link>
+        {viewAllHref && viewAllLabel ? (
+          <ContentLink
+            href={viewAllHref}
+            className="font-body text-body text-ink underline decoration-1 underline-offset-4 hover:decoration-2"
+          >
+            {viewAllLabel}
+          </ContentLink>
+        ) : null}
       </div>
 
       <div

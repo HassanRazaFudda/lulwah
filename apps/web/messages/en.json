@@ -54,6 +54,9 @@
       "title": "New In",
       "viewAll": "View all new in"
     },
+    "collectionRail": {
+      "viewAllGeneric": "View all"
+    },
     "shopByStitching": {
       "title": "Shop by stitching",
       "unstitched": {
@@ -73,7 +76,8 @@
       "eyebrow": "The Edit",
       "title": "Eid Edition, in five silhouettes",
       "body": "Forty-two pieces from Pakistan's leading fashion houses, shot in Dubai against the fabric they're cut from. Nothing sized for a Western catalogue — every chart is the brand's own.",
-      "cta": "Read the edit"
+      "cta": "Read the edit",
+      "ctaGeneric": "Read more"
     },
     "brandStrip": {
       "title": "Houses we carry"

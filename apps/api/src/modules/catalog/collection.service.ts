@@ -25,12 +25,48 @@ const AUTOMATED_COLLECTION_MAX_PRODUCTS = 200;
  *  read, via the exact same facet-filter machinery `GET /products` uses
  *  (`collection.rules.ts`). Manual collections just return their stored,
  *  drag-ordered array unchanged. */
+async function resolveMemberProductIds(doc: CollectionHydratedDoc): Promise<string[]> {
+  if (doc.type !== 'automated') return doc.productIds.map((id) => id.toString());
+  const filter = buildAutomatedProductFilter(doc.rules);
+  const { products } = await productRepo.listProducts(filter, 'newest', 1, AUTOMATED_COLLECTION_MAX_PRODUCTS);
+  return products.map((p) => p._id.toString());
+}
+
 async function resolveCollectionDto(doc: CollectionHydratedDoc): Promise<Collection> {
   const dto = toCollectionDto(doc);
   if (doc.type !== 'automated') return dto;
-  const filter = buildAutomatedProductFilter(doc.rules);
-  const { products } = await productRepo.listProducts(filter, 'newest', 1, AUTOMATED_COLLECTION_MAX_PRODUCTS);
-  return { ...dto, productIds: products.map((p) => p._id.toString()) };
+  return { ...dto, productIds: await resolveMemberProductIds(doc) };
+}
+
+/**
+ * Real product membership for a collection, by slug — manual collections
+ * return their stored, drag-ordered `productIds` array (plan.md's own
+ * model: "Collection (manual `productIds` only ...)" —
+ * `docs/implemented-plan.md` §4.4); automated collections compute it live
+ * via `rules[]`, the same resolution `resolveCollectionDto` already uses
+ * for the public collection-detail payload.
+ *
+ * Exported for `product.service.ts#listProducts`'s `?collection=` filter,
+ * which needs *this* — not the denormalized `Product.collectionIds` field
+ * `product.repository.ts` used to filter on. That field is a genuinely
+ * separate, independently-settable array on the product side
+ * (`AdminCreateProductInput.collectionIds`) that nothing in this codebase's
+ * only real collection-curation workflow (the Content/Collections admin
+ * screen, which edits `Collection.productIds`) ever writes — so filtering
+ * by it made `GET /products?collection=<any real manual collection>`
+ * silently return zero products, always, no matter how many real products
+ * the collection actually had. Found live while wiring the storefront's
+ * home page to a real CMS `collection_rail` section pointed at a real
+ * collection (see `docs/implemented-plan.md` §8 for the write-up) — the
+ * same "found during integration, fixed at the source" pattern several
+ * other bugs in that section already document. Returns `[]` (not an error)
+ * for an unresolvable slug, so a caller building an `$in` filter from this
+ * gets an honest zero-result query instead of one silently unfiltered.
+ */
+export async function getCollectionProductIds(slug: string): Promise<string[]> {
+  const doc = await repo.findCollectionBySlug(slug);
+  if (!doc) return [];
+  return resolveMemberProductIds(doc);
 }
 
 /** plan.md §9.2 `GET /collections` — public listing, always `status: active`. */
