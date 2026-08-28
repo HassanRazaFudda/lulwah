@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import type { Order, OrderItem, OrderStatus } from '@lulwah/contracts';
+import type { AdminOrder, OrderItem, OrderStatus } from '@lulwah/contracts';
 import { formatDateTime, formatMoney, formatUaePhone } from '@lulwah/utils';
 import { Button } from '@lulwah/ui';
 import { DataTable } from '../../../../components/DataTable';
 import type { DataTableColumn } from '../../../../components/DataTable';
+import { OrderInternalNotes } from '../../../../components/OrderInternalNotes';
+import { OrderRefunds } from '../../../../components/OrderRefunds';
 import { OrderStatusHistory } from '../../../../components/OrderStatusHistory';
 import { Panel } from '../../../../components/Panel';
 import { PageHeader } from '../../../../components/PageHeader';
@@ -18,11 +20,12 @@ import {
   CARRIER_LABELS,
   useAddOrderNoteMutation,
   useAdminOrderQuery,
+  useRefundOrderMutation,
   useUpdateOrderStatusMutation,
 } from '../../../../lib/queries/orders';
 import type { OrderCarrier } from '../../../../lib/queries/orders';
 
-function mapsUrlFor(order: Order): string {
+function mapsUrlFor(order: AdminOrder): string {
   const { geo, area, city, emirate } = order.shippingAddress;
   if (geo) return `https://www.google.com/maps?q=${geo.lat},${geo.lng}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${area}, ${city}, ${emirate}`)}`;
@@ -80,6 +83,101 @@ function ShipmentFieldset({
   );
 }
 
+/** plan.md §11.2 rule 6: "All money inputs are in AED with two decimals in
+ *  the UI, converted to fils at the boundary." This page's one money input
+ *  (the refund amount) converts both ways: `filsToAedInput` seeds the field
+ *  with the full refundable balance already in AED-with-cents;
+ *  `parseAedInputToFils` turns whatever the staff member typed back into an
+ *  integer fils value for the API — `null` for anything that isn't a valid
+ *  non-negative number, so the caller can tell "empty/invalid" apart from a
+ *  real (even zero) amount. */
+function filsToAedInput(fils: number): string {
+  return (fils / 100).toFixed(2);
+}
+
+function parseAedInputToFils(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  const aed = Number(trimmed);
+  if (!Number.isFinite(aed) || aed < 0) return null;
+  return Math.round(aed * 100);
+}
+
+/** plan.md §11.2 rule 3: "Every destructive action needs typed confirmation
+ *  for irreversible ones (delete product, refund)" — refund is the plan's
+ *  own named example. Typing the order's own order number is the
+ *  confirmation gesture (the well-known "type the resource's name to
+ *  confirm" pattern) — chosen over a generic word like "REFUND" because it
+ *  also makes the staff member re-read which order they're about to refund
+ *  money on, not just acknowledge an abstract warning. Amount defaults to
+ *  the full refundable balance (`order.service.ts#refundOrder`'s own
+ *  `paidFils - refundedFils`) but stays an editable field for a partial
+ *  refund. */
+function RefundFieldset({
+  amountAed,
+  reason,
+  confirmText,
+  orderNumber,
+  refundableFils,
+  onAmountChange,
+  onReasonChange,
+  onConfirmChange,
+}: {
+  amountAed: string;
+  reason: string;
+  confirmText: string;
+  orderNumber: string;
+  refundableFils: number;
+  onAmountChange: (value: string) => void;
+  onReasonChange: (value: string) => void;
+  onConfirmChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-12">
+      <div className="flex flex-col gap-4">
+        <label htmlFor="refund-amount" className="text-label uppercase tracking-label text-ink-70">
+          Refund amount (AED)
+        </label>
+        <input
+          id="refund-amount"
+          type="number"
+          step={0.01}
+          min={0}
+          value={amountAed}
+          onChange={(event) => onAmountChange(event.target.value)}
+          className="h-[40px] w-[160px] border border-line bg-paper px-16 text-body-sm outline-none focus:border-zamurrad"
+        />
+        <p className="text-body-sm text-ink-70">Refundable balance: {formatMoney(refundableFils, 'en')}</p>
+      </div>
+      <div className="flex flex-col gap-4">
+        <label htmlFor="refund-reason" className="text-label uppercase tracking-label text-ink-70">
+          Reason (optional)
+        </label>
+        <textarea
+          id="refund-reason"
+          placeholder="e.g. Customer returned item, damaged on arrival…"
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          maxLength={500}
+          className="min-h-[64px] border border-line bg-paper p-12 text-body-sm outline-none focus:border-zamurrad"
+        />
+      </div>
+      <div className="flex flex-col gap-4">
+        <label htmlFor="refund-confirm" className="text-label uppercase tracking-label text-ink-70">
+          Type <span className="font-semibold text-ink">{orderNumber}</span> to confirm this refund
+        </label>
+        <input
+          id="refund-confirm"
+          placeholder={orderNumber}
+          value={confirmText}
+          onChange={(event) => onConfirmChange(event.target.value)}
+          className="h-[40px] border border-line bg-paper px-16 text-body-sm outline-none focus:border-zamurrad"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function OrderDetailPage() {
   const params = useParams();
   const orderId = Array.isArray(params.id) ? (params.id[0] ?? '') : (params.id ?? '');
@@ -87,6 +185,7 @@ export default function OrderDetailPage() {
   const { data: order, isLoading } = useAdminOrderQuery(orderId);
   const updateStatus = useUpdateOrderStatusMutation();
   const addNote = useAddOrderNoteMutation(orderId);
+  const refundOrder = useRefundOrderMutation();
 
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState('');
@@ -96,14 +195,12 @@ export default function OrderDetailPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // `POST /admin/orders/:id/notes` persists for real (confirmed live — see
-  // task report), but no endpoint returns `internalNotes` back to a client
-  // (`order.mapper.ts#toOrderDto` deliberately omits it — an internal-only
-  // Mongoose field, see `lib/queries/orders.ts`'s doc comment on
-  // `useAddOrderNoteMutation`). This session-local list is what stands in
-  // for a read-back until that DTO gap is closed on the API side.
-  const [sessionNotes, setSessionNotes] = useState<{ text: string; at: Date }[]>([]);
   const [noteDraft, setNoteDraft] = useState('');
+
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmountAed, setRefundAmountAed] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundConfirmText, setRefundConfirmText] = useState('');
 
   const resetPendingChange = () => {
     setPendingStatus(null);
@@ -136,12 +233,34 @@ export default function OrderDetailPage() {
   const submitNote = () => {
     const text = noteDraft.trim();
     if (!text) return;
-    addNote.mutate(text, {
-      onSuccess: () => {
-        setSessionNotes((prev) => [...prev, { text, at: new Date() }]);
-        setNoteDraft('');
-      },
-    });
+    addNote.mutate(text, { onSuccess: () => setNoteDraft('') });
+  };
+
+  const openRefundForm = () => {
+    if (!order) return;
+    setRefundAmountAed(filsToAedInput(order.paidFils - order.refundedFils));
+    setRefundReason('');
+    setRefundConfirmText('');
+    setRefundOpen(true);
+  };
+
+  const resetRefundForm = () => {
+    setRefundOpen(false);
+    setRefundAmountAed('');
+    setRefundReason('');
+    setRefundConfirmText('');
+  };
+
+  const confirmRefund = () => {
+    if (!order) return;
+    const refundableFils = order.paidFils - order.refundedFils;
+    const amountFils = parseAedInputToFils(refundAmountAed);
+    if (amountFils === null || amountFils <= 0 || amountFils > refundableFils) return;
+    if (refundConfirmText.trim() !== order.orderNumber) return;
+    refundOrder.mutate(
+      { orderId, amountFils, reason: refundReason.trim() || undefined },
+      { onSuccess: resetRefundForm },
+    );
   };
 
   const handleCopyAddress = async () => {
@@ -165,6 +284,24 @@ export default function OrderDetailPage() {
   if (!order) {
     return <p className="text-body-sm text-ink-70">Order not found.</p>;
   }
+
+  // Mirrors `order.service.ts#refundOrder`'s own eligibility check
+  // (`paymentStatus` must be `paid`/`partially_refunded`, and there must be
+  // something still refundable) — a UI-side preview of the same rule the
+  // server actually enforces, not a replacement for it.
+  const refundableFils = order.paidFils - order.refundedFils;
+  const canRefund = (order.paymentStatus === 'paid' || order.paymentStatus === 'partially_refunded') && refundableFils > 0;
+  const parsedRefundAmountFils = parseAedInputToFils(refundAmountAed);
+  const refundAmountError =
+    parsedRefundAmountFils === null
+      ? 'Enter a refund amount.'
+      : parsedRefundAmountFils <= 0
+        ? 'Amount must be greater than zero.'
+        : parsedRefundAmountFils > refundableFils
+          ? `Amount cannot exceed the refundable balance of ${formatMoney(refundableFils, 'en')}.`
+          : null;
+  const refundConfirmError = refundConfirmText.trim() !== order.orderNumber ? `Type ${order.orderNumber} to confirm.` : null;
+  const canSubmitRefund = refundAmountError === null && refundConfirmError === null && !refundOrder.isPending;
 
   return (
     <div className="flex flex-col gap-16">
@@ -268,25 +405,65 @@ export default function OrderDetailPage() {
         </Panel>
       </div>
 
+      <div className="grid grid-cols-1 gap-16 lg:grid-cols-2">
+        <Panel title="Refund">
+          {!refundOpen ? (
+            <div className="flex flex-col gap-8">
+              <p className="text-body-sm text-ink-70">
+                Refundable: {formatMoney(Math.max(refundableFils, 0), 'en')} of {formatMoney(order.paidFils, 'en')} paid.
+              </p>
+              {!canRefund ? (
+                <p className="text-body-sm text-ink-70">
+                  {refundableFils <= 0 ? 'Nothing left to refund.' : 'This order has no captured payment to refund.'}
+                </p>
+              ) : null}
+              <div>
+                <Button type="button" variant="secondary" onClick={openRefundForm} disabled={!canRefund}>
+                  Refund…
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-12">
+              <RefundFieldset
+                amountAed={refundAmountAed}
+                reason={refundReason}
+                confirmText={refundConfirmText}
+                orderNumber={order.orderNumber}
+                refundableFils={refundableFils}
+                onAmountChange={setRefundAmountAed}
+                onReasonChange={setRefundReason}
+                onConfirmChange={setRefundConfirmText}
+              />
+              <p className="text-body-sm text-danger">
+                This cannot be undone once the gateway accepts it. The customer&apos;s original payment method is
+                credited.
+              </p>
+              {refundOrder.isError ? <p className="text-body-sm text-danger">{refundOrder.error.message}</p> : null}
+              <div className="flex gap-8">
+                <Button type="button" onClick={confirmRefund} disabled={!canSubmitRefund}>
+                  {refundOrder.isPending ? 'Refunding…' : 'Confirm refund'}
+                </Button>
+                <Button type="button" variant="tertiary" onClick={resetRefundForm} disabled={refundOrder.isPending}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Refund history">
+          <OrderRefunds refunds={order.refunds} />
+        </Panel>
+      </div>
+
       <Panel title="Internal notes">
         <div className="flex flex-col gap-16">
           <p className="text-body-sm text-ink-70">
-            Staff-only — never shown to the customer (plan.md §9.7). Saved to the order in the database, but this
-            API doesn&apos;t return stored notes on read yet, so this list only shows notes added in this browser
-            session.
+            Staff-only — never shown to the customer (plan.md §9.7). Round-trips for real: a note posted here is
+            durably persisted and visible to any staff member viewing this order, including after a refresh.
           </p>
-          {sessionNotes.length === 0 ? (
-            <p className="text-body-sm text-ink-70">No notes added this session.</p>
-          ) : (
-            <ul className="flex flex-col gap-8">
-              {sessionNotes.map((entry, index) => (
-                <li key={index} className="border-l-2 border-line pl-12">
-                  <p className="text-body-sm text-ink">{entry.text}</p>
-                  <p className="mt-4 text-body-sm text-ink-70">{formatDateTime(entry.at, 'en')}</p>
-                </li>
-              ))}
-            </ul>
-          )}
+          <OrderInternalNotes notes={order.internalNotes} />
           <div className="flex flex-col gap-8">
             <textarea
               placeholder="Add an internal note…"
