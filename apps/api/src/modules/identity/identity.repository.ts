@@ -50,6 +50,14 @@ export async function updateUserRole(id: string, role: UserDoc['role']): Promise
   return UserModel.findByIdAndUpdate(id, { role }, { returnDocument: 'after' }).exec();
 }
 
+/** `PATCH /admin/users/:id/status` — the deactivate/reactivate toggle.
+ *  Never accepts `'deleted'` from that endpoint (see `identity.dto.ts
+ *  #UpdateUserStatusInput`'s own restriction) — account deletion is a
+ *  separate, more irreversible concern this task didn't build. */
+export async function updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<UserHydratedDoc | null> {
+  return UserModel.findByIdAndUpdate(id, { status }, { returnDocument: 'after' }).exec();
+}
+
 export async function incrementFailedLoginCount(id: string): Promise<UserHydratedDoc | null> {
   return UserModel.findByIdAndUpdate(id, { $inc: { failedLoginCount: 1 } }, { returnDocument: 'after' }).exec();
 }
@@ -111,6 +119,29 @@ export async function revokeFamily(family: string, reason: SessionRevokedReason)
 
 export async function revokeAllSessionsForUser(userId: string, reason: SessionRevokedReason): Promise<void> {
   await SessionModel.updateMany({ userId, revokedAt: null }, { revokedAt: new Date(), revokedReason: reason }).exec();
+}
+
+/**
+ * The Users & roles "session list" — plan.md §11.1. A refresh token
+ * rotates on every use (see `identity.service.ts#refresh`'s doc comment),
+ * so at most one row per `family` is ever un-revoked at a time; querying
+ * "not revoked, not yet expired" therefore surfaces exactly one row per
+ * genuinely still-active login (one per device/browser that's logged in
+ * and hasn't been logged out), not the full rotation history — that
+ * history is exactly the noise an admin-facing "active sessions" list
+ * shouldn't show.
+ */
+export async function findActiveSessionsForUser(userId: string): Promise<SessionHydratedDoc[]> {
+  return SessionModel.find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } })
+    .sort({ createdAt: -1 })
+    .exec();
+}
+
+/** Scoped by `userId` so an admin revoking session `X` for user `A` can
+ *  never accidentally (or by a guessed id) revoke a session belonging to
+ *  a different user — a 404 on mismatch, not a silent no-op. */
+export async function findSessionByIdForUser(sessionId: string, userId: string): Promise<SessionHydratedDoc | null> {
+  return SessionModel.findOne({ _id: sessionId, userId }).exec();
 }
 
 // ---------------------------------------------------------------------------

@@ -551,6 +551,85 @@ describe('admin order status transitions', () => {
   });
 });
 
+describe('order status transitions — role-restricted subset (plan.md §10.2 ✏️* footnote)', () => {
+  it('warehouse may only drive processing -> ready_to_ship -> shipped; a table-valid transition outside that subset is rejected with 403, not the 409 a real table violation would produce', async () => {
+    const { app } = buildApp();
+    const admin = await registerAndLogin(app, 'super_admin');
+    const { sessionId } = await checkoutUpToPaymentIntent(app, admin.token, 10);
+    pinNextOtp(778899);
+    await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
+    await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '778899' });
+    const placeRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/place`).set('Idempotency-Key', `warehouse-${sessionId}`).send({});
+    const orderId = placeRes.body.data.order.id as string;
+    expect(placeRes.body.data.order.status).toBe('confirmed');
+
+    await UserModel.updateOne({ _id: admin.userId }, { role: 'warehouse' });
+    const warehouseLogin = await request(app).post('/api/v1/auth/login').send({ email: admin.email, password: 'correct-horse-battery-staple' });
+    const warehouseToken = warehouseLogin.body.data.accessToken as string;
+
+    // confirmed -> processing IS a table-valid transition (order_ops/manager
+    // may make it), but it's outside warehouse's own restricted subset —
+    // rejected 403 AUTH_FORBIDDEN, confirming this is a real, enforced
+    // restriction and not just the permission string letting anything
+    // through (the exact unenforced-gap risk this test exists to close).
+    const rejected = await request(app).patch(`/api/v1/admin/orders/${orderId}/status`).set('Authorization', `Bearer ${warehouseToken}`).send({ status: 'processing', notifyCustomer: false });
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.error.code).toBe('AUTH_FORBIDDEN');
+    expect(placeRes.body.data.order.status).toBe('confirmed'); // never actually moved
+
+    // Move the order to `processing` as super_admin so warehouse's own
+    // subset can be exercised starting from a state it's allowed to touch.
+    const toProcessing = await request(app).patch(`/api/v1/admin/orders/${orderId}/status`).set('Authorization', `Bearer ${admin.token}`).send({ status: 'processing', notifyCustomer: false });
+    expect(toProcessing.status).toBe(200);
+
+    const step1 = await request(app).patch(`/api/v1/admin/orders/${orderId}/status`).set('Authorization', `Bearer ${warehouseToken}`).send({ status: 'ready_to_ship', notifyCustomer: false });
+    expect(step1.status).toBe(200);
+    expect(step1.body.data.order.status).toBe('ready_to_ship');
+
+    const step2 = await request(app)
+      .patch(`/api/v1/admin/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${warehouseToken}`)
+      .send({ status: 'shipped', trackingNumber: 'TRK-1', carrier: 'aramex', notifyCustomer: false });
+    expect(step2.status).toBe(200);
+    expect(step2.body.data.order.status).toBe('shipped');
+
+    // shipped -> cancelled/returned/out_for_delivery are all table-valid
+    // from here, but every one of them is outside warehouse's subset too.
+    const rejectedAfterShipped = await request(app).patch(`/api/v1/admin/orders/${orderId}/status`).set('Authorization', `Bearer ${warehouseToken}`).send({ status: 'cancelled', notifyCustomer: false });
+    expect(rejectedAfterShipped.status).toBe(403);
+  });
+
+  it('support may only set cancelled; a table-valid transition to anything else is rejected with 403, but cancelling from a valid state succeeds', async () => {
+    const { app } = buildApp();
+    const admin = await registerAndLogin(app, 'super_admin');
+    const { sessionId } = await checkoutUpToPaymentIntent(app, admin.token, 10);
+    pinNextOtp(667788);
+    await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
+    await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '667788' });
+    const placeRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/place`).set('Idempotency-Key', `support-${sessionId}`).send({});
+    const orderId = placeRes.body.data.order.id as string;
+    expect(placeRes.body.data.order.status).toBe('confirmed');
+
+    await UserModel.updateOne({ _id: admin.userId }, { role: 'support' });
+    const supportLogin = await request(app).post('/api/v1/auth/login').send({ email: admin.email, password: 'correct-horse-battery-staple' });
+    const supportToken = supportLogin.body.data.accessToken as string;
+
+    // confirmed -> processing IS table-valid (order_ops/manager/warehouse
+    // territory), but outside support's subset — rejected.
+    const rejected = await request(app).patch(`/api/v1/admin/orders/${orderId}/status`).set('Authorization', `Bearer ${supportToken}`).send({ status: 'processing', notifyCustomer: false });
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.error.code).toBe('AUTH_FORBIDDEN');
+
+    // confirmed -> cancelled is table-valid AND the one target support may set.
+    const cancelled = await request(app)
+      .patch(`/api/v1/admin/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${supportToken}`)
+      .send({ status: 'cancelled', note: 'Customer requested cancellation via chat.', notifyCustomer: false });
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.data.order.status).toBe('cancelled');
+  });
+});
+
 describe('admin order refund (plan.md §8.8)', () => {
   /** COD's `paymentStatus` only flips to `paid` on delivery (see
    *  `order.service.ts`'s `order.delivered` listener) — a refund requires

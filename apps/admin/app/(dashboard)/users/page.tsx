@@ -10,26 +10,37 @@ import type { DataTableColumn } from '../../../components/DataTable';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { Skeleton } from '../../../components/Skeleton';
-import { selectClassName } from '../../../components/product-editor/field-styles';
+import { selectClassName, labelClassName } from '../../../components/product-editor/field-styles';
 import { getSessionUser } from '../../../lib/auth-session';
-import { ROLE_LABELS, STAFF_ROLES, useAdminUsersQuery, useUpdateUserRoleMutation } from '../../../lib/queries/users';
+import {
+  ROLE_LABELS,
+  STAFF_ROLES,
+  useAdminUsersQuery,
+  useInviteStaffMutation,
+  useRevokeSessionMutation,
+  useUpdateUserRoleMutation,
+  useUpdateUserStatusMutation,
+  useUserSessionsQuery,
+} from '../../../lib/queries/users';
+import type { InviteStaffResult } from '../../../lib/queries/users';
 
 /**
- * plan.md §11.1 Users & roles + §10.2's RBAC matrix, now real data against
- * `GET /admin/users` and a real role-change control against
- * `PATCH /admin/users/:id/role`.
+ * plan.md §11.1 Users & roles + §10.2's RBAC matrix.
  *
- * **What this screen deliberately does NOT build, and why**: plan.md
- * §11.1 also lists "Invite staff... force 2FA reset, deactivate, session
- * list with revoke" for this screen. None of those have a backing
- * endpoint anywhere in `apps/api` — `identity.routes.ts` has exactly two
- * admin routes, list and role-change (see `lib/queries/users.ts`'s doc
- * comment, which cites the exact file checked). Rather than silently
- * omitting them or wiring buttons to nothing, they're rendered below as
- * visibly disabled controls with an explanatory title/tooltip, and the
- * gap is called out in the panel above the table too — the same
- * "state the gap in the UI itself" precedent `orders/[id]/page.tsx` sets
- * for `internalNotes` not being readable back.
+ * **What this screen now builds for real, beyond list + role-change**:
+ * invite staff, deactivate/reactivate, and session-list-with-revoke are
+ * all real against `apps/api`'s `identity` module (see
+ * `lib/queries/users.ts`'s doc comment for the exact endpoints) —
+ * docs/implemented-plan.md §6.10/§11 item 8's gap, closed for three of
+ * the four actions plan.md §11.1 names.
+ *
+ * **What's still deliberately NOT built, and why**: "Force 2FA reset"
+ * stays a visibly disabled "coming soon" control. No real TOTP/2FA system
+ * exists anywhere in this codebase — the login page's TOTP field has
+ * never verified against anything real (docs/implemented-plan.md §6.2) —
+ * so there is nothing genuine to reset. Building a reset button against a
+ * feature that was never real would be a worse gap than the honest
+ * disabled control this screen already had.
  */
 
 const ROLE_FILTER_OPTIONS: Array<{ value: 'all' | UserRole; label: string }> = [
@@ -45,6 +56,8 @@ const STATUS_STYLES: Record<UserStatus, string> = {
   deleted: 'border-danger/40 bg-danger/12 text-danger',
 };
 
+const inputClassName = 'h-[40px] w-full border border-line bg-paper px-16 text-body-sm text-ink outline-none focus:border-zamurrad';
+
 function Pill({ children, className }: { children: ReactNode; className: string }) {
   return (
     <span className={cx('rounded-sm border px-8 py-4 text-[10px] font-semibold uppercase tracking-label', className)}>
@@ -54,9 +67,9 @@ function Pill({ children, className }: { children: ReactNode; className: string 
 }
 
 /** A disabled control representing plan.md §11.1 functionality this
- *  codebase has no endpoint for yet — never wired to a mutation, per this
- *  task's explicit instruction not to build a button that calls a
- *  nonexistent endpoint or silently does nothing. */
+ *  codebase has no real backing for — "Force 2FA reset" is the one
+ *  survivor of this pattern now that invite/deactivate/sessions are real
+ *  (see this file's own top comment for why). */
 function ComingSoonButton({ label, reason }: { label: string; reason: string }) {
   return (
     <button
@@ -70,9 +83,23 @@ function ComingSoonButton({ label, reason }: { label: string; reason: string }) 
   );
 }
 
+const UAE_PHONE_RE = /^5\d{8}$/;
+
+interface InviteFormState {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  role: UserRole;
+}
+
+const EMPTY_INVITE_FORM: InviteFormState = { email: '', firstName: '', lastName: '', phoneNumber: '', role: 'support' };
+
 export default function UsersPage() {
   const { data: users, isLoading } = useAdminUsersQuery();
   const updateRole = useUpdateUserRoleMutation();
+  const updateStatus = useUpdateUserStatusMutation();
+  const inviteStaff = useInviteStaffMutation();
   const sessionUser = getSessionUser();
 
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
@@ -80,11 +107,19 @@ export default function UsersPage() {
   const [pendingRole, setPendingRole] = useState<UserRole | ''>('');
   const [confirmText, setConfirmText] = useState('');
 
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteForm, setInviteForm] = useState<InviteFormState>(EMPTY_INVITE_FORM);
+  const [inviteResult, setInviteResult] = useState<InviteStaffResult | null>(null);
+
+  const [sessionsUserId, setSessionsUserId] = useState<string | null>(null);
+
   const filteredUsers = (users ?? []).filter((u) => roleFilter === 'all' || u.role === roleFilter);
   const pendingUser = pendingUserId ? (users ?? []).find((u) => u.id === pendingUserId) : undefined;
   const isSelf = pendingUser && sessionUser && pendingUser.id === sessionUser.id;
   const canConfirm =
     !!pendingUser && !!pendingRole && pendingRole !== pendingUser.role && confirmText.trim() === pendingRole && !isSelf;
+
+  const sessionsUser = sessionsUserId ? (users ?? []).find((u) => u.id === sessionsUserId) : undefined;
 
   const startRoleChange = (user: User) => {
     setPendingUserId(user.id);
@@ -101,6 +136,47 @@ export default function UsersPage() {
     updateRole.mutate(
       { userId: pendingUser.id, role: pendingRole },
       { onSuccess: cancelRoleChange },
+    );
+  };
+
+  const isInviteFormValid =
+    inviteForm.email.trim().length > 0 &&
+    inviteForm.firstName.trim().length > 0 &&
+    inviteForm.lastName.trim().length > 0 &&
+    UAE_PHONE_RE.test(inviteForm.phoneNumber.trim());
+
+  const submitInvite = () => {
+    if (!isInviteFormValid) return;
+    inviteStaff.mutate(
+      {
+        email: inviteForm.email.trim(),
+        firstName: inviteForm.firstName.trim(),
+        lastName: inviteForm.lastName.trim(),
+        phone: { countryCode: '+971', number: inviteForm.phoneNumber.trim() },
+        role: inviteForm.role,
+      },
+      {
+        onSuccess: (result) => {
+          setInviteResult(result);
+          setInviteForm(EMPTY_INVITE_FORM);
+          setShowInviteForm(false);
+        },
+      },
+    );
+  };
+
+  const toggleStatus = (user: User) => {
+    const nextStatus = user.status === 'active' ? 'suspended' : 'active';
+    const verb = nextStatus === 'suspended' ? 'deactivate' : 'reactivate';
+    const confirmed = window.confirm(
+      nextStatus === 'suspended'
+        ? `Deactivate ${user.email ?? user.id}? This immediately revokes their active sessions and blocks their next login. This can be undone.`
+        : `Reactivate ${user.email ?? user.id}? They will be able to log in again.`,
+    );
+    if (!confirmed) return;
+    updateStatus.mutate(
+      { userId: user.id, status: nextStatus },
+      { onError: () => window.alert(`Failed to ${verb} this account. See the console for details.`) },
     );
   };
 
@@ -128,21 +204,38 @@ export default function UsersPage() {
     {
       id: 'actions',
       header: 'Actions',
-      cell: (u) => (
-        <div className="flex flex-wrap items-center gap-8">
-          <Button
-            type="button"
-            variant="tertiary"
-            onClick={() => startRoleChange(u)}
-            disabled={updateRole.isPending && pendingUserId === u.id}
-          >
-            Change role
-          </Button>
-          <ComingSoonButton label="Reset 2FA" reason="No 2FA-reset endpoint exists in apps/api yet." />
-          <ComingSoonButton label="Deactivate" reason="No deactivate endpoint exists in apps/api yet." />
-          <ComingSoonButton label="Sessions" reason="No session-list/revoke endpoint exists in apps/api yet." />
-        </div>
-      ),
+      cell: (u) => {
+        const isSelfRow = !!sessionUser && sessionUser.id === u.id;
+        return (
+          <div className="flex flex-wrap items-center gap-8">
+            <Button
+              type="button"
+              variant="tertiary"
+              onClick={() => startRoleChange(u)}
+              disabled={updateRole.isPending && pendingUserId === u.id}
+            >
+              Change role
+            </Button>
+            <ComingSoonButton label="Reset 2FA" reason="No real TOTP/2FA system exists anywhere in this codebase, so there is nothing to reset." />
+            {u.status === 'deleted' ? (
+              <ComingSoonButton label="Deactivate" reason="This account is already deleted." />
+            ) : (
+              <Button
+                type="button"
+                variant="tertiary"
+                onClick={() => toggleStatus(u)}
+                disabled={isSelfRow || (updateStatus.isPending && updateStatus.variables?.userId === u.id)}
+                title={isSelfRow ? 'You cannot deactivate your own account from this screen.' : undefined}
+              >
+                {u.status === 'suspended' ? 'Reactivate' : 'Deactivate'}
+              </Button>
+            )}
+            <Button type="button" variant="tertiary" onClick={() => setSessionsUserId(u.id)}>
+              Sessions
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -151,21 +244,145 @@ export default function UsersPage() {
       <PageHeader
         title="Users & roles"
         description="plan.md §10.2 RBAC matrix — see role permissions there."
-        actions={<ComingSoonButton label="Invite staff" reason="No invite endpoint exists in apps/api yet." />}
+        actions={
+          <Button type="button" onClick={() => setShowInviteForm((v) => !v)}>
+            {showInviteForm ? 'Cancel invite' : 'Invite staff'}
+          </Button>
+        }
       />
 
       <Panel title="What's real here">
         <p className="text-body-sm text-ink-70">
-          The list below and the role-change control are real, live against <code>GET /admin/users</code> and{' '}
-          <code>PATCH /admin/users/:id/role</code>. Invite, 2FA reset, deactivate, and session revoke are shown as
-          disabled controls, not omitted, because <code>apps/api</code> has no endpoints for them yet — a real,
-          currently-missing piece of admin functionality worth a future phase, not a UI oversight.
+          List, role-change, invite, deactivate/reactivate, and session list + revoke are all real, live against{' '}
+          <code>apps/api</code>&apos;s <code>identity</code> module. <strong>Force 2FA reset</strong> is still shown as a
+          disabled control — no real TOTP/2FA system exists anywhere in this codebase, so there is nothing genuine to
+          reset yet.
         </p>
       </Panel>
 
+      {showInviteForm ? (
+        <Panel title="Invite staff">
+          <div className="flex flex-col gap-12">
+            <div className="grid grid-cols-1 gap-12 sm:grid-cols-2">
+              <div className="flex flex-col gap-4">
+                <label htmlFor="invite-email" className={labelClassName}>
+                  Email
+                </label>
+                <input
+                  id="invite-email"
+                  type="email"
+                  className={inputClassName}
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <label htmlFor="invite-role" className={labelClassName}>
+                  Role
+                </label>
+                <select
+                  id="invite-role"
+                  className={selectClassName}
+                  value={inviteForm.role}
+                  onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value as UserRole }))}
+                >
+                  {STAFF_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS[role]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-4">
+                <label htmlFor="invite-first-name" className={labelClassName}>
+                  First name
+                </label>
+                <input
+                  id="invite-first-name"
+                  className={inputClassName}
+                  value={inviteForm.firstName}
+                  onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <label htmlFor="invite-last-name" className={labelClassName}>
+                  Last name
+                </label>
+                <input
+                  id="invite-last-name"
+                  className={inputClassName}
+                  value={inviteForm.lastName}
+                  onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <label htmlFor="invite-phone" className={labelClassName}>
+                  Mobile (UAE, no leading 0 — e.g. 501234567)
+                </label>
+                <div className="flex items-center gap-8">
+                  <span className="text-body-sm text-ink-70">+971</span>
+                  <input
+                    id="invite-phone"
+                    className={inputClassName}
+                    value={inviteForm.phoneNumber}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, phoneNumber: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="501234567"
+                    maxLength={9}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p className="text-body-sm text-ink-70">
+              A temporary password is generated and shown once below — there is no email-sending infrastructure in this
+              codebase, so hand it to the new hire directly.
+            </p>
+
+            {inviteStaff.isError ? <p className="text-body-sm text-danger">{inviteStaff.error.message}</p> : null}
+
+            <div className="flex gap-8">
+              <Button type="button" onClick={submitInvite} disabled={!isInviteFormValid || inviteStaff.isPending}>
+                {inviteStaff.isPending ? 'Creating…' : 'Create account'}
+              </Button>
+              <Button type="button" variant="tertiary" onClick={() => setShowInviteForm(false)} disabled={inviteStaff.isPending}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {inviteResult ? (
+        <Panel title="Staff account created — copy this password now">
+          <div className="flex flex-col gap-12">
+            <p className="text-body-sm text-ink">
+              <strong>{inviteResult.user.email}</strong> ({ROLE_LABELS[inviteResult.user.role]}) can log in with the
+              temporary password below. It is shown <strong>once</strong> — it is never stored anywhere in plaintext and
+              cannot be retrieved again after you leave this screen.
+            </p>
+            <code className="w-fit border border-line bg-nacre px-16 py-8 text-body-sm text-ink">
+              {inviteResult.temporaryPassword}
+            </code>
+            <div>
+              <Button type="button" variant="tertiary" onClick={() => setInviteResult(null)}>
+                Done, I&apos;ve copied it
+              </Button>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {sessionsUserId ? (
+        <SessionsPanel
+          userId={sessionsUserId}
+          userLabel={sessionsUser?.email ?? sessionsUserId}
+          onClose={() => setSessionsUserId(null)}
+        />
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-16">
         <div className="flex flex-col gap-4">
-          <label htmlFor="role-filter" className="text-label font-semibold uppercase tracking-label text-ink-70">
+          <label htmlFor="role-filter" className={labelClassName}>
             Filter by role
           </label>
           <select
@@ -253,5 +470,54 @@ export default function UsersPage() {
         <DataTable columns={columns} rows={filteredUsers} getRowId={(u) => u.id} emptyMessage="No users match this filter." />
       )}
     </div>
+  );
+}
+
+/** plan.md §11.1's "session list with revoke" — real against `identity`'s
+ *  `Session` collection (see `identity.repository.ts
+ *  #findActiveSessionsForUser`'s doc comment for exactly what "one row"
+ *  means against a rotating-refresh-token store: one per still-logged-in
+ *  device, not a full rotation history). */
+function SessionsPanel({ userId, userLabel, onClose }: { userId: string; userLabel: string; onClose: () => void }) {
+  const { data: sessions, isLoading } = useUserSessionsQuery(userId);
+  const revokeSession = useRevokeSessionMutation();
+
+  return (
+    <Panel
+      title={`Active sessions — ${userLabel}`}
+      actions={
+        <Button type="button" variant="tertiary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <Skeleton className="h-[80px]" />
+      ) : !sessions || sessions.length === 0 ? (
+        <p className="text-body-sm text-ink-70">No active sessions — every session for this account has expired or been revoked.</p>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {sessions.map((s) => (
+            <div key={s.id} className="flex flex-wrap items-center justify-between gap-8 border border-line px-16 py-12">
+              <div className="flex flex-col gap-4">
+                <span className="text-body-sm text-ink">{s.userAgent ?? 'Unknown device'}</span>
+                <span className="text-body-sm text-ink-70">
+                  IP {s.ip ?? 'unknown'} · signed in {formatDateTime(s.createdAt, 'en')} · expires {formatDateTime(s.expiresAt, 'en')}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="tertiary"
+                onClick={() => revokeSession.mutate({ userId, sessionId: s.id })}
+                disabled={revokeSession.isPending && revokeSession.variables?.sessionId === s.id}
+              >
+                Revoke
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {revokeSession.isError ? <p className="mt-8 text-body-sm text-danger">{revokeSession.error.message}</p> : null}
+    </Panel>
   );
 }

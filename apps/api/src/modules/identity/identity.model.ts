@@ -143,7 +143,7 @@ export const UserModel = model<UserDoc>('User', userSchema);
 // Session (refresh tokens) — plan.md §10.1
 // ---------------------------------------------------------------------------
 
-export type SessionRevokedReason = 'rotated' | 'logout' | 'logout_all' | 'reuse_detected';
+export type SessionRevokedReason = 'rotated' | 'logout' | 'logout_all' | 'reuse_detected' | 'admin_revoked';
 
 export interface SessionDoc {
   _id: Types.ObjectId;
@@ -169,7 +169,7 @@ const sessionSchema = new Schema<SessionDoc>(
     tokenHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },
     revokedAt: { type: Date, default: null },
-    revokedReason: { type: String, enum: ['rotated', 'logout', 'logout_all', 'reuse_detected'], default: null },
+    revokedReason: { type: String, enum: ['rotated', 'logout', 'logout_all', 'reuse_detected', 'admin_revoked'], default: null },
     userAgent: { type: String, default: null },
     ip: { type: String, default: null },
   },

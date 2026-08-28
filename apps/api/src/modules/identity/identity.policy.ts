@@ -60,7 +60,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'discounts.read', 'discounts.write',
     'customers.read', 'customers.write',
     'content.read', 'content.write',
-    'reports.read',
+    'reports.read', 'reports.write',
     'settings.read',
     'users.read',
     // An audit trail of every admin's mutating actions is itself sensitive

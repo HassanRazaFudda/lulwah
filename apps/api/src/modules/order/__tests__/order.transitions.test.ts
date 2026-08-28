@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { OrderStatus } from '@lulwah/contracts';
+import type { OrderStatus, UserRole } from '@lulwah/contracts';
 import { AppError } from '../../../shared/errors.js';
-import { ALL_ORDER_STATUSES, assertValidOrderStatusTransition, getValidNextStatuses, isTerminalOrderStatus, isValidOrderStatusTransition } from '../order.transitions.js';
+import { ALL_ORDER_STATUSES, assertRoleMayMakeTransition, assertValidOrderStatusTransition, getValidNextStatuses, isTerminalOrderStatus, isValidOrderStatusTransition } from '../order.transitions.js';
 
 /**
  * Exhaustive coverage of the order status state machine — plan.md §8.7.2,
@@ -118,5 +118,81 @@ describe('assertValidOrderStatusTransition', () => {
   it('a table-valid transition never requires a reason, forced flag or not', () => {
     expect(() => assertValidOrderStatusTransition('pending_payment', 'confirmed', { isForcedBySuperAdmin: true, reason: undefined })).not.toThrow();
     expect(() => assertValidOrderStatusTransition('pending_payment', 'confirmed', { isForcedBySuperAdmin: false, reason: undefined })).not.toThrow();
+  });
+});
+
+/**
+ * plan.md §10.2's `✏️*` footnote: `warehouse`/`support` hold the same
+ * `orders.status.update` permission string as `manager`/`order_ops`, but
+ * may only drive a restricted subset of the table. Exhaustive over all 144
+ * (from, to) pairs for both restricted roles, matching this file's own
+ * precedent above, plus confirming every other role is a complete no-op
+ * (this function only narrows two roles, never rewrites the table).
+ */
+describe('assertRoleMayMakeTransition — plan.md §10.2 ✏️* footnote', () => {
+  const WAREHOUSE_ALLOWED: ReadonlyArray<readonly [OrderStatus, OrderStatus]> = [
+    ['processing', 'ready_to_ship'],
+    ['ready_to_ship', 'shipped'],
+  ];
+
+  describe('warehouse — exhaustive (from, to) coverage', () => {
+    for (const from of ALL_ORDER_STATUSES) {
+      for (const to of ALL_ORDER_STATUSES) {
+        const shouldBeAllowed = WAREHOUSE_ALLOWED.some(([f, t]) => f === from && t === to);
+        it(`${from} -> ${to} is ${shouldBeAllowed ? 'ALLOWED' : 'rejected'} for warehouse`, () => {
+          if (shouldBeAllowed) {
+            expect(() => assertRoleMayMakeTransition('warehouse', from, to)).not.toThrow();
+          } else {
+            expect(() => assertRoleMayMakeTransition('warehouse', from, to)).toThrow(AppError);
+          }
+        });
+      }
+    }
+  });
+
+  describe('support — exhaustive (from, to) coverage', () => {
+    for (const from of ALL_ORDER_STATUSES) {
+      for (const to of ALL_ORDER_STATUSES) {
+        const shouldBeAllowed = to === 'cancelled';
+        it(`${from} -> ${to} is ${shouldBeAllowed ? 'ALLOWED' : 'rejected'} for support`, () => {
+          if (shouldBeAllowed) {
+            expect(() => assertRoleMayMakeTransition('support', from, to)).not.toThrow();
+          } else {
+            expect(() => assertRoleMayMakeTransition('support', from, to)).toThrow(AppError);
+          }
+        });
+      }
+    }
+  });
+
+  it('rejections are AUTH_FORBIDDEN/403 — distinct from the table-transition 409', () => {
+    for (const role of ['warehouse', 'support'] as const) {
+      try {
+        assertRoleMayMakeTransition(role, 'confirmed', 'processing');
+        expect.unreachable(`${role} should have been rejected for confirmed -> processing`);
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppError);
+        expect((err as AppError).code).toBe('AUTH_FORBIDDEN');
+        expect((err as AppError).httpStatus).toBe(403);
+      }
+    }
+  });
+
+  it('every other role holding orders.status.update is a complete no-op — full, unrestricted table access preserved', () => {
+    const unrestrictedRoles: UserRole[] = ['super_admin', 'manager', 'order_ops'];
+    for (const role of unrestrictedRoles) {
+      for (const from of ALL_ORDER_STATUSES) {
+        for (const to of ALL_ORDER_STATUSES) {
+          // Never throws for these roles, table-valid pair or not — this
+          // function only narrows warehouse/support; table validity itself
+          // is assertValidOrderStatusTransition's separate job.
+          expect(() => assertRoleMayMakeTransition(role, from, to)).not.toThrow();
+        }
+      }
+    }
+  });
+
+  it('a role with no orders.status.update permission at all is also untouched by this function (it is a narrowing layer, never the sole gate)', () => {
+    expect(() => assertRoleMayMakeTransition('customer', 'processing', 'cancelled')).not.toThrow();
   });
 });

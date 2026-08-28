@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@lulwah/contracts';
+import type { OrderStatus, UserRole } from '@lulwah/contracts';
 import { AppError } from '../../shared/errors.js';
 
 /**
@@ -100,4 +100,76 @@ export function assertValidOrderStatusTransition(from: OrderStatus, to: OrderSta
     messageEn: `An order cannot move from "${from}" to "${to}".`,
     details: { from, to, validNextStatuses: getValidNextStatuses(from) },
   });
+}
+
+// ---------------------------------------------------------------------------
+// plan.md §10.2's `✏️*` footnote — the restricted-subset enforcement the
+// permission string alone can't express.
+// ---------------------------------------------------------------------------
+
+/**
+ * `warehouse`'s entire allowed slice of the state machine: the pack-and-ship
+ * chain, and nothing else — not even a transition that's perfectly legal in
+ * `ORDER_STATUS_TRANSITIONS` for another role (e.g. `processing -> cancelled`
+ * is a real table transition, but not one `warehouse` may make).
+ */
+const WAREHOUSE_ALLOWED_TRANSITIONS: ReadonlyArray<readonly [OrderStatus, OrderStatus]> = [
+  ['processing', 'ready_to_ship'],
+  ['ready_to_ship', 'shipped'],
+];
+
+/**
+ * `support`'s allowed target status: `cancelled`, from whatever `from` state
+ * the base table already permits (`pending_payment`/`confirmed`/`processing`
+ * /`stitching`/`ready_to_ship` all lead to `cancelled` there) — expressed as
+ * a target-status rule rather than duplicating those five pairs by hand, so
+ * it can't silently drift if `ORDER_STATUS_TRANSITIONS` itself is edited.
+ * "and re-send notifications" (the other half of the plan.md footnote) has
+ * no corresponding endpoint anywhere in this codebase — there is no
+ * standalone "resend" action, only the `notifyCustomer` flag on a status
+ * change itself — so that half of the footnote is not enforced here because
+ * there is nothing to enforce; it stays an aspirational/R2 note, not
+ * invented against nothing.
+ */
+const SUPPORT_ALLOWED_TARGET_STATUSES: readonly OrderStatus[] = ['cancelled'];
+
+/** Roles this restriction actually narrows. Every other role holding
+ *  `orders.status.update` (`super_admin`, `manager`, `order_ops`) keeps
+ *  full, unrestricted access to whatever `ORDER_STATUS_TRANSITIONS` (or the
+ *  `super_admin` force escape hatch) already allows them — this function is
+ *  a strictly additional narrowing layered on top for exactly these two
+ *  roles, never a rewrite of the table itself. */
+const ROLES_WITH_RESTRICTED_TRANSITIONS: ReadonlySet<UserRole> = new Set(['warehouse', 'support']);
+
+/**
+ * Enforces plan.md §10.2's `✏️*` footnote: "`warehouse` may only set
+ * `processing → ready_to_ship → shipped`; `support` may only set
+ * `cancelled`". Called from `order.service.ts#updateOrderStatus` — the one
+ * place a role-carrying actor (as opposed to a system/webhook-driven
+ * transition, which has no role to restrict) requests a status change.
+ * Layered strictly on top of `assertValidOrderStatusTransition`: a
+ * `warehouse`/`support` actor must pass both this AND the base table check
+ * (though every pair this function allows is already table-valid, so in
+ * practice this is the tighter of the two gates for these two roles).
+ * Never called for, or applicable to, `super_admin`'s force path.
+ */
+export function assertRoleMayMakeTransition(role: UserRole, from: OrderStatus, to: OrderStatus): void {
+  if (!ROLES_WITH_RESTRICTED_TRANSITIONS.has(role)) return;
+
+  if (role === 'warehouse') {
+    const allowed = WAREHOUSE_ALLOWED_TRANSITIONS.some(([f, t]) => f === from && t === to);
+    if (allowed) return;
+    throw new AppError('AUTH_FORBIDDEN', 403, {
+      messageEn: `The warehouse role may only move an order processing → ready_to_ship → shipped; "${from}" → "${to}" is outside that subset.`,
+      details: { role, from, to, allowedTransitions: WAREHOUSE_ALLOWED_TRANSITIONS },
+    });
+  }
+
+  if (role === 'support') {
+    if (SUPPORT_ALLOWED_TARGET_STATUSES.includes(to)) return;
+    throw new AppError('AUTH_FORBIDDEN', 403, {
+      messageEn: `The support role may only cancel orders; "${from}" → "${to}" is outside that subset.`,
+      details: { role, from, to, allowedTargetStatuses: SUPPORT_ALLOWED_TARGET_STATUSES },
+    });
+  }
 }
