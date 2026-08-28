@@ -96,3 +96,110 @@ export async function apiRequest<T>(
   }
   return parsed.data.data;
 }
+
+/** True when `error` is an `ApiClientError` the server raised specifically
+ *  because the authenticated user lacks a required permission — plan.md
+ *  §10.2's `AUTH_FORBIDDEN` is reused for both "not authenticated" (401)
+ *  and "authenticated but missing the permission" (403), so `httpStatus`
+ *  is what actually distinguishes the two here, not `code` alone. Screens
+ *  gated by a specific permission (Reports' `reports.read`, Audit log's
+ *  `audit.read`) use this to render a real "you don't have access" state
+ *  instead of a generic error dump. */
+export function isForbiddenError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.httpStatus === 403;
+}
+
+/**
+ * Same contract as `apiRequest`, but also returns the §9.1 envelope's
+ * `meta` (page/limit/total/hasMore) — `apiRequest` itself discards `meta`,
+ * which is fine for every existing caller (they all fetch one generous,
+ * unpaginated-in-practice page, per `queries/orders.ts`'s/`queries/
+ * inventory.ts`'s own doc comments), but the Audit log screen has no such
+ * guarantee — admin mutating traffic can realistically exceed one page —
+ * so it needs real `total`/`hasMore` to paginate against.
+ */
+export async function apiRequestWithMeta<T>(
+  path: string,
+  dataSchema: z.ZodType<T>,
+  options: ApiRequestOptions = {},
+): Promise<{ data: T; meta: ResponseMeta | undefined }> {
+  let response: Response;
+  try {
+    const accessToken = getAccessToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+
+    const init: RequestInit = {
+      method: options.method ?? 'GET',
+      headers,
+      credentials: 'include',
+    };
+    if (options.body !== undefined) init.body = JSON.stringify(options.body);
+    if (options.signal) init.signal = options.signal;
+    response = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Network request failed';
+    throw new ApiClientError('NETWORK_ERROR', message, 0);
+  }
+
+  const json: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const parsedError = ErrorEnvelope.safeParse(json);
+    if (parsedError.success) {
+      throw new ApiClientError(parsedError.data.error.code, parsedError.data.error.message, response.status);
+    }
+    throw new ApiClientError('INTERNAL_ERROR', `Request failed with status ${response.status}`, response.status);
+  }
+
+  const parsed = successEnvelopeSchema(dataSchema).safeParse(json);
+  if (!parsed.success) {
+    throw new ApiClientError('INTERNAL_ERROR', 'Response did not match the expected shape', response.status);
+  }
+  return { data: parsed.data.data, meta: parsed.data.meta };
+}
+
+export interface CsvDownloadResult {
+  blob: Blob;
+  filename: string;
+}
+
+const CONTENT_DISPOSITION_FILENAME_RE = /filename="([^"]*)"/;
+
+/**
+ * For the one admin surface that doesn't speak the §9.1 JSON envelope at
+ * all: `report.controller.ts`'s `?format=csv` branch sends a raw
+ * `text/csv` body with `Content-Disposition: attachment` directly (see
+ * that file — confirmed by reading it, not assumed), so this is a
+ * deliberately separate function rather than a mode of `apiRequest`,
+ * which always expects and Zod-parses the JSON envelope. A non-2xx
+ * response is still the normal JSON error envelope (the controller only
+ * diverges from JSON on the success path), so the failure branch reuses
+ * the same `ErrorEnvelope` parsing as `apiRequest`.
+ */
+export async function apiRequestCsv(path: string, fallbackFilename: string): Promise<CsvDownloadResult> {
+  let response: Response;
+  try {
+    const accessToken = getAccessToken();
+    const headers: Record<string, string> = {};
+    if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+    response = await fetch(`${API_BASE_URL}${path}`, { method: 'GET', headers, credentials: 'include' });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Network request failed';
+    throw new ApiClientError('NETWORK_ERROR', message, 0);
+  }
+
+  if (!response.ok) {
+    const json: unknown = await response.json().catch(() => null);
+    const parsedError = ErrorEnvelope.safeParse(json);
+    if (parsedError.success) {
+      throw new ApiClientError(parsedError.data.error.code, parsedError.data.error.message, response.status);
+    }
+    throw new ApiClientError('INTERNAL_ERROR', `Request failed with status ${response.status}`, response.status);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition');
+  const match = disposition ? CONTENT_DISPOSITION_FILENAME_RE.exec(disposition) : null;
+  return { blob, filename: match?.[1] || fallbackFilename };
+}
