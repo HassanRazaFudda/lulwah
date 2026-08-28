@@ -57,6 +57,13 @@ export const CheckoutSessionResponse = z.object({
     .object({ id: z.string(), name: z.string(), carrier: z.string(), etaMinDays: z.number(), etaMaxDays: z.number(), priceFils: z.number() })
     .nullable(),
   paymentMethod: PaymentMethod.nullable(),
+  /** Set once `place()` has created the `Order` for this session
+   *  (`apps/api/src/modules/checkout/checkout.repository.ts#markCompleted`)
+   *  — `null` until then. The Ziina return page
+   *  (`app/[locale]/(checkout)/checkout/session/[sessionId]/return/page.tsx`)
+   *  reads this off `getCheckoutSession()` to resolve which order to show,
+   *  with no new endpoint needed. */
+  orderNumber: z.string().nullable(),
   status: z.enum(['open', 'completed', 'expired']),
   expiresAt: z.coerce.date(),
 });

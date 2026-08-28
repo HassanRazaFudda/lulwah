@@ -30,7 +30,7 @@ describe('ZiinaGateway', () => {
       );
       const gateway = new ZiinaGateway('key_test_x', 'whsec_x', fetchImpl);
 
-      const result = await gateway.createIntent({ reference: 'checkout-session-1', amountFils: 24_900, currency: 'AED', method: 'card', customerEmail: 'shopper@example.com', customerPhone: null });
+      const result = await gateway.createIntent({ reference: 'checkout-session-1', amountFils: 24_900, currency: 'AED', method: 'card', customerEmail: 'shopper@example.com', customerPhone: null, successUrl: null, cancelUrl: null, failureUrl: null });
 
       expect(fetchImpl).toHaveBeenCalledWith(
         'https://api-v2.ziina.com/api/payment_intent',
@@ -56,7 +56,7 @@ describe('ZiinaGateway', () => {
       for (const [ziinaStatus, expected] of cases) {
         const fetchImpl = makeMockFetch(jsonResponse({ id: 'pi_x', status: ziinaStatus, redirect_url: null }));
         const gateway = new ZiinaGateway('key_test_x', 'whsec_x', fetchImpl);
-        const result = await gateway.createIntent({ reference: 'ref', amountFils: 1000, currency: 'AED', method: 'card', customerEmail: null, customerPhone: null });
+        const result = await gateway.createIntent({ reference: 'ref', amountFils: 1000, currency: 'AED', method: 'card', customerEmail: null, customerPhone: null, successUrl: null, cancelUrl: null, failureUrl: null });
         expect(result.status).toBe(expected);
       }
     });
@@ -64,7 +64,43 @@ describe('ZiinaGateway', () => {
     it('throws PAYMENT_FAILED when Ziina responds with a non-2xx status', async () => {
       const fetchImpl = makeMockFetch(jsonResponse({ message: 'invalid key' }, false, 401));
       const gateway = new ZiinaGateway('bad_key', 'whsec_x', fetchImpl);
-      await expect(gateway.createIntent({ reference: 'ref', amountFils: 1000, currency: 'AED', method: 'card', customerEmail: null, customerPhone: null })).rejects.toThrow(AppError);
+      await expect(gateway.createIntent({ reference: 'ref', amountFils: 1000, currency: 'AED', method: 'card', customerEmail: null, customerPhone: null, successUrl: null, cancelUrl: null, failureUrl: null })).rejects.toThrow(AppError);
+    });
+
+    it('includes success_url/cancel_url/failure_url in the request body when given (docs §3 — all three documented-optional)', async () => {
+      const fetchImpl = makeMockFetch(jsonResponse({ id: 'pi_urls', status: 'requires_payment_instrument', redirect_url: 'https://pay.ziina.com/pi_urls' }));
+      const gateway = new ZiinaGateway('key_test_x', 'whsec_x', fetchImpl);
+
+      await gateway.createIntent({
+        reference: 'checkout-session-2',
+        amountFils: 10_000,
+        currency: 'AED',
+        method: 'card',
+        customerEmail: null,
+        customerPhone: null,
+        successUrl: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=success',
+        cancelUrl: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=cancel',
+        failureUrl: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=failure',
+      });
+
+      const sentBody = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
+      expect(sentBody).toMatchObject({
+        success_url: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=success',
+        cancel_url: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=cancel',
+        failure_url: 'https://lulwahfashion.com/en/checkout/session/sess-1/return?result=failure',
+      });
+    });
+
+    it('omits success_url/cancel_url/failure_url entirely (not sent as literal null) when not given', async () => {
+      const fetchImpl = makeMockFetch(jsonResponse({ id: 'pi_no_urls', status: 'requires_payment_instrument', redirect_url: 'https://pay.ziina.com/pi_no_urls' }));
+      const gateway = new ZiinaGateway('key_test_x', 'whsec_x', fetchImpl);
+
+      await gateway.createIntent({ reference: 'checkout-session-3', amountFils: 10_000, currency: 'AED', method: 'card', customerEmail: null, customerPhone: null, successUrl: null, cancelUrl: null, failureUrl: null });
+
+      const sentBody = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
+      expect(sentBody).not.toHaveProperty('success_url');
+      expect(sentBody).not.toHaveProperty('cancel_url');
+      expect(sentBody).not.toHaveProperty('failure_url');
     });
   });
 

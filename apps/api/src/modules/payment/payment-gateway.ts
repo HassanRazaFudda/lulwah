@@ -29,6 +29,18 @@ export interface CreateIntentParams {
   method: PaymentMethod;
   customerEmail: string | null;
   customerPhone: string | null;
+  /** Ziina hosted-redirect targets (docs/ziina-integration-notes.md §3) —
+   *  all three are documented-optional on Ziina's own API, but required
+   *  (nullable, not `?:`) on this shared interface so every gateway
+   *  implementation has to make an explicit call about them rather than
+   *  silently forgetting to pass them through. `null` for gateways with no
+   *  redirect step (COD — `CodGateway#createIntent` ignores them). Built by
+   *  `checkout.service.ts#buildCheckoutReturnUrls`, keyed by the checkout
+   *  session id (the only stable identifier that exists before an `Order`
+   *  does — see that function's own doc comment). */
+  successUrl: string | null;
+  cancelUrl: string | null;
+  failureUrl: string | null;
   metadata?: Record<string, string>;
 }
 

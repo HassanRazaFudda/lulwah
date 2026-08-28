@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import type { Order, PaymentMethod } from '@lulwah/contracts';
+import { env } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import { CHECKOUT_RESERVATION_TTL_MS } from '../../config/constants.js';
 import type { AuthenticatedUser } from '../identity/identity.policy.js';
@@ -46,6 +47,30 @@ function computeInclusiveTax(taxableFils: number, taxRate: number): number {
 async function requireOpenSession(sessionId: string): Promise<CheckoutSessionHydratedDoc> {
   const session = await repo.findOpenSessionBySessionId(sessionId);
   if (!session || session.expiresAt.getTime() < Date.now()) {
+    throw new AppError('CHECKOUT_SESSION_EXPIRED', 409, { messageEn: 'This checkout session has expired. Please start checkout again.' });
+  }
+  return session;
+}
+
+/** Used only by `getSession` (the public, read-only `GET /checkout/session
+ *  /:id`) — every mutating step keeps using `requireOpenSession` above,
+ *  unchanged. A `completed` session (one `place()` has already turned into
+ *  an `Order`) must still be *readable* — Ziina's hosted-redirect return
+ *  page (`apps/web`'s `.../checkout/session/:sessionId/return`) calls this
+ *  endpoint after the browser comes back from Ziina, by which point `place`
+ *  has already run and flipped the session to `completed` (see
+ *  `place()`'s doc comment on why it now runs before the redirect, not
+ *  after). Only an `open` session still enforces its own `expiresAt` — a
+ *  `completed` session is valid to read for as long as the document exists
+ *  (`CHECKOUT_RESERVATION_TTL_MS` is 45 minutes, comfortably longer than a
+ *  realistic Ziina round trip); an `expired` session is still a real 409,
+ *  same as before. */
+async function requireSessionForRead(sessionId: string): Promise<CheckoutSessionHydratedDoc> {
+  const session = await repo.findSessionBySessionId(sessionId);
+  if (!session) {
+    throw new AppError('CHECKOUT_SESSION_EXPIRED', 404, { messageEn: 'Checkout session not found.' });
+  }
+  if (session.status === 'expired' || (session.status === 'open' && session.expiresAt.getTime() < Date.now())) {
     throw new AppError('CHECKOUT_SESSION_EXPIRED', 409, { messageEn: 'This checkout session has expired. Please start checkout again.' });
   }
   return session;
@@ -189,7 +214,7 @@ export async function createSession(store: ReservationStore, actor: Authenticate
 }
 
 export async function getSession(sessionId: string, actor: AuthenticatedUser | null): Promise<CheckoutSessionResponse> {
-  const session = await requireOpenSession(sessionId);
+  const session = await requireSessionForRead(sessionId);
   assertSessionOwnership(session, actor);
   return toCheckoutSessionResponse(session);
 }
@@ -252,6 +277,40 @@ export async function setShipping(actor: AuthenticatedUser | null, sessionId: st
 // Payment intent — plan.md §9.5, §20
 // ---------------------------------------------------------------------------
 
+/** Ziina needs `success_url`/`cancel_url`/`failure_url` at payment-intent
+ *  creation time (`POST /checkout/session/:id/payment-intent`,
+ *  `docs/ziina-integration-notes.md` §1/§3) — which happens *before*
+ *  `place()` ever creates the real `Order`, so there is no order number yet
+ *  to key these on. The checkout session id is the only stable identifier
+ *  that exists at this point, so every return URL is keyed by it instead:
+ *  `apps/web`'s new `/checkout/session/:sessionId/return?result=...` route
+ *  reads `orderNumber` back off this same session via `GET /checkout
+ *  /session/:id` once it's set (see `checkout.repository.ts#markCompleted`
+ *  and `requireSessionForRead` above).
+ *
+ *  Locale-prefixed explicitly (`/en/...`), not a bare `/checkout/...` path
+ *  — checked before deciding, not guessed: `apps/web`'s `next-intl`
+ *  middleware (`apps/web/i18n/routing.ts`) sets `localePrefix: 'always'`,
+ *  so a locale-less path is never served directly — it always costs an
+ *  extra 307 redirect through the middleware first (locale resolved from
+ *  the `NEXT_LOCALE` cookie / `Accept-Language`) before the return page's
+ *  own code ever runs. That's an avoidable extra hop on a URL that's
+ *  already arriving via a cross-domain redirect from Ziina, for a page
+ *  with no real RTL/Arabic content to justify depending on it — so `en` is
+ *  hardcoded rather than left to the middleware to guess.
+ *
+ *  Exported (not a private helper) so this is unit-testable on its own —
+ *  see `checkout.service.test.ts` — without needing a configured Ziina key
+ *  or a live HTTP round trip through the 503-gated `payment-intent` route. */
+export function buildCheckoutReturnUrls(sessionId: string): { successUrl: string; cancelUrl: string; failureUrl: string } {
+  const base = `${env.WEB_URL}/en/checkout/session/${encodeURIComponent(sessionId)}/return`;
+  return {
+    successUrl: `${base}?result=success`,
+    cancelUrl: `${base}?result=cancel`,
+    failureUrl: `${base}?result=failure`,
+  };
+}
+
 export async function createPaymentIntent(actor: AuthenticatedUser | null, sessionId: string, method: PaymentMethod): Promise<PaymentIntentResponse> {
   const session = await requireOpenSession(sessionId);
   assertSessionOwnership(session, actor);
@@ -285,7 +344,8 @@ export async function createPaymentIntent(actor: AuthenticatedUser | null, sessi
   // secret. `intent.redirectUrl` is where the storefront must send the
   // browser next; the webhook (`payment.service.ts#handleZiinaWebhook`),
   // not this response, is what actually confirms the order.
-  const intent = await paymentService.createCardIntent({ reference: session.sessionId, amountFils: session.grandTotalFils, currency: 'AED', customerEmail: email, customerPhone: phone });
+  const { successUrl, cancelUrl, failureUrl } = buildCheckoutReturnUrls(session.sessionId);
+  const intent = await paymentService.createCardIntent({ reference: session.sessionId, amountFils: session.grandTotalFils, currency: 'AED', customerEmail: email, customerPhone: phone, successUrl, cancelUrl, failureUrl });
   session.paymentGateway = 'ziina';
   session.paymentIntentId = intent.intentId;
   await repo.save(session);
@@ -316,6 +376,17 @@ export async function verifyCodOtp(sessionId: string, code: string): Promise<Che
 // Place — plan.md §9.5: "requires an Idempotency-Key header." The one
 // endpoint where getting this right actually matters — a retried request
 // must not create a second order.
+//
+// For the card/Ziina path specifically, `apps/web`'s checkout page calls
+// this BEFORE redirecting the browser to `redirectUrl` — not after, and
+// never skipped. This is what makes `order.service.ts
+// #recordCardPaymentResult` (the webhook handler) correct: it looks an
+// order up by `paymentIntentId` and expects to FIND one, sitting in
+// `pending_payment`, when Ziina's webhook eventually arrives — there is no
+// "create the order from the webhook" path anywhere in this codebase. If
+// the browser were sent to Ziina before `place()` ran, a customer who paid
+// successfully could return to a site with no order to show, and the
+// webhook would have nothing to attach its result to.
 // ---------------------------------------------------------------------------
 
 export async function place(
@@ -435,7 +506,7 @@ export async function place(
       for (const item of session.items) {
         await store.clearReserved(session.cartId, item.variantId.toString());
       }
-      await repo.markCompleted(session.sessionId, order.id);
+      await repo.markCompleted(session.sessionId, order.id, order.orderNumber);
     }
 
     await idempotencyStore.complete(idempotencyKey, order.id);

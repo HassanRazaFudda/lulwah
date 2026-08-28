@@ -135,6 +135,17 @@ export class ZiinaGateway implements PaymentGateway {
         // `intentId` as `Order.payment.intentId` (see
         // `order.repository.ts#findOrderByPaymentIntentId`).
         operation_id: randomUUID(),
+        // All three documented-optional on Ziina's API (docs §3) — omitted
+        // from the body entirely when null rather than sent as literal
+        // `null`, matching how every other optional field on this request
+        // is already handled (`message`/`expiry`/`allow_tips` are never
+        // sent by this codebase at all, same reasoning). `CodGateway`
+        // never reaches this method (see its own doc comment), so `null`
+        // here in practice only ever means "not yet wired by the caller,"
+        // not "COD."
+        ...(params.successUrl ? { success_url: params.successUrl } : {}),
+        ...(params.cancelUrl ? { cancel_url: params.cancelUrl } : {}),
+        ...(params.failureUrl ? { failure_url: params.failureUrl } : {}),
       },
     });
     const parsed = ZiinaPaymentIntentResponse.parse(body);

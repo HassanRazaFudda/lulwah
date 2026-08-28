@@ -49,6 +49,7 @@ export function toCheckoutSessionResponse(doc: CheckoutSessionDoc | CheckoutSess
       ? { id: doc.shippingMethod.id, name: doc.shippingMethod.name, carrier: doc.shippingMethod.carrier, etaMinDays: doc.shippingMethod.etaMinDays, etaMaxDays: doc.shippingMethod.etaMaxDays, priceFils: doc.shippingMethod.priceFils }
       : null,
     paymentMethod: doc.paymentMethod,
+    orderNumber: doc.orderNumber,
     status: doc.status,
     expiresAt: doc.expiresAt,
   };

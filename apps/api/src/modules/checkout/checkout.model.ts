@@ -179,6 +179,16 @@ export interface CheckoutSessionDoc {
   codVerifiedAt: Date | null;
 
   orderId: Types.ObjectId | null;
+  /** Set alongside `orderId` at `place()`-completion time
+   *  (`checkout.repository.ts#markCompleted`) — the Ziina return page
+   *  (`GET /checkout/session/:id`, `apps/web`'s `.../return/page.tsx`)
+   *  needs a way to resolve "what order came from this session" using only
+   *  the session id Ziina's `success_url`/`cancel_url`/`failure_url` was
+   *  keyed by (order numbers don't exist yet at payment-intent-creation
+   *  time — see `checkout.service.ts#buildCheckoutReturnUrls`'s doc
+   *  comment). Denormalized here rather than requiring a second lookup by
+   *  `orderId` on every session read. */
+  orderNumber: string | null;
   status: CheckoutSessionStatus;
   expiresAt: Date;
   createdAt: Date;
@@ -214,6 +224,7 @@ const checkoutSessionSchema = new Schema<CheckoutSessionDoc>(
     codVerifiedAt: { type: Date, default: null },
 
     orderId: { type: Schema.Types.ObjectId, default: null },
+    orderNumber: { type: String, default: null },
     status: { type: String, enum: ['open', 'completed', 'expired'], required: true, default: 'open' },
     expiresAt: { type: Date, required: true },
   },

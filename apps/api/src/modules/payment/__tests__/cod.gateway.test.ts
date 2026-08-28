@@ -64,12 +64,12 @@ describe('CodGateway', () => {
 
   it('createIntent (the PaymentGateway-interface entry point) requires a phone number', async () => {
     const gateway = new CodGateway();
-    await expect(gateway.createIntent({ reference: 'session-1', amountFils: 10_000, currency: 'AED', method: 'cod', customerEmail: null, customerPhone: null })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(gateway.createIntent({ reference: 'session-1', amountFils: 10_000, currency: 'AED', method: 'cod', customerEmail: null, customerPhone: null, successUrl: null, cancelUrl: null, failureUrl: null })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
   it('createIntent succeeds with a phone and reports otp-required status', async () => {
     const gateway = new CodGateway();
-    const result = await gateway.createIntent({ reference: 'session-2', amountFils: 10_000, currency: 'AED', method: 'cod', customerEmail: null, customerPhone: '+971501234567' });
+    const result = await gateway.createIntent({ reference: 'session-2', amountFils: 10_000, currency: 'AED', method: 'cod', customerEmail: null, customerPhone: '+971501234567', successUrl: null, cancelUrl: null, failureUrl: null });
     expect(result.redirectUrl).toBeNull();
     expect(result.status).toBe('requires_action');
   });

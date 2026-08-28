@@ -117,6 +117,13 @@ export const CheckoutSessionResponse = z.object({
   billingAddress: CheckoutSessionAddressView.nullable(),
   shippingMethod: z.object({ id: z.string(), name: z.string(), carrier: z.string(), etaMinDays: z.number(), etaMaxDays: z.number(), priceFils: z.number() }).nullable(),
   paymentMethod: PaymentMethod.nullable(),
+  /** Set once `place()` has created the `Order` for this session
+   *  (`checkout.repository.ts#markCompleted`) — `null` until then. This is
+   *  what lets the Ziina return page (`GET /checkout/session/:id`, keyed
+   *  only by session id — see `checkout.service.ts
+   *  #buildCheckoutReturnUrls`'s doc comment) resolve which order to show,
+   *  with no new endpoint needed. */
+  orderNumber: z.string().nullable(),
   status: z.enum(['open', 'completed', 'expired']),
   expiresAt: z.coerce.date(),
 });

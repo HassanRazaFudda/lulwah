@@ -22,7 +22,7 @@ import { humanize } from '@/lib/facets';
 import { errorMessageProp } from '@/lib/form-error';
 
 /**
- * Checkout — plan.md §15.6. Now wired to the real `checkout` module
+ * Checkout — plan.md §15.6. Wired to the real `checkout` module
  * (`apps/api/src/modules/checkout/checkout.routes.ts`) instead of a
  * simulated round trip: session creation on leaving Contact (a guest email
  * is required at session creation and can't be changed afterwards — see
@@ -37,11 +37,23 @@ import { errorMessageProp } from '@/lib/form-error';
  *   UAE storefronts don't distinguish it from the emirate in practice
  *   (§7.2's own field list — emirate/area/building/landmark — has no city
  *   either); it's derived from the selected emirate's label.
- * - Card is real-UI but honestly gated: `payment-intent {method:"card"}`
- *   cleanly `503`s in this environment (no Stripe account configured, see
- *   `docs/implemented-plan.md` §4.6.4/§4.6.5) — selecting it shows that
- *   real unavailable state and nudges to Cash on Delivery, rather than a
- *   Stripe Elements form that could never actually charge anything here.
+ * - **Card payment is Ziina's hosted-redirect flow, not an embedded form**
+ *   (`docs/ziina-integration-notes.md` §1 — Ziina has no client-side SDK).
+ *   Selecting "Card" fires `intentMutation` immediately, same as COD's OTP
+ *   request — its `redirectUrl` (from `POST .../payment-intent`) is held in
+ *   component state until the customer submits the form. Submitting for
+ *   `card` still calls `placeMutation` first (real `Order` created,
+ *   `pending_payment`, `payment.intentId` already set — see
+ *   `checkout.service.ts#place`'s doc comment on why this must run BEFORE
+ *   the redirect, not after) and only on that success does this page send
+ *   the browser to `redirectUrl` — never before an order exists to receive
+ *   Ziina's eventual webhook. COD's flow is unchanged: OTP verify, then
+ *   `place` navigates straight to the confirmation page.
+ * - Card is still honestly gated where it actually is unavailable:
+ *   `payment-intent {method:"card"}` cleanly `503`s whenever no Ziina
+ *   account is configured (see `docs/implemented-plan.md` §4.6.4/§4.6.5) —
+ *   selecting it shows that real unavailable state and nudges to Cash on
+ *   Delivery, never a payment form that couldn't actually charge anything.
  */
 const EMIRATE_OPTIONS = Emirate.options.map((value) => ({ value, label: humanize(value) }));
 
@@ -79,6 +91,11 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('cod');
   const [otpCode, setOtpCode] = useState('');
   const [codOtpVerified, setCodOtpVerified] = useState(false);
+  // Set the instant `place()` succeeds for a card order, right before this
+  // page sends the browser to Ziina's `redirectUrl` — the navigation isn't
+  // synchronous, so this drives an honest "redirecting" state instead of
+  // letting the button flash back to enabled for the moment in between.
+  const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
 
   // A fresh idempotency key per mount (plan.md §9.5) — reused across
   // retries of the same `place` attempt, regenerated only by a full page
@@ -124,9 +141,28 @@ export default function CheckoutPage() {
   const placeMutation = useMutation({
     mutationFn: (sessionId: string) => checkoutClient.placeOrder(sessionId, idempotencyKey),
     onSuccess: ({ order }) => {
-      queryClient.setQueryData(['order', order.orderNumber], order);
+      // True regardless of payment method — `place()` converts the cart
+      // and clears reservations unconditionally, the instant the order is
+      // created (see checkout.service.ts#place's doc comment). For card,
+      // this is genuinely true even though payment hasn't been confirmed
+      // yet — the return page's cancel/failure state says so plainly
+      // rather than pretending the cart is still there.
       clearCartCookie();
       queryClient.removeQueries({ queryKey: CART_QUERY_KEY });
+
+      if (paymentMethod === 'card' && intentMutation.data?.redirectUrl) {
+        // Ziina hosted-redirect (docs/ziina-integration-notes.md §1): the
+        // order already exists in `pending_payment` — Ziina's webhook, not
+        // this response, is what actually confirms it. Send the browser
+        // to Ziina's own page now; it redirects back to this same
+        // session's `.../return?result=...` route (built server-side by
+        // `checkout.service.ts#buildCheckoutReturnUrls`).
+        setIsRedirectingToPayment(true);
+        window.location.href = intentMutation.data.redirectUrl;
+        return;
+      }
+
+      queryClient.setQueryData(['order', order.orderNumber], order);
       router.push(`/checkout/confirmation/${order.orderNumber}`);
     },
   });
@@ -180,7 +216,11 @@ export default function CheckoutPage() {
     intentMutation.mutate({ sessionId, method });
   }
 
-  const canPlaceOrder = paymentMethod === 'cod' && codOtpVerified;
+  // Card has no OTP step — it's placeable as soon as `intentMutation` has a
+  // real `redirectUrl` to send the browser to next (the `card`+`503` case,
+  // the only one reachable without a configured Ziina account, never
+  // reaches this — `intentMutation.data` stays undefined on an error).
+  const canPlaceOrder = paymentMethod === 'cod' ? codOtpVerified : Boolean(intentMutation.data?.redirectUrl);
 
   if (isCartPending) {
     return (
@@ -401,14 +441,26 @@ export default function CheckoutPage() {
               <p className="mt-16 font-body text-body-sm text-success">Phone verified — ready to place your order.</p>
             ) : null}
 
+            {paymentMethod === 'card' && intentMutation.data?.redirectUrl && !isRedirectingToPayment ? (
+              <p className="mt-16 font-body text-body-sm text-success">
+                Ready — you&apos;ll be sent to Ziina&apos;s secure payment page to complete your card payment.
+              </p>
+            ) : null}
+
             {placeMutation.isError ? (
               <p role="alert" className="mt-16 font-body text-body-sm text-danger">
                 {placeMutation.error instanceof ApiError ? placeMutation.error.message : 'Could not place your order. Please try again.'}
               </p>
             ) : null}
 
-            <Button type="submit" variant="primary" className="mt-16 w-full" disabled={!canPlaceOrder || placeMutation.isPending}>
-              {placeMutation.isPending ? 'Placing order…' : 'Place order'}
+            <Button type="submit" variant="primary" className="mt-16 w-full" disabled={!canPlaceOrder || placeMutation.isPending || isRedirectingToPayment}>
+              {isRedirectingToPayment
+                ? 'Redirecting to secure payment…'
+                : placeMutation.isPending
+                  ? 'Placing order…'
+                  : paymentMethod === 'card'
+                    ? 'Continue to payment'
+                    : 'Place order'}
             </Button>
           </CheckoutStep>
         </div>

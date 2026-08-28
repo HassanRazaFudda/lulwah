@@ -325,6 +325,44 @@ describe('guest COD checkout — full flow', () => {
   });
 });
 
+describe('GET /checkout/session/:id after place() — the Ziina return-page design (checkout.service.ts#requireSessionForRead)', () => {
+  it('stays readable (not CHECKOUT_SESSION_EXPIRED) once place() marks the session completed, and exposes the resulting orderNumber', async () => {
+    const { app } = buildApp();
+    const adminToken = (await registerAndLogin(app, 'super_admin')).token;
+    const { sessionId } = await checkoutUpToPaymentIntent(app, adminToken, 10);
+    pinNextOtp(224466);
+    await request(app).post(`/api/v1/checkout/session/${sessionId}/payment-intent`).send({ method: 'cod' });
+    await request(app).post('/api/v1/checkout/cod/verify-otp').send({ sessionId, code: '224466' });
+
+    // Still open — orderNumber is null until place() runs.
+    const openRes = await request(app).get(`/api/v1/checkout/session/${sessionId}`);
+    expect(openRes.status).toBe(200);
+    expect(openRes.body.data.status).toBe('open');
+    expect(openRes.body.data.orderNumber).toBeNull();
+
+    const placeRes = await request(app).post(`/api/v1/checkout/session/${sessionId}/place`).set('Idempotency-Key', `return-page-${sessionId}`).send({});
+    expect(placeRes.status).toBe(201);
+    const orderNumber = placeRes.body.data.order.orderNumber as string;
+
+    // This is the exact call `apps/web`'s Ziina return page makes after
+    // the browser comes back from Ziina — it only has the session id
+    // (from success_url/cancel_url/failure_url), and must resolve which
+    // order to show. Before this fix, `getSession` only ever queried for
+    // `status: 'open'` sessions and would 409 here.
+    const completedRes = await request(app).get(`/api/v1/checkout/session/${sessionId}`);
+    expect(completedRes.status).toBe(200);
+    expect(completedRes.body.data.status).toBe('completed');
+    expect(completedRes.body.data.orderNumber).toBe(orderNumber);
+  });
+
+  it('a genuinely nonexistent session id still 404s from the read endpoint', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/api/v1/checkout/session/does-not-exist');
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('CHECKOUT_SESSION_EXPIRED');
+  });
+});
+
 describe('logged-in customer checkout attaches their identity to the order', () => {
   it('a logged-in customer placing an order gets order.userId set, and the order appears under GET /me/orders (found and fixed as part of P3 — attachUserIfPresent() previously did not exist, so req.user was always undefined on every checkout route)', async () => {
     const { app } = buildApp();
