@@ -31,8 +31,18 @@ export const AuditLogEntry = z.object({
   action: z.string(), // derived label, e.g. "PATCH /admin/orders/:id/status"
   entityType: z.string().nullable(), // e.g. "orders" — the first path segment after /admin/
   entityId: z.string().nullable(), // the first ObjectId-shaped path segment, if any
-  requestBody: z.unknown(), // redacted request payload — the "requested change"
-  responseBody: z.unknown(), // redacted response payload — the "resulting state"
+  // `.optional()`, not just `z.unknown()` alone — Zod v4 distinguishes a
+  // genuinely absent object key from a key present with value `undefined`,
+  // and rejects the former for a non-optional field even when the field's
+  // own type (`unknown`) would happily accept `undefined` as a *value*.
+  // A DELETE (and some other) requests send no JSON body at all, so
+  // `audit-log.middleware.ts` never sets `requestBody` for them — the
+  // Mongoose `Mixed` field with no `default` then omits the key entirely
+  // from the stored document, and that same absent key survives all the
+  // way to the wire. Found live: every list of real audit entries failed
+  // to parse in `apps/admin` the moment it contained even one DELETE.
+  requestBody: z.unknown().optional(), // redacted request payload — the "requested change"
+  responseBody: z.unknown().optional(), // redacted response payload — the "resulting state"
   statusCode: z.number().int(),
   ip: z.string().nullable(),
   userAgent: z.string().nullable(),
