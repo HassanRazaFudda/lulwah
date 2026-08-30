@@ -59,6 +59,8 @@ import '../modules/content/lookbook.model.js';
 import '../modules/content/media-asset.model.js';
 import '../modules/content/menu.model.js';
 import '../modules/content/page.model.js';
+import '../modules/engagement/review.model.js';
+import '../modules/engagement/wishlist.model.js';
 import '../modules/identity/address.model.js';
 import '../modules/identity/identity.model.js';
 import '../modules/inventory/inventory-item.model.js';
