@@ -69,6 +69,25 @@ export async function removeItem(req: Request, res: Response): Promise<void> {
   sendSuccess(res, { wishlist });
 }
 
+/** `POST /me/wishlist/merge` — auth required (mirrors
+ *  `cart.controller.ts#merge`'s own `requireAuthedUser` + guest-cookie-read
+ *  shape exactly). The guest cookie is cleared afterward, not re-set to
+ *  anything: unlike a cart, a `Wishlist` has no externally-held id for the
+ *  cookie to carry once merged — the caller's own login is what finds it
+ *  from here on. */
+export async function merge(req: Request, res: Response): Promise<void> {
+  const actor = requireAuthedUser(req);
+  const guestId = readGuestCookie(req);
+  const wishlist = await service.mergeWishlistOnLogin(guestId, actor.id);
+  res.clearCookie(WISHLIST_GUEST_COOKIE_NAME, {
+    httpOnly: false,
+    secure: env.COOKIE_SECURE,
+    sameSite: 'lax',
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
+  });
+  sendSuccess(res, { wishlist });
+}
+
 /** `GET /admin/customers/:id/wishlist` — plan.md §11.1's Customer detail
  *  screen. `wishlist: null` (not a 404) when the customer has no wishlist
  *  yet — the ordinary state for most customers, mirroring

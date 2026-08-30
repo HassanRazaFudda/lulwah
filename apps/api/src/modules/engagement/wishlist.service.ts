@@ -80,6 +80,40 @@ export async function removeItemFromWishlist(identity: WishlistIdentity, product
 }
 
 /**
+ * `POST /me/wishlist/merge` — plan.md §9.4's "guest + synced" wishlist,
+ * same "call this once, right after a successful login" trigger
+ * `cart.service.ts#mergeCartOnLogin` already establishes for cart (the
+ * frontend passes the guestId it already has from its cookie). Union of
+ * items by `productId`; on a collision the user's own existing entry wins
+ * (its `addedAt`/`priceAtAddFils` stay untouched) — it's the one they saved
+ * while actually signed in, same tie-break direction `mergeBothCarts`
+ * doesn't need to make (cart merges by `max(qty)`, wishlist items have no
+ * quantity to compare, just presence). The now-redundant guest document is
+ * deleted afterward — see `wishlist.repository.ts#deleteWishlist`'s own
+ * comment on why nothing else can reach it once merged.
+ */
+export async function mergeWishlistOnLogin(guestId: string | null, userId: string): Promise<Wishlist> {
+  const guestDoc = guestId ? await repo.findWishlistByIdentity({ userId: null, guestId }) : null;
+  const userDoc = await repo.findOrCreateWishlist({ userId, guestId: null });
+  if (!guestDoc) return toWishlistDto(userDoc);
+
+  const existingProductIds = new Set(userDoc.items.map((item) => item.productId.toString()));
+  for (const item of guestDoc.items) {
+    if (!existingProductIds.has(item.productId.toString())) {
+      userDoc.items.push({
+        productId: item.productId,
+        variantId: item.variantId,
+        addedAt: item.addedAt,
+        priceAtAddFils: item.priceAtAddFils,
+      } as WishlistItemSubdoc);
+    }
+  }
+  await repo.save(userDoc);
+  await repo.deleteWishlist(guestDoc._id.toString());
+  return toWishlistDto(userDoc);
+}
+
+/**
  * `GET /admin/customers/:id/wishlist` — plan.md §11.1's Customer detail
  * screen ("wishlist, reviews"). `wishlist` has no permission string of its
  * own (it's a self-service `/me/*` resource — see this module's report),

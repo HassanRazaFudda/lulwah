@@ -45,3 +45,13 @@ export async function findOrCreateWishlist(identity: WishlistIdentity): Promise<
 export async function save(doc: WishlistHydratedDoc): Promise<WishlistHydratedDoc> {
   return doc.save();
 }
+
+/** Used only by `wishlist.service.ts#mergeWishlistOnLogin` once a guest
+ *  wishlist's items have been folded into the logged-in user's own
+ *  document — the guest document itself is now redundant (a `Wishlist` is
+ *  looked up directly by identity, not by any externally-held id, so
+ *  there's nothing left pointing at it once its `guestId` cookie is
+ *  cleared). */
+export async function deleteWishlist(id: string): Promise<void> {
+  await WishlistModel.deleteOne({ _id: id }).exec();
+}

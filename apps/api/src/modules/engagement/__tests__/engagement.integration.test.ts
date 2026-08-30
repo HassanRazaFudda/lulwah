@@ -430,6 +430,52 @@ describe('me/wishlist — guest and logged-in', () => {
     const res = await request(app).post('/api/v1/me/wishlist').set('Authorization', `Bearer ${shopperToken}`).send({ productId: productA, variantId: variantB });
     expect(res.status).toBe(400);
   });
+
+  it('POST /me/wishlist/merge folds a guest wishlist into the just-logged-in user, unions with any existing items, and clears the guest cookie', async () => {
+    const app = buildApp();
+    const { token: adminToken } = await registerAndLogin(app, 'super_admin');
+    const { productId: guestProductId } = await seedVariantWithStock(app, adminToken, 5);
+    const { productId: userProductId } = await seedVariantWithStock(app, adminToken, 5);
+    const { token: shopperToken } = await registerAndLogin(app, 'customer');
+
+    // The user already has one item, saved while genuinely signed in.
+    await request(app).post('/api/v1/me/wishlist').set('Authorization', `Bearer ${shopperToken}`).send({ productId: userProductId });
+
+    // Same browser, before logging in: a guest wishlist with a different item.
+    const agent = request.agent(app);
+    await agent.post('/api/v1/me/wishlist').send({ productId: guestProductId });
+
+    const mergeRes = await agent.post('/api/v1/me/wishlist/merge').set('Authorization', `Bearer ${shopperToken}`);
+    expect(mergeRes.status).toBe(200);
+    const mergedIds = mergeRes.body.data.wishlist.items.map((item: { productId: string }) => item.productId).sort();
+    expect(mergedIds).toEqual([guestProductId, userProductId].sort());
+    expect(mergeRes.body.data.wishlist.guestId).toBeNull();
+    // The guest cookie is cleared, not carried forward — a stale merged-away
+    // guestId must never resurface a phantom wishlist on a later logout.
+    const setCookieHeader = mergeRes.headers['set-cookie'];
+    const guestCookieHeader = Array.isArray(setCookieHeader) ? setCookieHeader.find((c: string) => c.startsWith('lulwah_wishlist_guest=')) : undefined;
+    expect(guestCookieHeader).toMatch(/lulwah_wishlist_guest=;/);
+
+    // Confirmed durably merged, not just in the merge response: a fresh
+    // logged-in read (no cookie at all) sees both items.
+    const getRes = await request(app).get('/api/v1/me/wishlist').set('Authorization', `Bearer ${shopperToken}`);
+    expect(getRes.body.data.wishlist.items).toHaveLength(2);
+  });
+
+  it('POST /me/wishlist/merge with no guest cookie just returns the logged-in user\'s own wishlist', async () => {
+    const app = buildApp();
+    const { token: shopperToken } = await registerAndLogin(app, 'customer');
+
+    const res = await request(app).post('/api/v1/me/wishlist/merge').set('Authorization', `Bearer ${shopperToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.wishlist.items).toHaveLength(0);
+  });
+
+  it('POST /me/wishlist/merge requires a real login (401 without a token)', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/api/v1/me/wishlist/merge');
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('Customer detail composition — /api/v1/admin/customers/:id/{reviews,wishlist}', () => {

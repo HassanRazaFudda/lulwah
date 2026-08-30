@@ -20,7 +20,11 @@ import { requireCustomersRead, requireLoggedIn, requireReviewsRead, requireRevie
  * `GET|POST /me/wishlist` and `DELETE /me/wishlist/:productId` use
  * `attachUserIfPresent()` (never `requireAuth()`) — plan.md §9.4 lists them
  * as both authenticated AND guest routes, the same public-or-logged-in
- * shape `cart.routes.ts` gives every route except `merge`.
+ * shape `cart.routes.ts` gives every route except `merge` — and, like
+ * cart's own `merge`, `POST /me/wishlist/merge` is the one wishlist route
+ * that requires a real login: it folds a guest wishlist (identified by
+ * cookie) into the now-authenticated user's own, called once by the
+ * frontend right after a successful login, same trigger cart's merge uses.
  * `POST /me/reviews` DOES require a real login (the brief's own wording:
  * "authenticated customer only" — no guest review path).
  *
@@ -43,6 +47,7 @@ export function createEngagementRouter(): Router {
   router.get('/me/wishlist', attachUserIfPresent(), wishlistController.getMy);
   router.post('/me/wishlist', attachUserIfPresent(), wishlistController.addItem);
   router.delete('/me/wishlist/:productId', attachUserIfPresent(), wishlistController.removeItem);
+  router.post('/me/wishlist/merge', ...requireLoggedIn(), wishlistController.merge);
 
   // --- admin: review moderation ----------------------------------------------
   router.get('/admin/reviews', ...requireReviewsRead(), reviewController.adminList);
