@@ -80,7 +80,7 @@ export function MenuItemRow({
       <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
         <Input label="Href" value={node.href} onChange={(e) => onUpdate(path, { href: e.target.value })} />
         <Input
-          label="Badge — optional"
+          label="Badge (optional)"
           value={node.badge ?? ''}
           onChange={(e) => onUpdate(path, { badge: e.target.value.trim() || null })}
         />

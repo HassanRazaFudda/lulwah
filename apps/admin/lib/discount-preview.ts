@@ -50,28 +50,28 @@ export function estimateDiscountPreview(draft: DiscountDraft, sampleSubtotalFils
       supported: false,
       discountFils: 0,
       message:
-        'Preview is only available for discounts that apply to the whole catalogue ("Applies to: All products") — a targeted discount depends on which real products/collections/categories/brands are actually in the cart, which this estimate cannot know.',
+        'Preview is only available for discounts that apply to the whole catalogue ("Applies to: All products"). A targeted discount depends on which real products/collections/categories/brands are actually in the cart, which this estimate cannot know.',
     };
   }
   if (draft.excludeIds.length > 0) {
     return {
       supported: false,
       discountFils: 0,
-      message: 'Preview is not available while exclusions are set — same reason as targeting above.',
+      message: 'Preview is not available while exclusions are set; same reason as targeting above.',
     };
   }
   if (draft.type !== 'percentage' && draft.type !== 'fixed_amount') {
     return {
       supported: false,
       discountFils: 0,
-      message: `Preview is not available for "${draft.type.replace(/_/g, ' ')}" discounts — this estimate only reproduces simple percentage/fixed-amount math, not the real engine's tiered, buy-X-get-Y, or bundle logic.`,
+      message: `Preview is not available for "${draft.type.replace(/_/g, ' ')}" discounts. This estimate only reproduces simple percentage/fixed-amount math, not the real engine's tiered, buy-X-get-Y, or bundle logic.`,
     };
   }
   if (draft.conditions.minQuantity !== null) {
     return {
       supported: false,
       discountFils: 0,
-      message: 'Preview is not available while a minimum-quantity condition is set — this estimate has no sample cart line items to count against it.',
+      message: 'Preview is not available while a minimum-quantity condition is set: this estimate has no sample cart line items to count against it.',
     };
   }
   if (sampleSubtotalFils <= 0) {

@@ -47,8 +47,8 @@ export function CollectionRuleBuilder({
 
   return (
     <div className="flex flex-col gap-12">
-      <span className={labelClassName}>Rules — a product must match every rule below to be included</span>
-      {rules.length === 0 ? <p className="text-body-sm text-ink-70">No rules yet — an automated collection with no rules matches nothing.</p> : null}
+      <span className={labelClassName}>Rules: a product must match every rule below to be included</span>
+      {rules.length === 0 ? <p className="text-body-sm text-ink-70">No rules yet. An automated collection with no rules matches nothing.</p> : null}
       {rules.map((rule, index) => {
         const isBoolean = BOOLEAN_FIELDS.includes(rule.field);
         const isNumber = NUMBER_FIELDS.includes(rule.field);
@@ -98,7 +98,7 @@ export function CollectionRuleBuilder({
                 </>
               ) : isList ? (
                 <Input
-                  label="Value — comma-separated"
+                  label="Value (comma-separated)"
                   value={valueToInputText(rule.value)}
                   onChange={(e) =>
                     update(index, { value: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })

@@ -95,7 +95,7 @@ export function MenusPanel() {
     const sameParent =
       dragPath.length === targetPath.length && dragPath.slice(0, -1).join('.') === targetPath.slice(0, -1).join('.');
     if (!sameParent) {
-      pushToast('error', 'Drag only reorders within the same level — use Indent/Outdent to move a level.');
+      pushToast('error', 'Drag only reorders within the same level. Use Indent/Outdent to move a level.');
       setDragPath(null);
       return;
     }
@@ -176,7 +176,7 @@ export function MenusPanel() {
           </div>
 
           <div className="flex flex-col gap-8">
-            {items.length === 0 ? <p className="text-body-sm text-ink-70">No items yet — add one below.</p> : null}
+            {items.length === 0 ? <p className="text-body-sm text-ink-70">No items yet. Add one below.</p> : null}
             {items.map((node, index) => (
               <MenuItemRow
                 key={node.id}
@@ -210,7 +210,7 @@ export function MenusPanel() {
         </div>
       ) : (
         <p className="text-body-sm text-ink-70">
-          {list.length === 0 ? 'No menus yet — create one above.' : 'Select a menu above to edit it.'}
+          {list.length === 0 ? 'No menus yet. Create one above.' : 'Select a menu above to edit it.'}
         </p>
       )}
 

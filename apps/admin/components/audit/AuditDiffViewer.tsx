@@ -47,7 +47,7 @@ export function AuditDiffViewer({ requestBody, responseBody }: AuditDiffViewerPr
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between gap-8">
         <p className="text-[11px] text-ink-70">
-          Comparing the request payload sent to the API against the response payload it returned — not a
+          Comparing the request payload sent to the API against the response payload it returned. This is not a
           database before/after snapshot (this app doesn't re-read the entity's prior state).
         </p>
         <div className="flex shrink-0 gap-4">

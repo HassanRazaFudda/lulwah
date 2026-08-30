@@ -18,7 +18,7 @@ export function PricingTab({ draft, onChange }: { draft: ProductDraft; onChange:
       <div className="grid grid-cols-1 gap-16 md:grid-cols-3">
         <MoneyInput label="Base price (AED)" valueFils={draft.basePriceFils} onChange={(fils) => onChange({ ...draft, basePriceFils: fils ?? 0 })} />
         <MoneyInput
-          label="Compare-at price (AED) — optional"
+          label="Compare-at price (AED, optional)"
           valueFils={draft.compareAtPriceFils}
           nullable
           onChange={(compareAtPriceFils) => onChange({ ...draft, compareAtPriceFils })}

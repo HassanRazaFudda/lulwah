@@ -88,7 +88,7 @@ export function ValueTargetsTab({ draft, onChange }: { draft: DiscountDraft; onC
         ) : null}
 
         {draft.type === 'free_shipping' ? (
-          <p className="self-end text-body-sm text-ink-70">Waives shipping — no value field needed.</p>
+          <p className="self-end text-body-sm text-ink-70">Waives shipping, so no value field is needed.</p>
         ) : null}
       </div>
 
@@ -121,7 +121,7 @@ export function ValueTargetsTab({ draft, onChange }: { draft: DiscountDraft; onC
       </div>
 
       <div className="flex flex-col gap-4">
-        <span className={labelClassName}>Exclusions — optional</span>
+        <span className={labelClassName}>Exclusions (optional)</span>
         <ExcludePicker selected={draft.excludeIds} onChange={(excludeIds) => onChange({ ...draft, excludeIds })} />
       </div>
     </div>
@@ -136,7 +136,7 @@ function TiersEditor({ draft, onChange }: { draft: DiscountDraft; onChange: (nex
   return (
     <div className="flex flex-col gap-8 border border-line p-16">
       <span className={labelClassName}>
-        Tiers — the highest tier whose minimum spend the cart meets applies (plan.md §7.12 shape; the engine's own reading, see
+        Tiers: the highest tier whose minimum spend the cart meets applies (plan.md §7.12 shape; the engine's own reading, see
         `discount-engine.ts`)
       </span>
       {tiers.map((tier, index) => (
@@ -221,7 +221,7 @@ function BuyXGetYEditor({
         />
       </div>
       <div className="flex flex-col gap-4">
-        <span className={labelClassName}>Scoped to collection — optional</span>
+        <span className={labelClassName}>Scoped to collection (optional)</span>
         <select
           className={selectClassName}
           value={bxgy.appliesToCollectionId ?? ''}

@@ -27,7 +27,7 @@ export function MediaRefField({
   return (
     <div className="flex flex-col gap-8">
       <Input
-        label={`${label} — image URL`}
+        label={`${label}: image URL`}
         value={value?.url ?? ''}
         onChange={(event) => {
           const url = event.target.value.trim();

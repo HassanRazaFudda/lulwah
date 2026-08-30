@@ -57,7 +57,7 @@ export function DiscountsReportPanel() {
         {query.data ? (
           <div className="flex flex-col gap-8">
             <p className="text-[11px] text-ink-70">
-              "Est. margin impact" is realized revenue minus cost of goods for orders this discount touched — an
+              "Est. margin impact" is realized revenue minus cost of goods for orders this discount touched. It's an
               approximation, not a delta against a no-discount counterfactual. A negative value means this discount
               ran at a loss.
             </p>

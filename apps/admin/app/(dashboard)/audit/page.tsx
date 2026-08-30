@@ -223,7 +223,7 @@ export default function AuditLogPage() {
           />
           <div className="flex items-center justify-between gap-16">
             <p className="text-body-sm text-ink-70">
-              Page {page} of {Math.max(1, Math.ceil(total / limit))} — {total} total
+              Page {page} of {Math.max(1, Math.ceil(total / limit))} ({total} total)
             </p>
             <div className="flex gap-8">
               <button

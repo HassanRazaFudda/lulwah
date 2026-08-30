@@ -30,7 +30,7 @@ export function PublishingTab({ draft, onChange }: { draft: ProductDraft; onChan
           </select>
         </div>
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Publish at — optional (used when status is "scheduled")</span>
+          <span className={labelClassName}>Publish at (optional; used when status is "scheduled")</span>
           <input
             type="datetime-local"
             className={selectClassName}

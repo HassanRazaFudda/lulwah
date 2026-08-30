@@ -157,7 +157,7 @@ export function HomeSectionsPanel() {
       </div>
 
       <div className="flex flex-col gap-8">
-        {sorted.length === 0 ? <p className="text-body-sm text-ink-70">No home sections yet — add one above.</p> : null}
+        {sorted.length === 0 ? <p className="text-body-sm text-ink-70">No home sections yet. Add one above.</p> : null}
         {sorted.map((section, index) => {
           const isExpanded = expandedId === section.id;
           return (
@@ -210,7 +210,7 @@ export function HomeSectionsPanel() {
                 <div className="flex flex-col gap-16 border-t border-line p-16">
                   <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
                     <div className="flex flex-col gap-4">
-                      <span className={labelClassName}>Starts at — optional</span>
+                      <span className={labelClassName}>Starts at (optional)</span>
                       <input
                         type="datetime-local"
                         className={selectClassName}
@@ -219,7 +219,7 @@ export function HomeSectionsPanel() {
                       />
                     </div>
                     <div className="flex flex-col gap-4">
-                      <span className={labelClassName}>Ends at — optional</span>
+                      <span className={labelClassName}>Ends at (optional)</span>
                       <input
                         type="datetime-local"
                         className={selectClassName}
@@ -255,10 +255,10 @@ export function HomeSectionsPanel() {
       <Panel title="Live preview">
         <p className="text-body-sm text-ink-70">
           plan.md §11.1 calls for a live preview iframe alongside the section list. `apps/web` has no route today
-          that renders `home_sections` from this API — Home is still built from hardcoded editorial sections
+          that renders `home_sections` from this API. Home is still built from hardcoded editorial sections
           (`docs/implemented-plan.md` §5.1), and this task's brief scoped `apps/web` changes out (a separate P3
           workstream). Pointing an iframe at the storefront's current homepage would show unrelated hardcoded
-          content, not a preview of what's edited above — that would misrepresent what this screen does, so it's
+          content, not a preview of what's edited above; that would misrepresent what this screen does, so it's
           intentionally left out rather than faked. The section list/editor above is real and saves to the real
           API; wiring an actual preview is a documented follow-up once `apps/web`'s Home reads from
           `GET /content/home`.

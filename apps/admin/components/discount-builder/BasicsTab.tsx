@@ -47,7 +47,7 @@ export function BasicsTab({ draft, onChange }: { draft: DiscountDraft; onChange:
 
       <div className="flex flex-col gap-4">
         <label htmlFor="discount-description" className={labelClassName}>
-          Internal description — staff-only, never shown to customers
+          Internal description (staff-only, never shown to customers)
         </label>
         <textarea
           id="discount-description"
@@ -68,7 +68,7 @@ export function BasicsTab({ draft, onChange }: { draft: DiscountDraft; onChange:
                 checked={draft.mode === 'automatic'}
                 onChange={() => onChange({ ...draft, mode: 'automatic', code: null })}
               />
-              Automatic — applies to every eligible cart, no code needed
+              Automatic: applies to every eligible cart, no code needed
             </label>
             <label className="flex items-center gap-8 text-body-sm text-ink">
               <input
@@ -77,7 +77,7 @@ export function BasicsTab({ draft, onChange }: { draft: DiscountDraft; onChange:
                 checked={draft.mode === 'code'}
                 onChange={() => onChange({ ...draft, mode: 'code', code: draft.code ?? '' })}
               />
-              Code — customer enters a code at checkout
+              Code: customer enters a code at checkout
             </label>
           </div>
         </div>
@@ -94,7 +94,7 @@ export function BasicsTab({ draft, onChange }: { draft: DiscountDraft; onChange:
 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-3">
         <Input
-          label="Priority — lower runs first"
+          label="Priority (lower runs first)"
           type="number"
           step={1}
           value={draft.priority}

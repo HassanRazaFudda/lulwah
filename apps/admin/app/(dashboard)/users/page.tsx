@@ -243,7 +243,7 @@ export default function UsersPage() {
     <div className="flex flex-col gap-16">
       <PageHeader
         title="Users & roles"
-        description="plan.md §10.2 RBAC matrix — see role permissions there."
+        description="plan.md §10.2 RBAC matrix: see role permissions there."
         actions={
           <Button type="button" onClick={() => setShowInviteForm((v) => !v)}>
             {showInviteForm ? 'Cancel invite' : 'Invite staff'}
@@ -255,7 +255,7 @@ export default function UsersPage() {
         <p className="text-body-sm text-ink-70">
           List, role-change, invite, deactivate/reactivate, and session list + revoke are all real, live against{' '}
           <code>apps/api</code>&apos;s <code>identity</code> module. <strong>Force 2FA reset</strong> is still shown as a
-          disabled control — no real TOTP/2FA system exists anywhere in this codebase, so there is nothing genuine to
+          disabled control, because no real TOTP/2FA system exists anywhere in this codebase, so there is nothing genuine to
           reset yet.
         </p>
       </Panel>
@@ -317,7 +317,7 @@ export default function UsersPage() {
               </div>
               <div className="flex flex-col gap-4">
                 <label htmlFor="invite-phone" className={labelClassName}>
-                  Mobile (UAE, no leading 0 — e.g. 501234567)
+                  Mobile (UAE, no leading 0; e.g. 501234567)
                 </label>
                 <div className="flex items-center gap-8">
                   <span className="text-body-sm text-ink-70">+971</span>
@@ -334,7 +334,7 @@ export default function UsersPage() {
             </div>
 
             <p className="text-body-sm text-ink-70">
-              A temporary password is generated and shown once below — there is no email-sending infrastructure in this
+              A temporary password is generated and shown once below. There is no email-sending infrastructure in this
               codebase, so hand it to the new hire directly.
             </p>
 
@@ -353,11 +353,11 @@ export default function UsersPage() {
       ) : null}
 
       {inviteResult ? (
-        <Panel title="Staff account created — copy this password now">
+        <Panel title="Staff account created: copy this password now">
           <div className="flex flex-col gap-12">
             <p className="text-body-sm text-ink">
               <strong>{inviteResult.user.email}</strong> ({ROLE_LABELS[inviteResult.user.role]}) can log in with the
-              temporary password below. It is shown <strong>once</strong> — it is never stored anywhere in plaintext and
+              temporary password below. It is shown <strong>once</strong>: it is never stored anywhere in plaintext and
               cannot be retrieved again after you leave this screen.
             </p>
             <code className="w-fit border border-line bg-nacre px-16 py-8 text-body-sm text-ink">
@@ -404,7 +404,7 @@ export default function UsersPage() {
       </div>
 
       {pendingUser ? (
-        <Panel title="Change role — typed confirmation required">
+        <Panel title="Change role: typed confirmation required">
           <div className="flex flex-col gap-12">
             <p className="text-body-sm text-ink">
               Changing <strong>{pendingUser.email ?? pendingUser.id}</strong>&apos;s role from{' '}
@@ -427,7 +427,7 @@ export default function UsersPage() {
 
             {isSelf ? (
               <p className="text-body-sm text-danger">
-                You cannot change your own role from this screen — a client-side safety guard only, not an API
+                You cannot change your own role from this screen. This is a client-side safety guard only, not an API
                 restriction (identity.service.ts#updateUserRoleAsAdmin has no self-edit check of its own).
               </p>
             ) : pendingRole && pendingRole !== pendingUser.role ? (
@@ -484,7 +484,7 @@ function SessionsPanel({ userId, userLabel, onClose }: { userId: string; userLab
 
   return (
     <Panel
-      title={`Active sessions — ${userLabel}`}
+      title={`Active sessions: ${userLabel}`}
       actions={
         <Button type="button" variant="tertiary" onClick={onClose}>
           Close
@@ -494,7 +494,7 @@ function SessionsPanel({ userId, userLabel, onClose }: { userId: string; userLab
       {isLoading ? (
         <Skeleton className="h-[80px]" />
       ) : !sessions || sessions.length === 0 ? (
-        <p className="text-body-sm text-ink-70">No active sessions — every session for this account has expired or been revoked.</p>
+        <p className="text-body-sm text-ink-70">No active sessions. Every session for this account has expired or been revoked.</p>
       ) : (
         <div className="flex flex-col gap-8">
           {sessions.map((s) => (

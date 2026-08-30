@@ -26,7 +26,7 @@ export function LimitsBadgeTab({
       <div className="grid grid-cols-1 gap-16 md:grid-cols-3">
         <div className="flex flex-col gap-4">
           <label htmlFor="limit-total" className={labelClassName}>
-            Total usage limit — optional, blank = unlimited
+            Total usage limit (optional, blank = unlimited)
           </label>
           <input
             id="limit-total"
@@ -40,7 +40,7 @@ export function LimitsBadgeTab({
         </div>
         <div className="flex flex-col gap-4">
           <label htmlFor="limit-per-customer" className={labelClassName}>
-            Per-customer limit — optional, blank = unlimited
+            Per-customer limit (optional, blank = unlimited)
           </label>
           <input
             id="limit-per-customer"
@@ -54,7 +54,7 @@ export function LimitsBadgeTab({
         </div>
         {usedCount !== undefined ? (
           <div className="flex flex-col gap-4">
-            <span className={labelClassName}>Used so far — read-only</span>
+            <span className={labelClassName}>Used so far (read-only)</span>
             <p className="text-body-sm text-ink">
               {usedCount}
               {usage.limitTotal !== null ? ` / ${usage.limitTotal}` : ' / unlimited'}

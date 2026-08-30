@@ -42,7 +42,7 @@ export function MediaTab({ productId, media }: { productId: string; media: Produ
   return (
     <div className="flex flex-col gap-24">
       <form onSubmit={handleSubmit} className="flex flex-col gap-12 border border-line bg-nacre p-16">
-        <p className="text-body-sm text-ink-70">Paste a hosted image URL — there is no upload pipeline in this phase.</p>
+        <p className="text-body-sm text-ink-70">Paste a hosted image URL; there is no upload pipeline in this phase.</p>
         <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
           <Input label="Image URL" value={url} onChange={(e) => setUrl(e.target.value)} {...(urlError ? { errorMessage: urlError } : {})} />
           <Input label="Alt text" value={alt} onChange={(e) => setAlt(e.target.value)} />

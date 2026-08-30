@@ -28,8 +28,8 @@ export function PreviewTab({ draft }: { draft: DiscountDraft }) {
   return (
     <div className="flex flex-col gap-16">
       <p className="text-body-sm text-ink-70">
-        This is a client-side ESTIMATE, not the real pricing engine — it only covers simple, untargeted percentage/fixed-amount
-        discounts. It is not run when the discount actually applies at checkout; that always uses the real server-side
+        This is a client-side ESTIMATE, not the real pricing engine. It only covers simple, untargeted percentage/fixed-amount
+        discounts, and it is not run when the discount actually applies at checkout; that always uses the real server-side
         engine.
       </p>
       <div className="max-w-[280px]">

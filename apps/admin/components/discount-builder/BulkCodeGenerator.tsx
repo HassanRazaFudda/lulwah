@@ -59,7 +59,7 @@ export function BulkCodeGenerator({ draft }: { draft: DiscountDraft }) {
   return (
     <div className="flex flex-col gap-16">
       <p className="text-body-sm text-ink-70">
-        Generates <strong>{codes.length || 0}</strong> real, independent code-mode discounts — each one a genuine document created
+        Generates <strong>{codes.length || 0}</strong> real, independent code-mode discounts. Each one is a genuine document created
         by its own <code>POST /admin/discounts</code> call, sharing every field on this builder except the code itself. Not a
         bulk endpoint (the API has none); this is N real requests fired from your browser.
       </p>

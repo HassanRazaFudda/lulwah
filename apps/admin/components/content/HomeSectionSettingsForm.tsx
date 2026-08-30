@@ -45,7 +45,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
             <MediaRefField label="Mobile media" value={media('mediaMobile')} onChange={(v) => set('mediaMobile', v)} />
           </div>
           <Input
-            label="Video URL — optional"
+            label="Video URL (optional)"
             value={str('videoUrl')}
             onChange={(e) => set('videoUrl', e.target.value.trim() || null)}
           />
@@ -55,7 +55,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
           </div>
           <Input label="Link href" value={str('linkHref')} onChange={(e) => set('linkHref', e.target.value)} />
           <div className="flex flex-col gap-4">
-            <span className={labelClassName}>Links to collection — optional</span>
+            <span className={labelClassName}>Links to collection (optional)</span>
             <select
               className={selectClassName}
               value={(settings.collectionId as string | null) ?? ''}
@@ -81,7 +81,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
           </div>
           <div className="flex flex-col gap-4">
             <span className={labelClassName}>
-              Collection — leave unset to fall back to newest/best-selling products (storefront decides which)
+              Collection: leave unset to fall back to newest/best-selling products (storefront decides which)
             </span>
             <select
               className={selectClassName}
@@ -106,7 +106,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
               onChange={(e) => set('limit', Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
             />
             <Input
-              label="View-all href — optional"
+              label="View-all href (optional)"
               value={str('viewAllHref')}
               onChange={(e) => set('viewAllHref', e.target.value.trim() || null)}
             />
@@ -148,7 +148,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
           <MediaRefField label="Media" value={media('media')} onChange={(v) => set('media', v)} />
           <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
             <Input
-              label="Link href — optional"
+              label="Link href (optional)"
               value={str('linkHref')}
               onChange={(e) => set('linkHref', e.target.value.trim() || null)}
             />
@@ -170,9 +170,9 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
     case 'brand_strip':
       return (
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Brands (marquee order follows selection order below is not preserved — see note)</span>
+          <span className={labelClassName}>Brands (marquee order follows selection order below is not preserved; see note)</span>
           <p className="text-body-sm text-ink-70">
-            Checklist order is alphabetical, not the storefront render order — `brandIds` is a plain array with no
+            Checklist order is alphabetical, not the storefront render order. `brandIds` is a plain array with no
             separate ordering UI in this pass; reorder by editing the underlying array if a specific sequence matters.
           </p>
           <MultiCheckList
@@ -202,7 +202,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
         <div className="flex flex-col gap-16">
           <MediaRefField label="Media" value={media('media')} onChange={(v) => set('media', v)} />
           <Input
-            label="Video URL — optional, overrides the still image on the storefront"
+            label="Video URL (optional; overrides the still image on the storefront)"
             value={str('videoUrl')}
             onChange={(e) => set('videoUrl', e.target.value.trim() || null)}
           />
@@ -224,7 +224,7 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
     case 'journal_teaser':
       return (
         <StringListEditor
-          label="Journal post slugs (up to 4) — R2 scope, journal itself doesn't exist yet"
+          label="Journal post slugs (up to 4; R2 scope, journal itself doesn't exist yet)"
           values={(settings.postSlugs as string[]) ?? []}
           onChange={(v) => set('postSlugs', v)}
           max={4}
@@ -270,7 +270,7 @@ function CategoryGridTilesEditor({
 
   return (
     <div className="flex flex-col gap-12">
-      <span className={labelClassName}>Tiles (up to 8) — "Shop by stitching" / "Shop by occasion"</span>
+      <span className={labelClassName}>Tiles (up to 8): "Shop by stitching" / "Shop by occasion"</span>
       {tiles.length === 0 ? <p className="text-body-sm text-ink-70">No tiles yet.</p> : null}
       {tiles.map((tile, index) => (
         <div key={index} className="flex flex-col gap-8 border border-line p-12">

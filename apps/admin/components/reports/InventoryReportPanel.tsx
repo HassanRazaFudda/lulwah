@@ -84,7 +84,7 @@ export function InventoryReportPanel() {
             <section className="flex flex-col gap-8">
               <h3 className="text-label font-semibold uppercase tracking-label text-ink-70">Stock ageing</h3>
               <p className="text-[11px] text-ink-70">
-                "Age" is days since the variant was first listed, not days since it was last restocked — a
+                "Age" is days since the variant was first listed, not days since it was last restocked. This is a
                 documented simplification (no per-restock history is aggregated here).
               </p>
               <DataTable columns={AGEING_COLUMNS} rows={query.data.ageing} getRowId={(r) => r.bucket} />

@@ -83,7 +83,7 @@ export function ProductsReportPanel() {
               <h3 className="text-label font-semibold uppercase tracking-label text-ink-70">
                 Never sold
                 {query.data.neverSoldCount > query.data.neverSold.length
-                  ? ` — showing ${query.data.neverSold.length} of ${query.data.neverSoldCount}`
+                  ? ` (showing ${query.data.neverSold.length} of ${query.data.neverSoldCount})`
                   : ` (${query.data.neverSoldCount})`}
               </h3>
               <DataTable

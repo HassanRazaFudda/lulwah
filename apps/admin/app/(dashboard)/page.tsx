@@ -68,7 +68,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-24">
-      <PageHeader title="Dashboard" description="Trailing 7 days, vs the 7 days before — no date-range picker on this dashboard yet." />
+      <PageHeader title="Dashboard" description="Trailing 7 days, vs the 7 days before. There's no date-range picker on this dashboard yet." />
 
       <div className="grid grid-cols-2 gap-16 lg:grid-cols-4">
         {statsError ? (
@@ -128,7 +128,7 @@ export default function DashboardPage() {
               {lowStockRows.map((item) => (
                 <li key={item.variantId} className="flex items-center justify-between border-b border-line py-8 text-body-sm">
                   <span className="text-ink">
-                    {productById.get(item.productId)?.title ?? 'Unknown product'} — {item.sku}
+                    {productById.get(item.productId)?.title ?? 'Unknown product'} ({item.sku})
                   </span>
                   <span className={item.onHand === 0 ? 'font-semibold text-danger' : 'font-semibold text-warning'}>
                     {item.onHand} / {item.lowStockThreshold}

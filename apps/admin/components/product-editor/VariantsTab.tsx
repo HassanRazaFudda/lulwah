@@ -103,7 +103,7 @@ export function VariantsTab({
           </div>
           <div className="flex flex-col gap-12">
             <Input
-              label="Colours — comma-separated, optional"
+              label="Colours (comma-separated, optional)"
               hint="e.g. Ferozi, Off White, Maroon"
               value={colorsText}
               onChange={(e) => setColorsText(e.target.value)}
@@ -191,7 +191,7 @@ export function VariantsTab({
       <div className="flex flex-col gap-8">
         <p className="text-body-sm font-semibold text-ink">Existing variants ({variants.length})</p>
         {variants.length === 0 ? (
-          <p className="text-body-sm text-ink-70">No variants yet — generate some above.</p>
+          <p className="text-body-sm text-ink-70">No variants yet. Generate some above.</p>
         ) : (
           <div className="flex flex-col gap-8">
             {variants.map((variant) => (

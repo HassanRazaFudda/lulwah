@@ -198,7 +198,7 @@ function PageForm({ draft, onChange }: { draft: PageDraft; onChange: (next: Page
         <Input label="Title (EN)" value={draft.titleEn} onChange={(e) => onChange({ ...draft, titleEn: e.target.value })} />
         <Input label="Title (AR)" value={draft.titleAr} onChange={(e) => onChange({ ...draft, titleAr: e.target.value })} />
         <Input
-          label="Slug — auto if left blank on create"
+          label="Slug (auto if left blank on create)"
           value={draft.slug}
           onChange={(e) => onChange({ ...draft, slug: e.target.value })}
         />
@@ -207,7 +207,7 @@ function PageForm({ draft, onChange }: { draft: PageDraft; onChange: (next: Page
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <div className="flex flex-col gap-4">
           <label className={labelClassName} htmlFor="page-body-en">
-            Body (EN) — HTML, sanitized server-side; no WYSIWYG toolbar in this pass
+            Body (EN): HTML, sanitized server-side; no WYSIWYG toolbar in this pass
           </label>
           <textarea
             id="page-body-en"
@@ -244,12 +244,12 @@ function PageForm({ draft, onChange }: { draft: PageDraft; onChange: (next: Page
 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <Input
-          label="SEO title (EN) — optional"
+          label="SEO title (EN, optional)"
           value={draft.seo.titleEn ?? ''}
           onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, titleEn: e.target.value } })}
         />
         <Input
-          label="SEO description (EN) — optional"
+          label="SEO description (EN, optional)"
           value={draft.seo.descEn ?? ''}
           onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, descEn: e.target.value } })}
         />

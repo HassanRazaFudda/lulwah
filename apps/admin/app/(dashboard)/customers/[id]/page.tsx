@@ -158,7 +158,7 @@ export default function CustomerDetailPage() {
 
       <Panel title="COD risk signal">
         <p className="mb-12 text-body-sm text-ink-70">
-          Not a fraud-scoring model — no risk-scoring pipeline exists anywhere in this codebase (checked
+          Not a fraud-scoring model: no risk-scoring pipeline exists anywhere in this codebase (checked
           `payment/cod.gateway.ts` and the rest of the `payment` module). This is a transparent, real-data signal
           only: whether staff have applied the <code>risky_cod</code> tag below, plus this customer&apos;s actual
           COD order history.
@@ -248,7 +248,7 @@ export default function CustomerDetailPage() {
           <div className="flex flex-col gap-12">
             <p className="text-body-sm text-ink-70">
               `CartItem` snapshots carry no product title/brand/image (same documented gap as the storefront&apos;s
-              own cart client, `docs/implemented-plan.md` §5.4) — showing variant id, quantity and price only.
+              own cart client, `docs/implemented-plan.md` §5.4), so this shows variant id, quantity and price only.
             </p>
             <DataTable
               columns={CART_ITEM_COLUMNS}
@@ -315,7 +315,7 @@ export default function CustomerDetailPage() {
 
         <Panel title="Internal notes">
           <div className="flex flex-col gap-12">
-            <p className="text-body-sm text-ink-70">Staff-only — never shown to the customer (plan.md §7.1).</p>
+            <p className="text-body-sm text-ink-70">Staff-only: never shown to the customer (plan.md §7.1).</p>
             <textarea
               value={notesDraft}
               onChange={(event) => setNotesDraft(event.target.value)}

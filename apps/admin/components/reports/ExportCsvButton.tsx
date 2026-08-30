@@ -38,7 +38,7 @@ export function ExportCsvButton({ path, fallbackFilename }: ExportCsvButtonProps
       {exportCsv.isError ? (
         <p className="max-w-[240px] text-right text-[11px] text-danger">
           {isForbiddenError(exportCsv.error)
-            ? "Export requires the reports.write permission — you can view this report but not export it."
+            ? "Export requires the reports.write permission; you can view this report but not export it."
             : exportCsv.error instanceof Error
               ? exportCsv.error.message
               : 'Export failed.'}

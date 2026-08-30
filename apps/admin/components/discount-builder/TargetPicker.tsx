@@ -32,7 +32,7 @@ export function TargetPicker({
   const { data: brands, isLoading: brandsLoading } = useAdminBrandsQuery();
 
   if (appliesTo === 'all') {
-    return <p className="text-body-sm text-ink-70">Applies to every product in the catalogue — no target selection needed.</p>;
+    return <p className="text-body-sm text-ink-70">Applies to every product in the catalogue, so no target selection is needed.</p>;
   }
 
   const byAppliesTo: Record<Exclude<DiscountAppliesTo, 'all'>, { loading: boolean; options: MultiCheckOption[] }> = {

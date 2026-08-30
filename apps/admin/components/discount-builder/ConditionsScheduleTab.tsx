@@ -21,14 +21,14 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
     <div className="flex flex-col gap-24">
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <MoneyInput
-          label="Minimum spend (AED) — optional"
+          label="Minimum spend (AED, optional)"
           valueFils={c.minSubtotalFils}
           nullable
           onChange={(minSubtotalFils) => setConditions({ minSubtotalFils })}
         />
         <div className="flex flex-col gap-4">
           <label htmlFor="min-quantity" className={labelClassName}>
-            Minimum quantity — optional
+            Minimum quantity (optional)
           </label>
           <input
             id="min-quantity"
@@ -53,7 +53,7 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
 
       <div className="flex flex-col gap-4">
         <label htmlFor="customer-tags" className={labelClassName}>
-          Customer tags — optional, comma-separated
+          Customer tags (optional, comma-separated)
         </label>
         <input
           id="customer-tags"
@@ -73,7 +73,7 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Emirates — optional, empty means all</span>
+          <span className={labelClassName}>Emirates (optional; empty means all)</span>
           <MultiCheckList
             options={Emirate.options.map((e) => ({ value: e, label: e.replace(/_/g, ' ') }))}
             selected={c.emirates ?? []}
@@ -81,7 +81,7 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
           />
         </div>
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Payment methods — optional, empty means all</span>
+          <span className={labelClassName}>Payment methods (optional; empty means all)</span>
           <MultiCheckList
             options={PaymentMethod.options.map((m) => ({ value: m, label: m.replace(/_/g, ' ') }))}
             selected={c.paymentMethods ?? []}
@@ -93,7 +93,7 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <div className="flex flex-col gap-4">
           <label htmlFor="starts-at" className={labelClassName}>
-            Starts — optional
+            Starts (optional)
           </label>
           <input
             id="starts-at"
@@ -105,7 +105,7 @@ export function ConditionsScheduleTab({ draft, onChange }: { draft: DiscountDraf
         </div>
         <div className="flex flex-col gap-4">
           <label htmlFor="ends-at" className={labelClassName}>
-            Ends — optional
+            Ends (optional)
           </label>
           <input
             id="ends-at"

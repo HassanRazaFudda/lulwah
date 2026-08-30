@@ -23,7 +23,7 @@ export function InventoryTab({ variants }: { variants: AdminVariantWithStock[] }
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (variants.length === 0) {
-    return <p className="text-body-sm text-ink-70">No variants yet — add some on the Variants tab first.</p>;
+    return <p className="text-body-sm text-ink-70">No variants yet. Add some on the Variants tab first.</p>;
   }
 
   return (

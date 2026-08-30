@@ -57,7 +57,7 @@ export function SearchReportPanel() {
             <section className="flex flex-col gap-8">
               <h3 className="text-label font-semibold uppercase tracking-label text-ink-70">Zero-result queries</h3>
               <p className="text-[11px] text-ink-70">
-                Searches that returned nothing — a merchandising/catalogue-gap signal, not a bug list.
+                Searches that returned nothing: a merchandising/catalogue-gap signal, not a bug list.
               </p>
               <DataTable
                 columns={COLUMNS}

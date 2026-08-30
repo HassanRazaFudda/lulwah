@@ -46,7 +46,7 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-16">
-      <PageHeader title="Reports" description="Sales, Products, Customers, Discounts, Inventory and Search — each exportable to CSV." />
+      <PageHeader title="Reports" description="Sales, Products, Customers, Discounts, Inventory and Search: each exportable to CSV." />
 
       <div className="flex flex-wrap gap-4 border-b border-line" role="tablist" aria-label="Report category">
         {TABS.map((tab) => (
@@ -81,7 +81,7 @@ export default function ReportsPage() {
           <p className="text-label font-semibold uppercase tracking-label text-ink-70">Not available</p>
           <p className="max-w-[560px] text-body-sm text-ink-70">
             Traffic reporting needs a Google Analytics 4 integration, which hasn't been built anywhere in this
-            codebase yet (plan.md §23 remains unbuilt) — there is no real data source for this to read from. Rather
+            codebase yet (plan.md §23 remains unbuilt), so there is no real data source for this to read from. Rather
             than show invented numbers, this tab stays empty until that integration exists.
           </p>
         </div>

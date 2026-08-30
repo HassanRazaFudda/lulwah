@@ -125,17 +125,17 @@ export function MediaLibraryPanel() {
   return (
     <div className="flex flex-col gap-16">
       <div className="border border-line bg-nacre p-16">
-        <h3 className="mb-8 text-body font-semibold text-ink">Add asset — paste a hosted image URL</h3>
+        <h3 className="mb-8 text-body font-semibold text-ink">Add asset: paste a hosted image URL</h3>
         <p className="mb-12 text-body-sm text-ink-70">
-          No upload/S3 pipeline exists in this codebase — this pastes an already-hosted URL into the library's
+          No upload/S3 pipeline exists in this codebase, so this pastes an already-hosted URL into the library's
           metadata (folder, tags, alt text), the same reality `product-editor/MediaTab.tsx` documents for product
           photography.
         </p>
         <div className="grid grid-cols-1 gap-12 md:grid-cols-4">
           <Input label="Image URL" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} />
           <Input label="Alt text (EN)" value={newAlt} onChange={(e) => setNewAlt(e.target.value)} />
-          <Input label="Folder — optional" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
-          <Input label="Tags — comma-separated" value={newTags} onChange={(e) => setNewTags(e.target.value)} />
+          <Input label="Folder (optional)" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
+          <Input label="Tags (comma-separated)" value={newTags} onChange={(e) => setNewTags(e.target.value)} />
         </div>
         <div className="mt-12">
           <Button type="button" onClick={handleAdd} disabled={!urlValid || createAsset.isPending}>
@@ -172,11 +172,11 @@ export function MediaLibraryPanel() {
       {selected.size > 0 ? (
         <div className="border border-line bg-nacre p-16">
           <h3 className="mb-8 text-body font-semibold text-ink">Bulk edit ({selected.size} selected)</h3>
-          <p className="mb-12 text-body-sm text-ink-70">Only fields you fill in below are applied — blank fields are left unchanged.</p>
+          <p className="mb-12 text-body-sm text-ink-70">Only fields you fill in below are applied; blank fields are left unchanged.</p>
           <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
             <Input label="Alt text (EN)" value={bulkAlt} onChange={(e) => setBulkAlt(e.target.value)} />
             <Input label="Folder" value={bulkFolder} onChange={(e) => setBulkFolder(e.target.value)} />
-            <Input label="Tags — comma-separated" value={bulkTags} onChange={(e) => setBulkTags(e.target.value)} />
+            <Input label="Tags (comma-separated)" value={bulkTags} onChange={(e) => setBulkTags(e.target.value)} />
           </div>
           <div className="mt-12 flex items-center gap-8">
             <Button type="button" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>

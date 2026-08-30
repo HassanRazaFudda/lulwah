@@ -119,15 +119,15 @@ export function CustomersReportPanel() {
           <div className="flex flex-col gap-24">
             {!dateFrom ? (
               <p className="text-[11px] text-ink-70">
-                No start date set — every customer in range counts as "new" (there's no earlier boundary to compare
+                No start date set, so every customer in range counts as "new" (there's no earlier boundary to compare
                 against). Set "From" for a meaningful new-vs-returning split.
               </p>
             ) : null}
             <div className="flex flex-wrap gap-24 border border-line bg-paper p-16">
               <Stat label="New customers" value={String(query.data.newCustomers.customers)} />
-              <Stat label="New — revenue" value={formatMoney(query.data.newCustomers.revenueFils, 'en')} />
+              <Stat label="New customer revenue" value={formatMoney(query.data.newCustomers.revenueFils, 'en')} />
               <Stat label="Returning customers" value={String(query.data.returningCustomers.customers)} />
-              <Stat label="Returning — revenue" value={formatMoney(query.data.returningCustomers.revenueFils, 'en')} />
+              <Stat label="Returning customer revenue" value={formatMoney(query.data.returningCustomers.revenueFils, 'en')} />
               <Stat label="Average LTV (all-time)" value={formatMoney(query.data.averageLtvFils, 'en')} />
             </div>
 

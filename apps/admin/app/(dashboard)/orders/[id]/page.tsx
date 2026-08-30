@@ -460,7 +460,7 @@ export default function OrderDetailPage() {
       <Panel title="Internal notes">
         <div className="flex flex-col gap-16">
           <p className="text-body-sm text-ink-70">
-            Staff-only — never shown to the customer (plan.md §9.7). Round-trips for real: a note posted here is
+            Staff-only: never shown to the customer (plan.md §9.7). Round-trips for real: a note posted here is
             durably persisted and visible to any staff member viewing this order, including after a refresh.
           </p>
           <OrderInternalNotes notes={order.internalNotes} />

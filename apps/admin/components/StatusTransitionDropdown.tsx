@@ -29,7 +29,7 @@ export function StatusTransitionDropdown({ currentStatus, onApply, disabled }: S
   const [selected, setSelected] = useState<OrderStatus | ''>('');
 
   if (validNextStatuses.length === 0) {
-    return <p className="text-body-sm text-ink-70">Terminal status — no further transitions.</p>;
+    return <p className="text-body-sm text-ink-70">Terminal status: no further transitions.</p>;
   }
 
   return (

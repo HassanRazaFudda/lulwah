@@ -157,7 +157,7 @@ export default function DiscountsPage() {
     <div className="flex flex-col gap-16">
       <PageHeader
         title="Discounts"
-        description={`${visibleDiscounts.length} discount${visibleDiscounts.length === 1 ? '' : 's'} — usage vs limit is real; per-discount revenue attributed isn't tracked by the API (no field exists for it), so it's not shown here`}
+        description={`${visibleDiscounts.length} discount${visibleDiscounts.length === 1 ? '' : 's'}. Usage vs limit is real; per-discount revenue attributed isn't tracked by the API (no field exists for it), so it's not shown here`}
         actions={
           <Button asChild>
             <Link href="/discounts/new">New discount</Link>

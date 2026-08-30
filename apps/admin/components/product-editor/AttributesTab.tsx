@@ -170,21 +170,21 @@ export function AttributesTab({ draft, onChange }: { draft: ProductDraft; onChan
 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-4">
         <Input
-          label="Neckline — optional"
+          label="Neckline (optional)"
           value={draft.neckline ?? ''}
           onChange={(e) => onChange({ ...draft, neckline: e.target.value || null })}
         />
         <Input
-          label="Sleeve length — optional"
+          label="Sleeve length (optional)"
           value={draft.sleeveLength ?? ''}
           onChange={(e) => onChange({ ...draft, sleeveLength: e.target.value || null })}
         />
         <Input
-          label="Shirt length — optional"
+          label="Shirt length (optional)"
           value={draft.shirtLength ?? ''}
           onChange={(e) => onChange({ ...draft, shirtLength: e.target.value || null })}
         />
-        <Input label="Fit — optional" value={draft.fit ?? ''} onChange={(e) => onChange({ ...draft, fit: e.target.value || null })} />
+        <Input label="Fit (optional)" value={draft.fit ?? ''} onChange={(e) => onChange({ ...draft, fit: e.target.value || null })} />
       </div>
     </div>
   );

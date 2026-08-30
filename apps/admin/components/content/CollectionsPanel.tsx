@@ -292,7 +292,7 @@ function CollectionForm({
         <Input label="Name" value={draft.name} onChange={(e) => onChange({ ...draft, name: e.target.value })} />
         <Input label="Name (AR)" value={draft.nameAr} onChange={(e) => onChange({ ...draft, nameAr: e.target.value })} />
         <Input
-          label="Slug — auto if left blank on create"
+          label="Slug (auto if left blank on create)"
           value={draft.slug ?? ''}
           onChange={(e) => onChange({ ...draft, slug: e.target.value })}
         />
@@ -355,7 +355,7 @@ function CollectionForm({
           </select>
         </div>
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Brand — optional (house edit if unset)</span>
+          <span className={labelClassName}>Brand (optional; house edit if unset)</span>
           <select className={selectClassName} value={draft.brandId ?? ''} onChange={(e) => onChange({ ...draft, brandId: e.target.value || null })}>
             <option value="">None</option>
             {brands.map((b) => (
@@ -374,7 +374,7 @@ function CollectionForm({
 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Launch at — optional</span>
+          <span className={labelClassName}>Launch at (optional)</span>
           <input
             type="datetime-local"
             className={selectClassName}
@@ -383,7 +383,7 @@ function CollectionForm({
           />
         </div>
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>End at — optional</span>
+          <span className={labelClassName}>End at (optional)</span>
           <input
             type="datetime-local"
             className={selectClassName}
@@ -411,7 +411,7 @@ function CollectionForm({
         <CollectionRuleBuilder rules={draft.rules} onChange={(rules) => onChange({ ...draft, rules })} />
       ) : (
         <div className="flex flex-col gap-8">
-          <span className={labelClassName}>Products — manual order (drag to reorder)</span>
+          <span className={labelClassName}>Products, manual order (drag to reorder)</span>
           <div className="flex items-center gap-8">
             <select className={selectClassName} value={productPickerId} onChange={(e) => onProductPickerIdChange(e.target.value)}>
               <option value="">Select a product to add…</option>

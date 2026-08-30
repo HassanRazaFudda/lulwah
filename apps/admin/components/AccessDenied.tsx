@@ -22,7 +22,7 @@ export function AccessDenied({ permission, description }: AccessDeniedProps) {
       <p className="text-label font-semibold uppercase tracking-label text-danger">Access restricted</p>
       <p className="max-w-[420px] text-body-sm text-ink-70">
         {description ?? "You don't have access to this screen."} Requires the{' '}
-        <code className="rounded-sm bg-pearl px-4 py-2 text-[12px]">{permission}</code> permission — ask a manager or
+        <code className="rounded-sm bg-pearl px-4 py-2 text-[12px]">{permission}</code> permission. Ask a manager or
         super admin to grant it if you need it.
       </p>
     </div>

@@ -84,7 +84,7 @@ export function SalesReportPanel() {
           <div className="flex flex-col gap-8">
             {MULTI_COUNT_GROUPINGS.has(groupBy) ? (
               <p className="text-[11px] text-ink-70">
-                One order can touch more than one {groupBy} — rows can sum to more than the totals below.
+                One order can touch more than one {groupBy}, so rows can sum to more than the totals below.
               </p>
             ) : null}
             <DataTable

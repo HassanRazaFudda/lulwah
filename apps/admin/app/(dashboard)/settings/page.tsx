@@ -127,7 +127,7 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-16">
       <PageHeader
         title="Settings"
-        description="Store details, shipping, COD, tax, feature flags and maintenance mode — real GET/PATCH /admin/settings."
+        description="Store details, shipping, COD, tax, feature flags and maintenance mode: real GET/PATCH /admin/settings."
         actions={
           <div className="flex items-center gap-12">
             {updateSettings.isSuccess ? <span className="text-body-sm text-success">Saved</span> : null}
@@ -368,7 +368,7 @@ function FeatureFlagsPanel({ settings }: { settings: Settings }) {
     <Panel title="Feature flags">
       <div className="flex flex-col gap-12">
         <p className="text-body-sm text-ink-70">
-          Persisted for real in MongoDB, but no code path in this repo reads any of these flags yet — toggling here
+          Persisted for real in MongoDB, but no code path in this repo reads any of these flags yet. Toggling here
           has no live effect until a future feature is built to check it.
         </p>
         {entries.length === 0 ? (
@@ -418,7 +418,7 @@ function MaintenanceModePanel({ settings }: { settings: Settings }) {
       <div className="flex flex-col gap-12">
         <p className="text-body-sm text-ink-70">
           Persisted for real, but no middleware in `apps/web`/`apps/api` currently reads this flag to actually block
-          storefront traffic — toggling here writes the value, it does not yet put the storefront into maintenance.
+          storefront traffic. Toggling here writes the value; it does not yet put the storefront into maintenance.
         </p>
         <label className="flex items-center gap-8 text-body-sm text-ink">
           <input
@@ -454,7 +454,7 @@ function PaymentGatewayPanel({ settings }: { settings: Settings }) {
           <StatusPill ok={gw.webhookSecretConfigured} />
         </div>
         <p className="mt-8 text-body-sm text-ink-70">
-          Read-only status computed from server env vars. Real secrets live only in <code>.env</code> — there is no
+          Read-only status computed from server env vars. Real secrets live only in <code>.env</code>; there is no
           field anywhere in this form that can submit or display a raw key (plan.md §19).
         </p>
       </div>

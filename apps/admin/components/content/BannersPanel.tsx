@@ -247,7 +247,7 @@ function BannerForm({ draft, onChange }: { draft: BannerDraft; onChange: (next: 
         <Input label="Text (AR)" value={draft.textAr} onChange={(e) => onChange({ ...draft, textAr: e.target.value })} />
       </div>
       <Input
-        label="Link — optional"
+        label="Link (optional)"
         value={draft.link ?? ''}
         onChange={(e) => onChange({ ...draft, link: e.target.value.trim() || null })}
       />
@@ -257,7 +257,7 @@ function BannerForm({ draft, onChange }: { draft: BannerDraft; onChange: (next: 
       </div>
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Starts at — optional</span>
+          <span className={labelClassName}>Starts at (optional)</span>
           <input
             type="datetime-local"
             className={selectClassName}
@@ -266,7 +266,7 @@ function BannerForm({ draft, onChange }: { draft: BannerDraft; onChange: (next: 
           />
         </div>
         <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Ends at — optional</span>
+          <span className={labelClassName}>Ends at (optional)</span>
           <input
             type="datetime-local"
             className={selectClassName}

@@ -33,12 +33,12 @@ export function BasicsTab({ draft, onChange, brands, categories, collections }: 
       <div className="grid grid-cols-1 gap-16 md:grid-cols-2">
         <Input label="Title" value={draft.title} onChange={(e) => onChange({ ...draft, title: e.target.value })} />
         <Input
-          label="Title (Arabic) — optional"
+          label="Title (Arabic, optional)"
           value={draft.titleAr}
           onChange={(e) => onChange({ ...draft, titleAr: e.target.value })}
         />
         <Input
-          label="Slug — auto-generated from title if left blank"
+          label="Slug (auto-generated from title if left blank)"
           value={draft.slug}
           onChange={(e) => onChange({ ...draft, slug: e.target.value })}
         />
