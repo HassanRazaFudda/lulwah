@@ -122,7 +122,7 @@ export function AddToBagForm({
       {colorOptions.length > 0 ? (
         <fieldset className="flex flex-col gap-8">
           <legend className="font-body text-label font-semibold tracking-label text-ink uppercase">
-            Colour{selectedColor ? ` — ${selectedColor}` : ''}
+            Colour{selectedColor ? `: ${selectedColor}` : ''}
           </legend>
           <div className="flex flex-wrap gap-8">
             {colorOptions.map((color) => (
@@ -173,7 +173,7 @@ export function AddToBagForm({
       <p className="font-body text-body-sm font-medium" aria-live="polite">
         {!inStock ? (
           <span className="text-mukaish">
-            Sold out —{' '}
+            Sold out.{' '}
             <button type="button" className="text-ink underline decoration-1 underline-offset-4">
               notify me
             </button>

@@ -91,7 +91,7 @@ export default async function CheckoutReturnPage({ params, searchParams }: Check
     return (
       <StatusMessage
         title="We couldn't find your order"
-        body="Your payment may still have gone through — check your email for a confirmation, or contact us with your payment reference if you were charged."
+        body="Your payment may still have gone through. Check your email for a confirmation, or contact us with your payment reference if you were charged."
       />
     );
   }

@@ -34,7 +34,7 @@ export default function AccountOrdersPage() {
 
       <div className="flex flex-col gap-24 border-t border-line pt-24">
         <p className="font-body text-body text-ink-70">
-          Sign-in isn&apos;t available yet — track an order with your order number and the email or phone used at
+          Sign-in isn&apos;t available yet. Track an order with your order number and the email or phone used at
           checkout.
         </p>
 

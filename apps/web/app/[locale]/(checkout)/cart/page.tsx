@@ -236,7 +236,7 @@ function CartLine({ item, locale }: { item: CartItemView; locale: 'en' | 'ar' })
             {item.priceChanged ? <span className="font-body text-body-sm text-garnet">Price updated since you added this.</span> : null}
             {isOverStock ? (
               <span className="font-body text-body-sm text-garnet">
-                {item.availableStock === 0 ? 'No longer in stock.' : `Only ${item.availableStock} left — update quantity.`}
+                {item.availableStock === 0 ? 'No longer in stock.' : `Only ${item.availableStock} left. Update quantity.`}
               </span>
             ) : null}
           </div>

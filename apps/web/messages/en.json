@@ -1,8 +1,8 @@
 {
   "meta": {
-    "defaultTitle": "Lulwah Fashion — Pakistani Designer Wear in the UAE",
-    "titleTemplate": "%s — Lulwah Fashion",
-    "description": "Khaadi, Asim Jofa, Sana Safinaz and more — unstitched lawn, pret and wedding formals, delivered across the UAE in 2–4 days."
+    "defaultTitle": "Lulwah Fashion | Pakistani Designer Wear in the UAE",
+    "titleTemplate": "%s | Lulwah Fashion",
+    "description": "Khaadi, Asim Jofa, Sana Safinaz and more: unstitched lawn, pret and wedding formals, delivered across the UAE in 2–4 days."
   },
   "nav": {
     "unstitched": "Unstitched",
@@ -39,14 +39,14 @@
     "shippingReturns": "Shipping & returns",
     "ourStory": "Our story",
     "newsletterTitle": "Stay ahead of the drop",
-    "newsletterSubtitle": "New collections, restocks and Eid edits — before they sell out.",
+    "newsletterSubtitle": "New collections, restocks and Eid edits, before they sell out.",
     "legalLine": "© {year} Lulwah Fashion FZE. TRN 100123456700003. Registered in Dubai, UAE.",
     "paymentMethods": "Visa · Mastercard · Apple Pay · Cash on delivery",
     "whatsapp": "Chat with us on WhatsApp"
   },
   "home": {
     "hero": {
-      "eyebrow": "Lawn '26 — Volume One",
+      "eyebrow": "Lawn '26, Volume One",
       "title": "Forty-two designs, cut for Dubai's summer.",
       "cta": "See the collection"
     },
@@ -61,7 +61,7 @@
       "title": "Shop by stitching",
       "unstitched": {
         "title": "Unstitched",
-        "description": "Fabric by the piece — lawn, khaddar, chiffon. Take it to your tailor, or let ours finish it."
+        "description": "Fabric by the piece: lawn, khaddar, chiffon. Take it to your tailor, or let ours finish it."
       },
       "pret": {
         "title": "Ready to Wear",
@@ -69,13 +69,13 @@
       },
       "formal": {
         "title": "Formal & Wedding",
-        "description": "Mehndi, barat, walima, nikkah — festive weight, festive work."
+        "description": "Mehndi, barat, walima, nikkah: festive weight, festive work."
       }
     },
     "editorial": {
       "eyebrow": "The Edit",
       "title": "Eid Edition, in five silhouettes",
-      "body": "Forty-two pieces from Pakistan's leading fashion houses, shot in Dubai against the fabric they're cut from. Nothing sized for a Western catalogue — every chart is the brand's own.",
+      "body": "Forty-two pieces from Pakistan's leading fashion houses, shot in Dubai against the fabric they're cut from. Nothing sized for a Western catalogue; every chart is the brand's own.",
       "cta": "Read the edit",
       "ctaGeneric": "Read more"
     },
@@ -104,7 +104,7 @@
     },
     "newsletterSection": {
       "title": "Know when Lawn '26 lands.",
-      "subtitle": "One email, before a collection sells out — not a weekly blast."
+      "subtitle": "One email, before a collection sells out. Not a weekly blast."
     }
   }
 }

@@ -51,7 +51,7 @@ function FullConfirmation({ order, locale }: { order: Order; locale: 'en' | 'ar'
   return (
     <div className="mx-auto flex max-w-[720px] flex-col gap-32 px-24 py-96">
       <div className="flex flex-col items-center gap-16 text-center">
-        <h1 className="font-display text-heading-1 tracking-display text-ink">Thank you — order placed</h1>
+        <h1 className="font-display text-heading-1 tracking-display text-ink">Thank you, order placed</h1>
         <p className="font-body text-body text-ink-70">
           Order <span className="font-medium text-ink tabular-nums">{order.orderNumber}</span>. A confirmation is on its way
           to {order.guestEmail ?? 'your email'}.

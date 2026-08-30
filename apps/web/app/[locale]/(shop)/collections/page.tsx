@@ -21,19 +21,19 @@ const COLLECTIONS = [
     slug: 'new-in',
     name: "Lawn '26, Vol 1",
     subtitle: '42 designs, in stock in Dubai',
-    image: '/campaigns/lawn-26-vol1-hero.jpg',
+    image: '/campaigns/lulwah-hero-lawn.jpg',
   },
   {
     slug: 'eid',
     name: 'Eid Edit',
     subtitle: 'Festive weight, festive work',
-    image: '/campaigns/eid-edit-2026.jpg',
+    image: '/campaigns/lulwah-editorial-eid.jpg',
   },
   {
     slug: 'formal-wedding',
     name: "Wedding Festive '26",
-    subtitle: 'Barat, walima, nikkah — three worlds, one edit',
-    image: '/campaigns/panel-formal.jpg',
+    subtitle: 'Barat, walima, nikkah: three worlds, one edit',
+    image: '/campaigns/lulwah-tile-formal.jpg',
   },
 ] as const;
 

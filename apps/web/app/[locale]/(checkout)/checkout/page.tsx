@@ -63,7 +63,7 @@ const CheckoutSchema = z.object({
   firstName: z.string().min(1, 'First name is required.'),
   lastName: z.string().min(1, 'Last name is required.'),
   emirate: Emirate,
-  area: z.string().min(1, 'Area is required — e.g. Al Barsha, JLT.'),
+  area: z.string().min(1, 'Area is required, e.g. Al Barsha, JLT.'),
   buildingName: z.string().min(1, 'Building or villa name is required.'),
   apartment: z.string().optional(),
   street: z.string().optional(),
@@ -372,7 +372,7 @@ export default function CheckoutPage() {
               <PaymentOption
                 value="card"
                 label="Card"
-                description="Visa, Mastercard — 3D Secure"
+                description="Visa, Mastercard, 3D Secure"
                 checked={paymentMethod === 'card'}
                 onSelect={() => handleChoosePaymentMethod('card')}
               />
@@ -438,12 +438,12 @@ export default function CheckoutPage() {
             ) : null}
 
             {paymentMethod === 'cod' && codOtpVerified ? (
-              <p className="mt-16 font-body text-body-sm text-success">Phone verified — ready to place your order.</p>
+              <p className="mt-16 font-body text-body-sm text-success">Phone verified. Ready to place your order.</p>
             ) : null}
 
             {paymentMethod === 'card' && intentMutation.data?.redirectUrl && !isRedirectingToPayment ? (
               <p className="mt-16 font-body text-body-sm text-success">
-                Ready — you&apos;ll be sent to Ziina&apos;s secure payment page to complete your card payment.
+                Ready. You&apos;ll be sent to Ziina&apos;s secure payment page to complete your card payment.
               </p>
             ) : null}
 

@@ -27,7 +27,7 @@ export const BRANDS: SeedBrand[] = [
   { name: 'Asim Jofa', slug: 'asim-jofa', countryOfOrigin: 'PK', description: 'Festive and bridal houses of Lahore silk, karandi and banarsi, zari and gota work.' },
   { name: 'Sana Safinaz', slug: 'sana-safinaz', countryOfOrigin: 'PK', description: 'Luxury prêt and lawn with a signature true-to-brand-chart fit, closer to a UK 8 at Small.' },
   { name: 'Maria B', slug: 'maria-b', countryOfOrigin: 'PK', description: 'Formal jamawar and festive chiffon, tilla and dabka on heavy hand-set borders.' },
-  { name: 'Gul Ahmed', slug: 'gul-ahmed', countryOfOrigin: 'PK', description: "Pakistan's largest textile house — cambric, khaddar and lawn at everyday prices." },
+  { name: 'Gul Ahmed', slug: 'gul-ahmed', countryOfOrigin: 'PK', description: "Pakistan's largest textile house, known for cambric, khaddar and lawn at everyday prices." },
   { name: 'Elan', slug: 'elan', countryOfOrigin: 'PK', description: 'Organza and banarsi eveningwear, mirror work and hand embroidery for party and nikkah.' },
 ];
 
@@ -140,7 +140,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#f2efe9',
     basePriceFils: 27_500,
     variants: [{ sku: 'KHAS-25-088-OW', color: 'Off White', onHand: 0 }],
-    descriptionEn: 'Khaddar holds heat better than lawn — this is a winter-weight suit, block-printed by hand in Karachi.',
+    descriptionEn: 'Khaddar holds heat better than lawn. This winter-weight suit is block-printed by hand in Karachi.',
   },
   {
     title: 'Rani Pink Cambric, 2 Piece',
@@ -159,7 +159,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#c2185b',
     basePriceFils: 13_900,
     variants: [{ sku: 'KHAS-26-045-RP', color: 'Rani Pink', onHand: 22 }],
-    descriptionEn: 'Shirt and trouser only, screen-printed on cambric — pair with a dupatta from Dupattas & Shawls or wear the shirt over jeans.',
+    descriptionEn: 'Shirt and trouser only, screen-printed on cambric. Pair it with a dupatta from Dupattas & Shawls, or wear the shirt over jeans.',
   },
   {
     title: 'Mint Cotton Net Kurti',
@@ -181,7 +181,7 @@ export const PRODUCTS: SeedProduct[] = [
       { sku: 'KHAS-PRT-26-019-S', size: 'S', onHand: 6 },
       { sku: 'KHAS-PRT-26-019-M', size: 'M', onHand: 9 },
     ],
-    descriptionEn: 'A single-piece kurti with an embroidered yoke — true to Khaadi\'s own prêt sizing, not scaled from a Western chart.',
+    descriptionEn: 'A single-piece kurti with an embroidered yoke, true to Khaadi\'s own prêt sizing rather than scaled from a Western chart.',
   },
   {
     title: 'Gold Eid Lawn Luxe, 3 Piece',
@@ -202,7 +202,7 @@ export const PRODUCTS: SeedProduct[] = [
     compareAtPriceFils: 38_900,
     badges: ['limited'],
     variants: [{ sku: 'KHAS-EID-26-012-GD', color: 'Gold', onHand: 4 }],
-    descriptionEn: "Khaadi's Eid luxe line — sequin-scattered lawn with an organza dupatta finished on all four sides.",
+    descriptionEn: "Sequin-scattered lawn from Khaadi's Eid luxe line, with an organza dupatta finished on all four sides.",
   },
   {
     title: 'Bridal Silk, Custom Stitched',
@@ -224,7 +224,7 @@ export const PRODUCTS: SeedProduct[] = [
     stitchingPriceFils: 12_000,
     stitchingLeadDays: 10,
     variants: [{ sku: 'KHAS-BRD-26-003-MR', color: 'Deep Maroon', onHand: 2 }],
-    descriptionEn: 'Pure silk with hand-set zari and resham on the shirt front. We stitch to your measurements — allow 10 days.',
+    descriptionEn: 'Pure silk with hand-set zari and resham on the shirt front. We stitch to your measurements, so allow 10 days.',
   },
 
   // --- Asim Jofa ----------------------------------------------------------
@@ -246,7 +246,7 @@ export const PRODUCTS: SeedProduct[] = [
     basePriceFils: 42_500,
     badges: ['limited'],
     variants: [{ sku: 'AJ-LAWN-26-3B-MG', color: 'Mehndi Green', onHand: 6 }],
-    descriptionEn: 'Zari and resham on karandi — heavier than lawn, cut for festive daywear rather than high-summer heat.',
+    descriptionEn: 'Zari and resham on karandi, heavier than lawn and cut for festive daywear rather than high-summer heat.',
   },
   {
     title: 'Banarsi Bridal, 3 Piece',
@@ -271,7 +271,7 @@ export const PRODUCTS: SeedProduct[] = [
     stitchingLeadDays: 14,
     badges: ['limited', 'last_pieces'],
     variants: [{ sku: 'AJ-BRD-26-002-MR', color: 'Deep Maroon', onHand: 1 }],
-    descriptionEn: 'Woven banarsi with hand-set gota and zari border. One piece left in this colourway — stitching adds 10–14 days.',
+    descriptionEn: 'Woven banarsi with hand-set gota and zari border. Only one piece left in this colourway, and stitching adds 10–14 days.',
   },
   {
     title: 'Chiffon Eid Edit, 3 Piece',
@@ -290,7 +290,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#e2725b',
     basePriceFils: 38_000,
     variants: [{ sku: 'AJ-EID-26-021-CR', color: 'Coral', onHand: 5 }],
-    descriptionEn: 'Shirt front pre-stitched at the neckline — finish the hem to your length. Tilla border on both dupatta edges.',
+    descriptionEn: 'Shirt front pre-stitched at the neckline; finish the hem to your own length. Tilla border on both dupatta edges.',
   },
   {
     title: 'Organza Nikkah Set',
@@ -312,7 +312,7 @@ export const PRODUCTS: SeedProduct[] = [
     stitchingPriceFils: 12_000,
     stitchingLeadDays: 10,
     variants: [{ sku: 'AJ-NIK-26-014-EM', color: 'Emerald', onHand: 3 }],
-    descriptionEn: 'Mirror work over hand embroidery on organza, cut for a nikkah guest — stitched to measurement, ready in 10 days.',
+    descriptionEn: 'Mirror work over hand embroidery on organza, cut for a nikkah guest. Stitched to measurement, ready in 10 days.',
   },
   {
     title: 'Silk Jacquard Winter Shawl',
@@ -331,7 +331,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#3a3a3a',
     basePriceFils: 18_500,
     variants: [{ sku: 'AJ-WIN-26-009-CH', color: 'Charcoal', onHand: 11 }],
-    descriptionEn: 'A single jacquard shawl, woven with a self-tone naqshi border — layers over any winter suit.',
+    descriptionEn: 'A single jacquard shawl, woven with a self-tone naqshi border. Layers over any winter suit.',
   },
 
   // --- Sana Safinaz ---------------------------------------------------------
@@ -360,7 +360,7 @@ export const PRODUCTS: SeedProduct[] = [
       { sku: 'SS-PRET-26-041-L', size: 'L', onHand: 0 },
       { sku: 'SS-PRET-26-041-XL', size: 'XL', onHand: 0 },
     ],
-    descriptionEn: "A single-piece kurti in Sana Safinaz's standard prêt sizing — true to the brand's own chart, which runs closer to a UK 8 at Small.",
+    descriptionEn: "A single-piece kurti in Sana Safinaz's standard prêt sizing, true to the brand's own chart, which runs closer to a UK 8 at Small.",
   },
   {
     title: 'Luxury Chiffon Eid, 3 Piece',
@@ -380,7 +380,7 @@ export const PRODUCTS: SeedProduct[] = [
     basePriceFils: 46_000,
     isFeatured: true,
     variants: [{ sku: 'SS-EID-26-018-IG', color: 'Ivory Gold', onHand: 7 }],
-    descriptionEn: 'This season\'s Eid luxury edit — sequin placement follows the print, not scattered generically.',
+    descriptionEn: 'This season\'s Eid luxury edit follows the print for sequin placement, rather than scattering it generically.',
   },
   {
     title: 'Formal Organza Gharara Set',
@@ -402,7 +402,7 @@ export const PRODUCTS: SeedProduct[] = [
       { sku: 'SS-FRM-26-033-S', size: 'S', onHand: 3 },
       { sku: 'SS-FRM-26-033-M', size: 'M', onHand: 4 },
     ],
-    descriptionEn: 'Fully stitched gharara set, ready to wear — hand embroidery on the shirt front and gharara hem.',
+    descriptionEn: 'Fully stitched gharara set, ready to wear, with hand embroidery on the shirt front and gharara hem.',
   },
   {
     title: 'Signature Print Lawn, 2 Piece',
@@ -421,7 +421,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#87ceeb',
     basePriceFils: 15_900,
     variants: [{ sku: 'SS-LAWN-26-004-SB', color: 'Sky Blue', onHand: 18 }],
-    descriptionEn: "This year's signature print, unstitched shirt and trouser — one of the brand's most-repeated lawn motifs.",
+    descriptionEn: "This year's signature print, in an unstitched shirt and trouser, is one of the brand's most-repeated lawn motifs.",
   },
   {
     title: 'Velvet Winter Shawl, Naqshi Border',
@@ -440,7 +440,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#2f4f2f',
     basePriceFils: 21_000,
     variants: [{ sku: 'SS-WIN-26-051-BG', color: 'Bottle Green', onHand: 9 }],
-    descriptionEn: 'Velvet shawl with a self-embroidered naqshi border — heavier drape than jacquard, for cooler evenings.',
+    descriptionEn: 'Velvet shawl with a self-embroidered naqshi border. Drapes heavier than jacquard, good for cooler evenings.',
   },
   {
     title: 'Cotton Net Casual Set, 2 Piece',
@@ -459,7 +459,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#f3e5ab',
     basePriceFils: 19_500,
     variants: [{ sku: 'SS-CAS-26-060-M', size: 'M', onHand: 12 }],
-    descriptionEn: 'Ready-to-wear shirt and trouser set — no dupatta included, styled for a casual daytime look.',
+    descriptionEn: 'Ready-to-wear shirt and trouser set, no dupatta included, styled for a casual daytime look.',
   },
 
   // --- Maria B --------------------------------------------------------------
@@ -490,7 +490,7 @@ export const PRODUCTS: SeedProduct[] = [
       { sku: 'MB-FEST-26-019-WN', color: 'Wine', onHand: 0 },
       { sku: 'MB-FEST-26-019-EM', color: 'Emerald', onHand: 0 },
     ],
-    descriptionEn: 'Heavy jamawar with hand-set tilla and dabka on the shirt front and border. We stitch to your measurements — allow 10–14 days.',
+    descriptionEn: 'Heavy jamawar with hand-set tilla and dabka on the shirt front and border. We stitch to your measurements, so allow 10–14 days.',
   },
   {
     title: 'Mustard Chiffon, 2 Piece',
@@ -510,7 +510,7 @@ export const PRODUCTS: SeedProduct[] = [
     basePriceFils: 21_900,
     badges: ['new'],
     variants: [{ sku: 'MB-FEST-26-071-MU', color: 'Mustard', onHand: 9 }],
-    descriptionEn: 'Shirt front is pre-stitched at the neckline and sides — finish the hem and sleeves to your length.',
+    descriptionEn: 'Shirt front is pre-stitched at the neckline and sides; finish the hem and sleeves to your own length.',
   },
   {
     title: 'Classic Lawn, 3 Piece',
@@ -529,7 +529,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#c66b3d',
     basePriceFils: 17_500,
     variants: [{ sku: 'MB-LAWN-26-102-TC', color: 'Terracotta', onHand: 26 }],
-    descriptionEn: "Maria B's everyday print line — matching printed dupatta, no embroidery, priced for the summer rotation.",
+    descriptionEn: "Maria B's everyday print line, with a matching printed dupatta and no embroidery, priced for the summer rotation.",
   },
   {
     title: 'Eid Luxury Organza, 3 Piece',
@@ -549,7 +549,7 @@ export const PRODUCTS: SeedProduct[] = [
     basePriceFils: 52_000,
     compareAtPriceFils: 61_000,
     variants: [{ sku: 'MB-EID-26-036-BL', color: 'Blush', onHand: 3 }],
-    descriptionEn: "The brand's Eid luxury organza — hand-embroidered panels on the shirt front, sequins along the dupatta border.",
+    descriptionEn: "The brand's Eid luxury organza has hand-embroidered panels on the shirt front and sequins along the dupatta border.",
   },
   {
     title: 'Bridal Silk Gharara',
@@ -612,7 +612,7 @@ export const PRODUCTS: SeedProduct[] = [
     basePriceFils: 12_900,
     compareAtPriceFils: 15_900,
     variants: [{ sku: 'GA-SUM-26-233-IV', color: 'Ivory', onHand: 31 }],
-    descriptionEn: 'Shirt and trouser only — pair with a dupatta from Dupattas & Shawls, or wear as a kurti over jeans.',
+    descriptionEn: 'Shirt and trouser only. Pair it with a dupatta from Dupattas & Shawls, or wear it as a kurti over jeans.',
   },
   {
     title: 'Khaddar Winter, 3 Piece',
@@ -631,7 +631,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#3a3a3a',
     basePriceFils: 16_500,
     variants: [{ sku: 'GA-WIN-26-077-CH', color: 'Charcoal', onHand: 14 }],
-    descriptionEn: 'Khaddar shirt, trouser and printed cotton dupatta — Gul Ahmed\'s winter-weight everyday line.',
+    descriptionEn: 'Khaddar shirt, trouser and printed cotton dupatta, from Gul Ahmed\'s winter-weight everyday line.',
   },
   {
     title: 'Eid Lawn Deluxe, 3 Piece',
@@ -652,7 +652,7 @@ export const PRODUCTS: SeedProduct[] = [
     compareAtPriceFils: 31_000,
     badges: ['bestseller'],
     variants: [{ sku: 'GA-EID-26-015-PC', color: 'Peach', onHand: 8 }],
-    descriptionEn: "Gul Ahmed's Eid deluxe line — hand-embroidered neckline over digital print, chiffon dupatta.",
+    descriptionEn: "Gul Ahmed's Eid deluxe line has a hand-embroidered neckline over digital print, with a chiffon dupatta.",
   },
   {
     title: 'Pret Co-ord Set',
@@ -674,7 +674,7 @@ export const PRODUCTS: SeedProduct[] = [
       { sku: 'GA-PRT-26-091-S', size: 'S', onHand: 5 },
       { sku: 'GA-PRT-26-091-M', size: 'M', onHand: 7 },
     ],
-    descriptionEn: 'Matching top and trouser co-ord, cotton with a screen-printed border — no dupatta needed.',
+    descriptionEn: 'Matching top and trouser co-ord, cotton with a screen-printed border, no dupatta needed.',
   },
   {
     title: 'Organza Party Wear',
@@ -693,7 +693,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#1b263b',
     basePriceFils: 29_900,
     variants: [{ sku: 'GA-PTY-26-028-NV', color: 'Navy', onHand: 6 }],
-    descriptionEn: 'Fully stitched party set, sequin placement along the neckline and hem — ready to wear.',
+    descriptionEn: 'Fully stitched party set, ready to wear, with sequin placement along the neckline and hem.',
   },
 
   // --- Elan -------------------------------------------------------------------
@@ -716,7 +716,7 @@ export const PRODUCTS: SeedProduct[] = [
     compareAtPriceFils: 76_000,
     badges: ['bestseller'],
     variants: [{ sku: 'ELN-BRD-26-006-NR', color: 'Noir', size: 'M', onHand: 5 }],
-    descriptionEn: "Mirror work over hand embroidery on a fully-stitched gharara set — Elan's standard formal sizing, ready to wear.",
+    descriptionEn: "Mirror work over hand embroidery on a fully-stitched gharara set, in Elan's standard formal sizing and ready to wear.",
   },
   {
     title: 'Luxury Lawn Eid, 3 Piece',
@@ -735,7 +735,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#0047ab',
     basePriceFils: 34_000,
     variants: [{ sku: 'ELN-EID-26-011-CB', color: 'Cobalt', onHand: 7 }],
-    descriptionEn: "Elan's Eid luxury lawn — tilla border on an organza dupatta, digital print exclusive to this drop.",
+    descriptionEn: "Elan's Eid luxury lawn has a tilla border on an organza dupatta, with a digital print exclusive to this drop.",
   },
   {
     title: 'Bridal Banarsi Set',
@@ -758,7 +758,7 @@ export const PRODUCTS: SeedProduct[] = [
     stitchingLeadDays: 14,
     badges: ['limited'],
     variants: [{ sku: 'ELN-BRD-26-019-WN', color: 'Wine', onHand: 2 }],
-    descriptionEn: 'Woven banarsi with hand-set zari, dabka and gota — Elan\'s barat line, stitched to measurement.',
+    descriptionEn: 'Woven banarsi with hand-set zari, dabka and gota, from Elan\'s barat line, stitched to measurement.',
   },
   {
     title: 'Chiffon Formal, 2 Piece',
@@ -777,7 +777,7 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#c2185b',
     basePriceFils: 31_500,
     variants: [{ sku: 'ELN-FRM-26-025-FU', color: 'Fuchsia', onHand: 4 }],
-    descriptionEn: 'Pre-stitched neckline and sides, hand embroidery scattered across the shirt front — finish to your length.',
+    descriptionEn: 'Pre-stitched neckline and sides, hand embroidery scattered across the shirt front. Finish to your own length.',
   },
   {
     title: 'Velvet Winter Shawl',
@@ -796,6 +796,6 @@ export const PRODUCTS: SeedProduct[] = [
     colorHex: '#5c2a4d',
     basePriceFils: 19_900,
     variants: [{ sku: 'ELN-WIN-26-003-PL', color: 'Plum', onHand: 0 }],
-    descriptionEn: 'Velvet shawl with a tonal naqshi border, sold on its own — layers over any winter suit.',
+    descriptionEn: 'Velvet shawl with a tonal naqshi border, sold on its own. Layers over any winter suit.',
   },
 ];

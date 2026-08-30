@@ -24,7 +24,7 @@ export default function LocaleError({ error, reset }: { error: Error & { digest?
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-16 px-24 py-64 text-center">
       <h1 className="font-display text-heading-1 tracking-display text-ink">Something went wrong</h1>
       <p className="max-w-[480px] font-body text-body text-mukaish">
-        We couldn&apos;t load this page. This is usually temporary — try again in a moment.
+        We couldn&apos;t load this page. This is usually temporary, so try again in a moment.
       </p>
       <Button type="button" onClick={() => reset()}>
         Try again

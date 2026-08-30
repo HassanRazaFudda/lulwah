@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: PdpPageProps): Promise<Metada
   const detail = await getProductBySlug(slug);
   if (!detail) return {};
   return {
-    title: `${detail.product.title} — ${detail.brand.name}`,
+    title: `${detail.product.title} | ${detail.brand.name}`,
     description: detail.product.seo.descEn ?? detail.product.title,
   };
 }

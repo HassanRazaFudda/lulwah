@@ -12,7 +12,7 @@ const FAQ_ITEMS: AccordionItemData[] = [
     title: 'What does "unstitched" mean?',
     content: (
       <p>
-        The suit ships as fabric pieces — shirt, trouser, and usually a dupatta — rather than a finished, sewn
+        The suit ships as fabric pieces (shirt, trouser, and usually a dupatta) rather than a finished, sewn
         garment. You take it to your own tailor, or use our custom-stitching service at checkout.
       </p>
     ),
@@ -22,7 +22,7 @@ const FAQ_ITEMS: AccordionItemData[] = [
     title: 'How do brand sizes compare?',
     content: (
       <p>
-        Every Pakistani house sizes differently — Khaadi runs closer to a UK 8 at Small, Sana Safinaz closer to a UK
+        Every Pakistani house sizes differently. Khaadi runs closer to a UK 8 at Small, Sana Safinaz closer to a UK
         10. Check the size chart on each product page before ordering pret pieces.
       </p>
     ),

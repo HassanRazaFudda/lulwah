@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
   if (!brand) return {};
   return {
     title: brand.name,
-    description: `Shop ${brand.name} — Pakistani designer wear, delivered across the UAE in 2–4 days.`,
+    description: `Shop ${brand.name}: Pakistani designer wear, delivered across the UAE in 2–4 days.`,
   };
 }
 

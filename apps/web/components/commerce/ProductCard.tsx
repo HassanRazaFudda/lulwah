@@ -76,7 +76,7 @@ export function ProductCard({
     <div className={cx('group relative flex flex-col gap-12', className)}>
       {/* Media — 3:4, radius 0, no shadow/border (§13.5, §13.6). */}
       <div className="relative aspect-[3/4] overflow-hidden bg-pearl">
-        <Link href={href} aria-label={`${brandName} — ${title}`} className="absolute inset-0 block">
+        <Link href={href} aria-label={`${brandName}: ${title}`} className="absolute inset-0 block">
           <Image
             src={image.src}
             alt={image.alt}

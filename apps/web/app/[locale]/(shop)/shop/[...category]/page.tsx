@@ -72,7 +72,7 @@ interface PlpPageProps {
 
 export async function generateMetadata({ params }: PlpPageProps): Promise<Metadata> {
   const { category = [] } = await params;
-  const heading = category.length > 0 ? category.map(humanize).join(' — ') : 'Shop All';
+  const heading = category.length > 0 ? category.map(humanize).join(' / ') : 'Shop All';
   return {
     title: `${heading} in the UAE`,
     description: `Shop ${heading} from Pakistan's leading designer houses, delivered across the UAE in 2–4 days.`,
@@ -83,7 +83,7 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
   const { locale, category = [] } = await params;
   const search = await searchParams;
   const basePath = `/shop/${category.join('/')}`;
-  const heading = category.length > 0 ? category.map(humanize).join(' — ') : 'Shop All';
+  const heading = category.length > 0 ? category.map(humanize).join(' / ') : 'Shop All';
 
   const scope = await resolveShopSegments(category);
 
