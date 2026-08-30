@@ -323,6 +323,42 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
  * point of these URLs is `apps/web` rendering them correctly, which is what
  * this data is for.
  */
+/**
+ * `lulwah-*.jpg` images (hero, the stitching/occasion tiles, the Eid
+ * editorial) — real, styled South Asian formalwear/lawn photography,
+ * replacing the original `panel-*`/`occasion-*`/`eid-edit-2026` fabric-
+ * macro shots those same slots used before. Found live, reported by the
+ * user: a fabric-texture close-up is the wrong *kind* of image for a tile
+ * whose job is showing what an outfit looks like, not what the cloth feels
+ * like (the old `occasion-mehndi.jpg` — a green-and-gold brocade swatch,
+ * no garment, no styling — standing in for an actual "Mehndi" occasion
+ * tile was the clearest case of this). `video_banner`'s own
+ * `fabric-macro-jamawar.jpg` is untouched — that section's whole point
+ * (plan.md §15.2 §7: "a single fabric macro image, no text, pure rhythm")
+ * is texture, so it was never actually mismatched.
+ *
+ * Sourced from Unsplash (Unsplash License — free for commercial use, no
+ * permission/attribution required, though credited here anyway):
+ * Muneeb Malhotra ("Eastern dresses 2024" / "lawn eastern dresses" shoots
+ * — hero, unstitched/pret tiles, Eid editorial, Eid tile), iKshana
+ * Productions (formal/wedding tile, Barat/Walima tiles), Bulbul Ahmed
+ * (Mehndi and Everyday tiles). Every URL is a plain `images.unsplash.com`
+ * link — the free tier — never `plus.unsplash.com` (Unsplash+, a paid
+ * subscription tier with different terms this project has no license for;
+ * several premium results from the same searches were deliberately
+ * excluded for this reason).
+ *
+ * **Worth being direct about**: these are real, identifiable people's
+ * faces, which the *license* permits commercially but doesn't itself
+ * guarantee a model release for implying endorsement of a specific,
+ * unrelated brand — a different question from copyright, and the reason
+ * this project's own earlier photography (§9 of `docs/implemented-plan
+ * .md`) had deliberately avoided face-visible portraits. Used here as
+ * pre-launch placeholder content only, favoring shots where the garment
+ * is the clear focus over ones that read as a personal portrait — not a
+ * substitute for the client's own real photography before this site is
+ * ever public, which remains `plan.md` §29 risk #2 either way.
+ */
 async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, string>, collectionIdBySlug: Map<string, string>): Promise<void> {
   const media = (publicId: string, width: number, height: number) => ({ publicId, url: `/campaigns/${publicId}.jpg`, width, height });
 
@@ -332,7 +368,7 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
       settings: {
         headlineEn: "Lawn '26 — Volume One",
         headlineAr: "لان ٢٦ — الجزء الأول",
-        media: media('lawn-26-vol1-hero', 1600, 900),
+        media: media('lulwah-hero-lawn', 1600, 900),
         mediaMobile: null,
         videoUrl: null,
         linkLabelEn: 'Shop the collection',
@@ -359,9 +395,9 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
         titleEn: 'Shop by stitching',
         titleAr: 'تسوقي حسب الخياطة',
         tiles: [
-          { labelEn: 'Unstitched', labelAr: 'غير مخيط', image: media('panel-unstitched', 800, 1000), href: '/shop/unstitched' },
-          { labelEn: 'Ready to wear', labelAr: 'جاهز للارتداء', image: media('panel-pret', 800, 1000), href: '/shop/pret' },
-          { labelEn: 'Formal & wedding', labelAr: 'رسمي وزفاف', image: media('panel-formal', 800, 1000), href: '/shop/formal-wedding' },
+          { labelEn: 'Unstitched', labelAr: 'غير مخيط', image: media('lulwah-tile-unstitched', 1000, 1250), href: '/shop/unstitched' },
+          { labelEn: 'Ready to wear', labelAr: 'جاهز للارتداء', image: media('lulwah-tile-pret', 1000, 1250), href: '/shop/pret' },
+          { labelEn: 'Formal & wedding', labelAr: 'رسمي وزفاف', image: media('lulwah-tile-formal', 1000, 1250), href: '/shop/formal-wedding' },
         ],
       },
       sortOrder: 2,
@@ -376,7 +412,7 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
         titleAr: 'إصدار العيد',
         bodyEn: "Forty-two pieces from Pakistan's leading fashion houses — five silhouettes, one occasion.",
         bodyAr: 'اثنان وأربعون قطعة من دور الأزياء الرائدة في باكستان.',
-        media: media('eid-edit-2026', 1200, 1500),
+        media: media('lulwah-editorial-eid', 1200, 1500),
         linkHref: '/collections/eid-edition-26',
         mediaPosition: 'left',
       },
@@ -415,11 +451,11 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
         titleEn: 'Shop by occasion',
         titleAr: 'تسوقي حسب المناسبة',
         tiles: [
-          { labelEn: 'Eid', labelAr: 'العيد', image: media('occasion-eid', 800, 1000), href: '/collections/eid-edition-26' },
-          { labelEn: 'Barat', labelAr: 'البرات', image: media('occasion-barat', 800, 1000), href: '/shop/formal-wedding' },
-          { labelEn: 'Mehndi', labelAr: 'المهندي', image: media('occasion-mehndi', 800, 1000), href: '/shop/formal-wedding' },
-          { labelEn: 'Walima', labelAr: 'الوليمة', image: media('occasion-walima', 800, 1000), href: '/shop/formal-wedding' },
-          { labelEn: 'Everyday', labelAr: 'يومي', image: media('occasion-everyday', 800, 1000), href: '/shop/pret' },
+          { labelEn: 'Eid', labelAr: 'العيد', image: media('lulwah-occasion-eid', 1000, 1250), href: '/collections/eid-edition-26' },
+          { labelEn: 'Barat', labelAr: 'البرات', image: media('lulwah-occasion-barat', 1000, 1250), href: '/shop/formal-wedding' },
+          { labelEn: 'Mehndi', labelAr: 'المهندي', image: media('lulwah-occasion-mehndi', 1000, 1250), href: '/shop/formal-wedding' },
+          { labelEn: 'Walima', labelAr: 'الوليمة', image: media('lulwah-occasion-walima', 1000, 1250), href: '/shop/formal-wedding' },
+          { labelEn: 'Everyday', labelAr: 'يومي', image: media('lulwah-occasion-everyday', 1000, 1250), href: '/shop/pret' },
         ],
       },
       sortOrder: 7,
