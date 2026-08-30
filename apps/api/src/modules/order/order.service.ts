@@ -678,6 +678,28 @@ export async function getCustomerCodRisk(actor: AuthenticatedUser, userId: strin
   return { codOrdersPlaced, codOrdersCancelled, cancelledRate: codOrdersPlaced > 0 ? codOrdersCancelled / codOrdersPlaced : 0 };
 }
 
+/**
+ * `engagement` module's exclusive read for `POST /me/reviews`'s
+ * server-side "isVerifiedPurchase" check (plan.md §5.3: never `OrderModel`
+ * directly) — a narrow, deliberate extension of this module, same category
+ * as `hasPriorOrders`/`getActiveCartForUser`-style additions above made for
+ * another module's sake. No `assertPermission` here: this is a self-service
+ * check on the caller's own purchase history (`review.service.ts` always
+ * calls it with the review-submitter's own `userId`), the same trust
+ * `cart.service.ts#recalculate` already extends to `identityService.me()`.
+ *
+ * "Completed" is read as `delivered`, not any post-payment status
+ * (`order.repository.ts#SPEND_COUNTED_STATUSES` counts `confirmed` onward
+ * toward spend/LTV — a different question). `Review.fitFeedback` asks how
+ * the garment actually fit, which nobody can honestly answer before
+ * physically receiving it, so `delivered` is the only bar this codebase
+ * treats as a genuine, review-worthy completed purchase.
+ */
+export async function findDeliveredOrderForProduct(userId: string, productId: string): Promise<string | null> {
+  const result = await repo.findDeliveredOrderForUserAndProduct(userId, productId);
+  return result?.orderId ?? null;
+}
+
 /** `GET /orders/track` — plan.md §8.7.5. No login: the order number plus
  *  the email/phone on file together stand in for authentication. Rate-
  *  limited at the router (`order.routes.ts`, reusing `shared/rate-limit.ts`)

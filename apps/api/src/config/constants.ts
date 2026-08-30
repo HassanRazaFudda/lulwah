@@ -106,3 +106,18 @@ export const STANDARD_SHIPPING_FEE_FILS = 2_000;
  * scalable. See `customer.service.ts#adminListCustomers`'s doc comment.
  */
 export const CUSTOMER_LIST_SORT_SCAN_CAP = 2_000;
+
+/**
+ * `engagement`'s guest wishlist identity — the same guest/logged-in split
+ * `CART_COOKIE_NAME` establishes for `cart` (plan.md §8.5), applied to
+ * `wishlists` (plan.md §7.13: "`userId|guestId`"). Deliberately a separate
+ * cookie from `lulwah_cart`: a wishlist is a distinct resource with its own
+ * lifetime, and this cookie carries a bare identity token (`guestId`), not
+ * an externally-addressable resource id the way `lulwah_cart` carries a
+ * real `cartId` — every wishlist route is `/me/wishlist*`, never
+ * `/wishlist/:id`, so there's nothing else for the cookie to key. Not
+ * `httpOnly` for the same reason `lulwah_cart` isn't: a storefront wishlist
+ * icon legitimately wants to read/react to it client-side.
+ */
+export const WISHLIST_GUEST_COOKIE_NAME = 'lulwah_wishlist_guest';
+export const WISHLIST_GUEST_COOKIE_TTL_MS = 30 * 24 * 60 * 60_000;

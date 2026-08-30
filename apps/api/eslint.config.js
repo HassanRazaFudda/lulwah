@@ -26,7 +26,7 @@ import { baseConfig } from '@lulwah/config/eslint.config.js';
 // this merge). Only resolving the two names this specific merge actually
 // contributed (`content`, `audit`) to keep this fix scoped to the conflict
 // at hand.
-const MODULES = ['identity', 'catalog', 'inventory', 'cart', 'pricing', 'content', 'audit'];
+const MODULES = ['identity', 'catalog', 'inventory', 'cart', 'pricing', 'content', 'audit', 'engagement'];
 
 const moduleBoundaryZones = MODULES.map((moduleName) => ({
   target: `./src/modules/${moduleName}/**/*`,
