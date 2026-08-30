@@ -12,6 +12,7 @@ import type { DataTableColumn, DataTableSort } from '../../../components/DataTab
 import { PageHeader } from '../../../components/PageHeader';
 import { ProductStatusPill } from '../../../components/ProductStatusPill';
 import { Skeleton } from '../../../components/Skeleton';
+import { resolveAssetUrl } from '../../../lib/asset-url';
 import { useAdminBrandsQuery } from '../../../lib/queries/catalog-refs';
 import { useAdminProductsQuery } from '../../../lib/queries/products';
 
@@ -103,7 +104,7 @@ export default function ProductsPage() {
           // A plain <img>, not next/image — the admin console has no
           // imgproxy loader wired up (plan.md §8.3), so next/image's
           // default loader would just fail against these pasted-URL images.
-          <img src={url} alt="" className="h-[40px] w-[40px] object-cover" />
+          <img src={resolveAssetUrl(url)} alt="" className="h-[40px] w-[40px] object-cover" />
         ) : (
           <div className="h-[40px] w-[40px] bg-pearl" />
         );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { MediaAssetType } from '@lulwah/contracts';
 import { Button, Input } from '@lulwah/ui';
 import { Skeleton } from '../Skeleton';
+import { resolveAssetUrl } from '../../lib/asset-url';
 import { pushToast } from '../../lib/stores/toast-store';
 import {
   useAdminMediaAssetsQuery,
@@ -206,7 +207,7 @@ export function MediaLibraryPanel() {
                 Select
               </label>
               {/* Plain <img> — no imgproxy loader in local dev (plan.md §8.3). */}
-              <img src={asset.url} alt={asset.alt} className="aspect-[3/4] w-full border border-line object-cover" />
+              <img src={resolveAssetUrl(asset.url)} alt={asset.alt} className="aspect-[3/4] w-full border border-line object-cover" />
               <p className="truncate text-body-sm text-ink">{asset.alt || <span className="italic text-ink-70">No alt text</span>}</p>
               <p className="truncate text-body-sm text-ink-70">{asset.folder || '(root)'}{asset.tags.length > 0 ? ` · ${asset.tags.join(', ')}` : ''}</p>
               <button type="button" className="self-start text-body-sm text-danger hover:underline" onClick={() => handleDelete(asset.id, asset.alt)}>

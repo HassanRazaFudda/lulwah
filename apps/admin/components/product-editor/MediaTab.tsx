@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ProductMediaItem } from '@lulwah/contracts';
 import { Button, Input } from '@lulwah/ui';
+import { resolveAssetUrl } from '../../lib/asset-url';
 import { useAddProductMediaMutation } from '../../lib/queries/products';
 import { selectClassName } from './field-styles';
 
@@ -76,7 +77,7 @@ export function MediaTab({ productId, media }: { productId: string; media: Produ
           .map((item) => (
             <figure key={item.id} className="flex flex-col gap-4">
               {/* Plain <img> — no imgproxy loader in local dev (plan.md §8.3); pasted-URL media previews render as-is. */}
-              <img src={item.url} alt={item.alt} className="aspect-[3/4] w-full border border-line object-cover" />
+              <img src={resolveAssetUrl(item.url)} alt={item.alt} className="aspect-[3/4] w-full border border-line object-cover" />
               <figcaption className="text-body-sm text-ink-70">
                 {item.isPrimary ? <span className="font-semibold text-zamurrad">Primary · </span> : null}
                 {item.alt || <span className="italic">No alt text</span>}

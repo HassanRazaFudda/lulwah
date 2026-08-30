@@ -2,6 +2,7 @@
 
 import type { MediaRef } from '@lulwah/contracts';
 import { Input } from '@lulwah/ui';
+import { resolveAssetUrl } from '../../lib/asset-url';
 
 /**
  * A pasted-URL `MediaRef` input, reused across hero/banner/menu-featured/
@@ -37,7 +38,7 @@ export function MediaRefField({
       {value?.url ? (
         // Plain <img> — no imgproxy loader in local dev (plan.md §8.3),
         // same precedent `MediaTab.tsx`/`products/page.tsx` already set.
-        <img src={value.url} alt="" className="h-[64px] w-[64px] border border-line object-cover" />
+        <img src={resolveAssetUrl(value.url)} alt="" className="h-[64px] w-[64px] border border-line object-cover" />
       ) : null}
     </div>
   );
