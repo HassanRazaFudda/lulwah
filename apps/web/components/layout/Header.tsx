@@ -151,9 +151,22 @@ export function Header() {
         // patches of the Hero photo. A scrim guarantees contrast for both
         // regardless of what's directly behind them, without touching
         // Hero.tsx or making Sale's colour conditional on scroll state.
+        //
+        // `h-160`, not `inset-0` (still reported unreadable after the
+        // first attempt) — `inset-0` sized the scrim to exactly this
+        // header's own 64px box, so `bg-gradient-to-b`'s 50% stop (where
+        // the fade is already most of the way to transparent) landed
+        // almost exactly on the vertically-centred logo/nav row, leaving
+        // real content sitting in the *weakest* part of the gradient
+        // instead of the strongest. A scrim taller than the header itself
+        // — overflowing past its bottom edge into the Hero below, which
+        // `header` never clips since nothing here sets `overflow-hidden`
+        // — keeps the whole header's content inside the gradient's dark,
+        // high-opacity top portion, fading out gracefully into the Hero
+        // beneath rather than inside the header's own content row.
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink/55 via-ink/15 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-0 h-160 bg-gradient-to-b from-ink/65 via-ink/40 to-transparent"
         />
       ) : null}
       <div className="relative mx-auto flex h-64 max-w-[1600px] items-center justify-between px-24 lg:px-[clamp(24px,5vw,88px)]">
