@@ -7,19 +7,31 @@ import { useTranslations } from 'next-intl';
 import { cx } from '@lulwah/ui';
 import { Link, usePathname } from '@/i18n/navigation';
 
-// Client-provided mark (logo.png at the repo root) extracted onto a
-// transparent background in two colorways: gold for the transparent
-// header state over the dark hero, ink for the solid-paper state
-// elsewhere (plan.md §15.1). Native aspect ratio preserved (731:640)
-// so next/image never has to guess and shift layout. Both files already
-// existed in `public/brand/` untouched by this fix -- only the ink one
-// was ever actually referenced before now.
+// Client-provided mark (logo.png at the repo root), extracted onto a
+// transparent background. Native aspect ratio preserved (731:640) so
+// next/image never has to guess and shift layout.
+//
+// Only one source file now, not the previous gold/ink colorway pair --
+// found live, reported by the user, and this was the one complaint that
+// survived two rounds of scrim tuning (§8.x): both `logo-lockup-gold.png`
+// and `logo-lockup-ink.png` are extremely pale, softly-shaded "embossed
+// foil" exports -- barely legible even sitting on plain white, let alone
+// a photographic hero. No amount of scrim contrast behind them was ever
+// going to fix that; the asset itself has almost no internal contrast to
+// work with. Recolouring via `filter` instead of picking between two
+// pre-baked colourways sidesteps the source files' own softness
+// entirely: `brightness-0` forces every non-transparent pixel of
+// whichever file is loaded to pure black regardless of its original
+// shading (the alpha channel, which is what actually defines the
+// letterforms, is untouched), and `invert` flips that to pure white for
+// the dark/transparent header state. A solid white mark over the scrim
+// is also the more correct reading of plan.md §13.3's own colour law
+// anyway ("gold is metal, not paint -- hairlines ... never a large
+// fill") -- a large gold-filled logo would have been in tension with
+// that rule even if the source file had been bold enough to use as-is.
 const LOGO_ASPECT = 731 / 640;
 const LOGO_HEIGHT = 40;
-const LOGO_SRC = {
-  gold: '/brand/logo-lockup-gold.png',
-  ink: '/brand/logo-lockup-ink.png',
-} as const;
+const LOGO_SRC = '/brand/logo-lockup-ink.png';
 
 // Deviation: plan.md's full mega-menu (four link columns plus a
 // crossfading featured tile, §15.1) is not built here — it's a
@@ -205,12 +217,12 @@ export function Header() {
           className="absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
           <Image
-            src={isTransparent ? LOGO_SRC.gold : LOGO_SRC.ink}
+            src={LOGO_SRC}
             alt="Lulwah Fashion"
             width={Math.round(LOGO_HEIGHT * LOGO_ASPECT)}
             height={LOGO_HEIGHT}
             priority
-            className="h-[40px] w-auto"
+            className={cx('h-[40px] w-auto brightness-0', isTransparent && 'invert')}
           />
         </Link>
 
