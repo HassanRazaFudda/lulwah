@@ -12,6 +12,8 @@ import { HomeSectionModel } from '../home-section.model.js';
 import { BannerModel } from '../banner.model.js';
 import { MenuModel } from '../menu.model.js';
 import { PageModel } from '../page.model.js';
+import { LookbookModel } from '../lookbook.model.js';
+import { JournalPostModel } from '../journal.model.js';
 import { MediaAssetModel } from '../media-asset.model.js';
 
 /**
@@ -33,6 +35,8 @@ beforeAll(async () => {
     BannerModel.syncIndexes(),
     MenuModel.syncIndexes(),
     PageModel.syncIndexes(),
+    LookbookModel.syncIndexes(),
+    JournalPostModel.syncIndexes(),
     MediaAssetModel.syncIndexes(),
   ]);
 }, 60_000);
@@ -50,6 +54,8 @@ beforeEach(async () => {
     BannerModel.deleteMany({}),
     MenuModel.deleteMany({}),
     PageModel.deleteMany({}),
+    LookbookModel.deleteMany({}),
+    JournalPostModel.deleteMany({}),
     MediaAssetModel.deleteMany({}),
   ]);
 });
@@ -289,6 +295,212 @@ describe('pages', () => {
     const token = await createUserAndLogin(app, 'content');
     await request(app).post('/api/v1/admin/content/pages').set('Authorization', `Bearer ${token}`).send({ titleEn: 'About', slug: 'about' });
     const dup = await request(app).post('/api/v1/admin/content/pages').set('Authorization', `Bearer ${token}`).send({ titleEn: 'About Us', slug: 'about' });
+    expect(dup.status).toBe(409);
+  });
+});
+
+describe('lookbooks', () => {
+  it('round-trips a full admin CRUD flow (create -> read -> update -> read -> delete -> 404)', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+
+    const createRes = await request(app)
+      .post('/api/v1/admin/content/lookbooks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        titleEn: 'Eid Edit',
+        titleAr: 'اطلالة العيد',
+        gallery: [{ publicId: 'gallery-1', url: 'https://example.com/gallery-1.jpg' }],
+        status: 'draft',
+      });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.data.lookbook.slug).toBe('eid-edit');
+    expect(createRes.body.data.lookbook.gallery).toHaveLength(1);
+    expect(createRes.body.data.lookbook.gallery[0].publicId).toBe('gallery-1');
+    const id = createRes.body.data.lookbook.id as string;
+
+    const getRes = await request(app).get(`/api/v1/admin/content/lookbooks/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.data.lookbook.titleEn).toBe('Eid Edit');
+
+    const updateRes = await request(app)
+      .patch(`/api/v1/admin/content/lookbooks/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'Eid Edit — Reissued', sortOrder: 3 });
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.data.lookbook.titleEn).toBe('Eid Edit — Reissued');
+
+    const getAfterUpdateRes = await request(app).get(`/api/v1/admin/content/lookbooks/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getAfterUpdateRes.status).toBe(200);
+    expect(getAfterUpdateRes.body.data.lookbook.titleEn).toBe('Eid Edit — Reissued');
+    expect(getAfterUpdateRes.body.data.lookbook.sortOrder).toBe(3);
+
+    const deleteRes = await request(app).delete(`/api/v1/admin/content/lookbooks/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.status).toBe(200);
+
+    const getAfterDeleteRes = await request(app).get(`/api/v1/admin/content/lookbooks/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getAfterDeleteRes.status).toBe(404);
+  });
+
+  it('hides drafts from the public endpoints, exposes published ones, and 404s an unknown slug', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+
+    const draftRes = await request(app)
+      .post('/api/v1/admin/content/lookbooks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'Draft Look', status: 'draft' });
+    expect(draftRes.status).toBe(201);
+    const slug = draftRes.body.data.lookbook.slug as string;
+
+    const draftListRes = await request(app).get('/api/v1/content/lookbooks');
+    expect(draftListRes.status).toBe(200);
+    expect(draftListRes.body.data.lookbooks).toHaveLength(0);
+
+    const draftSlugRes = await request(app).get(`/api/v1/content/lookbooks/${slug}`);
+    expect(draftSlugRes.status).toBe(404);
+
+    const publishRes = await request(app)
+      .patch(`/api/v1/admin/content/lookbooks/${draftRes.body.data.lookbook.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+    expect(publishRes.status).toBe(200);
+
+    const publishedListRes = await request(app).get('/api/v1/content/lookbooks');
+    expect(publishedListRes.status).toBe(200);
+    expect(publishedListRes.body.data.lookbooks).toHaveLength(1);
+    expect(publishedListRes.body.data.lookbooks[0].slug).toBe(slug);
+    expect(publishedListRes.body.data.lookbooks[0]).not.toHaveProperty('status');
+
+    const publishedSlugRes = await request(app).get(`/api/v1/content/lookbooks/${slug}`);
+    expect(publishedSlugRes.status).toBe(200);
+    expect(publishedSlugRes.body.data.lookbook.titleEn).toBe('Draft Look');
+
+    const missingRes = await request(app).get('/api/v1/content/lookbooks/does-not-exist');
+    expect(missingRes.status).toBe(404);
+  });
+
+  it('rejects a duplicate slug (CONFLICT)', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+    await request(app).post('/api/v1/admin/content/lookbooks').set('Authorization', `Bearer ${token}`).send({ titleEn: 'Look', slug: 'look' });
+    const dup = await request(app).post('/api/v1/admin/content/lookbooks').set('Authorization', `Bearer ${token}`).send({ titleEn: 'Look Two', slug: 'look' });
+    expect(dup.status).toBe(409);
+  });
+});
+
+describe('journal', () => {
+  it('round-trips a full admin CRUD flow (create -> read -> update -> read -> delete -> 404)', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+
+    const createRes = await request(app)
+      .post('/api/v1/admin/content/journal')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'How Lawn Is Woven', excerptEn: 'A quick primer on the fabric.', status: 'draft' });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.data.post.slug).toBe('how-lawn-is-woven');
+    expect(createRes.body.data.post.publishedAt).toBeNull();
+    const id = createRes.body.data.post.id as string;
+
+    const getRes = await request(app).get(`/api/v1/admin/content/journal/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.data.post.titleEn).toBe('How Lawn Is Woven');
+
+    const updateRes = await request(app)
+      .patch(`/api/v1/admin/content/journal/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ excerptEn: 'An updated primer on the fabric.' });
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.data.post.excerptEn).toBe('An updated primer on the fabric.');
+
+    const getAfterUpdateRes = await request(app).get(`/api/v1/admin/content/journal/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getAfterUpdateRes.status).toBe(200);
+    expect(getAfterUpdateRes.body.data.post.excerptEn).toBe('An updated primer on the fabric.');
+
+    const deleteRes = await request(app).delete(`/api/v1/admin/content/journal/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.status).toBe(200);
+
+    const getAfterDeleteRes = await request(app).get(`/api/v1/admin/content/journal/${id}`).set('Authorization', `Bearer ${token}`);
+    expect(getAfterDeleteRes.status).toBe(404);
+  });
+
+  it('sanitizes rich-text body HTML on write, hides drafts publicly, sets publishedAt on first publish, and 404s an unknown slug', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+
+    const draftRes = await request(app)
+      .post('/api/v1/admin/content/journal')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        titleEn: 'Draft Post',
+        bodyEn: '<p>Real content.</p><script>alert(1)</script><img src=x onerror=alert(2)>',
+        status: 'draft',
+      });
+    expect(draftRes.status).toBe(201);
+    expect(draftRes.body.data.post.bodyEn).toContain('<p>Real content.</p>');
+    expect(draftRes.body.data.post.bodyEn).not.toContain('<script>');
+    expect(draftRes.body.data.post.bodyEn).not.toContain('onerror');
+    const slug = draftRes.body.data.post.slug as string;
+
+    const draftListRes = await request(app).get('/api/v1/content/journal');
+    expect(draftListRes.status).toBe(200);
+    expect(draftListRes.body.data.posts).toHaveLength(0);
+
+    const draftSlugRes = await request(app).get(`/api/v1/content/journal/${slug}`);
+    expect(draftSlugRes.status).toBe(404);
+
+    const publishRes = await request(app)
+      .patch(`/api/v1/admin/content/journal/${draftRes.body.data.post.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+    expect(publishRes.status).toBe(200);
+    expect(publishRes.body.data.post.publishedAt).toBeTruthy();
+
+    const publishedListRes = await request(app).get('/api/v1/content/journal');
+    expect(publishedListRes.status).toBe(200);
+    expect(publishedListRes.body.data.posts).toHaveLength(1);
+    expect(publishedListRes.body.data.posts[0].slug).toBe(slug);
+    expect(publishedListRes.body.data.posts[0]).not.toHaveProperty('status');
+
+    const publishedSlugRes = await request(app).get(`/api/v1/content/journal/${slug}`);
+    expect(publishedSlugRes.status).toBe(200);
+    expect(publishedSlugRes.body.data.post.titleEn).toBe('Draft Post');
+
+    const missingRes = await request(app).get('/api/v1/content/journal/does-not-exist');
+    expect(missingRes.status).toBe(404);
+  });
+
+  it('resolves journal_teaser postSlugs to real published posts, in request order, dropping drafts and unknown slugs', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+
+    const postA = await request(app)
+      .post('/api/v1/admin/content/journal')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'Post A', slug: 'post-a', status: 'published' });
+    const postB = await request(app)
+      .post('/api/v1/admin/content/journal')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'Post B', slug: 'post-b', status: 'published' });
+    const draftC = await request(app)
+      .post('/api/v1/admin/content/journal')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titleEn: 'Draft C', slug: 'post-c', status: 'draft' });
+    expect(postA.status).toBe(201);
+    expect(postB.status).toBe(201);
+    expect(draftC.status).toBe(201);
+
+    const res = await request(app).get('/api/v1/content/journal?slugs=post-b,post-c,post-a,unknown-slug');
+    expect(res.status).toBe(200);
+    expect(res.body.data.posts.map((p: { slug: string }) => p.slug)).toEqual(['post-b', 'post-a']);
+  });
+
+  it('rejects a duplicate slug (CONFLICT)', async () => {
+    const app = buildApp();
+    const token = await createUserAndLogin(app, 'content');
+    await request(app).post('/api/v1/admin/content/journal').set('Authorization', `Bearer ${token}`).send({ titleEn: 'Post', slug: 'post' });
+    const dup = await request(app).post('/api/v1/admin/content/journal').set('Authorization', `Bearer ${token}`).send({ titleEn: 'Post Two', slug: 'post' });
     expect(dup.status).toBe(409);
   });
 });

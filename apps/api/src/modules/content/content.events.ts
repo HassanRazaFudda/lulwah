@@ -14,6 +14,8 @@ export interface ContentEventMap {
   'page.published': { slug: string };
   'menu.updated': { location: string };
   'banner.updated': { bannerId: string };
+  'lookbook.published': { slug: string };
+  'journal.published': { slug: string };
 }
 
 class ContentEventBus extends EventEmitter {

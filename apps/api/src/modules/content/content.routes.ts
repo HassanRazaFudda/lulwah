@@ -3,6 +3,8 @@ import * as homeSectionController from './home-section.controller.js';
 import * as bannerController from './banner.controller.js';
 import * as menuController from './menu.controller.js';
 import * as pageController from './page.controller.js';
+import * as lookbookController from './lookbook.controller.js';
+import * as journalController from './journal.controller.js';
 import * as mediaAssetController from './media-asset.controller.js';
 import { requireContentRead, requireContentWrite } from './content.policy.js';
 
@@ -30,6 +32,10 @@ export function createContentRouter(): Router {
   router.get('/content/banners', bannerController.listPublic);
   router.get('/content/pages/:slug', pageController.getPublicBySlug);
   router.get('/content/menus/:key', menuController.getPublicByLocation);
+  router.get('/content/lookbooks', lookbookController.listPublic);
+  router.get('/content/lookbooks/:slug', lookbookController.getPublicBySlug);
+  router.get('/content/journal', journalController.listPublic);
+  router.get('/content/journal/:slug', journalController.getPublicBySlug);
 
   // --- admin: home sections ---------------------------------------------
   router.get('/admin/content/home-sections', ...requireContentRead(), homeSectionController.adminList);
@@ -59,6 +65,20 @@ export function createContentRouter(): Router {
   router.get('/admin/content/pages/:id', ...requireContentRead(), pageController.adminGet);
   router.patch('/admin/content/pages/:id', ...requireContentWrite(), pageController.adminUpdate);
   router.delete('/admin/content/pages/:id', ...requireContentWrite(), pageController.adminDelete);
+
+  // --- admin: lookbooks -----------------------------------------------------
+  router.get('/admin/content/lookbooks', ...requireContentRead(), lookbookController.adminList);
+  router.post('/admin/content/lookbooks', ...requireContentWrite(), lookbookController.adminCreate);
+  router.get('/admin/content/lookbooks/:id', ...requireContentRead(), lookbookController.adminGet);
+  router.patch('/admin/content/lookbooks/:id', ...requireContentWrite(), lookbookController.adminUpdate);
+  router.delete('/admin/content/lookbooks/:id', ...requireContentWrite(), lookbookController.adminDelete);
+
+  // --- admin: journal ---------------------------------------------------------
+  router.get('/admin/content/journal', ...requireContentRead(), journalController.adminList);
+  router.post('/admin/content/journal', ...requireContentWrite(), journalController.adminCreate);
+  router.get('/admin/content/journal/:id', ...requireContentRead(), journalController.adminGet);
+  router.patch('/admin/content/journal/:id', ...requireContentWrite(), journalController.adminUpdate);
+  router.delete('/admin/content/journal/:id', ...requireContentWrite(), journalController.adminDelete);
 
   // --- admin: media library ---------------------------------------------
   router.get('/admin/content/media/folders', ...requireContentRead(), mediaAssetController.adminListFolders);

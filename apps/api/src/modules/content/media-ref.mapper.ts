@@ -23,3 +23,16 @@ export function toMediaRefSubdoc(ref: MediaRef | null | undefined): MediaRefSubd
   if (!ref) return null;
   return { publicId: ref.publicId, url: ref.url, width: ref.width ?? null, height: ref.height ?? null };
 }
+
+/** Same shape as `toMediaRefDto`, for a field that's never null — e.g. one
+ *  item of a `MediaRefSubdoc[]` gallery array (`lookbook.model.ts`). Avoids
+ *  every such call site having to filter/assert away `toMediaRefDto`'s
+ *  `| null` return type for a value that structurally can't be null. */
+export function toMediaRefDtoRequired(subdoc: MediaRefSubdoc): MediaRef {
+  return {
+    publicId: subdoc.publicId,
+    url: subdoc.url,
+    ...(subdoc.width !== null ? { width: subdoc.width } : {}),
+    ...(subdoc.height !== null ? { height: subdoc.height } : {}),
+  };
+}

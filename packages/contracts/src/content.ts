@@ -114,8 +114,12 @@ export const UspBarSectionSettings = z.object({
 });
 export type UspBarSectionSettings = z.infer<typeof UspBarSectionSettings>;
 
-/** plan.md §15.2 §10 (R2) — "two posts." References journal post slugs; the
- *  journal itself is out of scope (R2), this just carries the intent. */
+/** plan.md §15.2 §10 (R2) — "two posts." References journal post slugs.
+ *  `JournalPost` now exists (see below) — `postSlugs` holds real
+ *  `JournalPost.slug` values; `GET /content/journal?slugs=...` is the
+ *  resolution mechanism (see that section's own doc comment). Rendering
+ *  this section on the storefront is still a separate, later pass — this
+ *  settings shape needed no change, it already matches a real slug 1:1. */
 export const JournalTeaserSectionSettings = z.object({
   postSlugs: z.array(z.string()).max(4).default([]),
 });
@@ -311,6 +315,109 @@ export const PublicPage = z.object({
   seo: PageSeo,
 });
 export type PublicPage = z.infer<typeof PublicPage>;
+
+// ---------------------------------------------------------------------------
+// Lookbooks — plan.md §11.1's content-domain table lists `Lookbook` as its
+// own `content` entity, alongside `Page`/`Banner`/`HomeSection`/`Menu`/`Media`
+// — NOT a duplicate of `Collection.layout`'s `'lookbook'` value or its
+// `lookbookMedia` field above (`collection.ts`): those describe how a
+// shoppable Collection *renders*; this is the standalone editorial-gallery
+// entity itself, with its own slug/route. `collectionId` is the optional
+// "shop this look" tie-in back to a real Collection — a bare `objectId`
+// reference, not a populated relation, same "no cross-module validation"
+// posture `HeroSectionSettings.collectionId` above already establishes.
+// `bodyEn`/`bodyAr`/`seo` mirror `Page`'s own shape verbatim (sanitized
+// HTML — see `content` module's `sanitize.ts`).
+// ---------------------------------------------------------------------------
+
+export const LookbookStatus = z.enum(['draft', 'published']);
+export type LookbookStatus = z.infer<typeof LookbookStatus>;
+
+export const Lookbook = z.object({
+  id: objectId,
+  slug: z.string(),
+  titleEn: z.string(),
+  titleAr: z.string(),
+  heroMedia: MediaRef.nullable(),
+  heroMediaMobile: MediaRef.nullable(),
+  gallery: z.array(MediaRef),
+  bodyEn: z.string(),
+  bodyAr: z.string(),
+  collectionId: objectId.nullable(),
+  status: LookbookStatus,
+  seo: PageSeo,
+  sortOrder: z.number().int(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Lookbook = z.infer<typeof Lookbook>;
+
+/** `GET /content/lookbooks[/:slug]` — published lookbooks only (the service
+ *  layer 404s a draft slug); no admin-only `status` on the wire, same trim
+ *  `PublicPage` applies. */
+export const PublicLookbook = z.object({
+  slug: z.string(),
+  titleEn: z.string(),
+  titleAr: z.string(),
+  heroMedia: MediaRef.nullable(),
+  heroMediaMobile: MediaRef.nullable(),
+  gallery: z.array(MediaRef),
+  bodyEn: z.string(),
+  bodyAr: z.string(),
+  collectionId: objectId.nullable(),
+  seo: PageSeo,
+});
+export type PublicLookbook = z.infer<typeof PublicLookbook>;
+
+// ---------------------------------------------------------------------------
+// Journal — blog-style editorial posts (plan.md §11.1's content-domain
+// table; also plan.md's `/[locale]/journal /journal/[slug]` route). Backs
+// `journal_teaser` above — `JournalTeaserSectionSettings.postSlugs` now
+// resolve to real `JournalPost.slug` values via `GET
+// /content/journal?slugs=a,b,c` (see `journal.dto.ts#ListJournalPostsQuery`
+// in the `content` API module), which returns published posts in the
+// requested slug order, dropping any slug that's unknown or still a draft —
+// the storefront rendering of the section itself is a separate, later pass.
+// `excerptEn`/`excerptAr` are the short teaser text that section needs
+// without pulling a post's full body. `bodyEn`/`bodyAr`/`seo` again mirror
+// `Page`'s shape.
+// ---------------------------------------------------------------------------
+
+export const JournalPostStatus = z.enum(['draft', 'published']);
+export type JournalPostStatus = z.infer<typeof JournalPostStatus>;
+
+export const JournalPost = z.object({
+  id: objectId,
+  slug: z.string(),
+  titleEn: z.string(),
+  titleAr: z.string(),
+  coverMedia: MediaRef.nullable(),
+  excerptEn: z.string(),
+  excerptAr: z.string(),
+  bodyEn: z.string(),
+  bodyAr: z.string(),
+  publishedAt: z.coerce.date().nullable(),
+  status: JournalPostStatus,
+  seo: PageSeo,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type JournalPost = z.infer<typeof JournalPost>;
+
+/** `GET /content/journal[/:slug]` — published posts only. */
+export const PublicJournalPost = z.object({
+  slug: z.string(),
+  titleEn: z.string(),
+  titleAr: z.string(),
+  coverMedia: MediaRef.nullable(),
+  excerptEn: z.string(),
+  excerptAr: z.string(),
+  bodyEn: z.string(),
+  bodyAr: z.string(),
+  publishedAt: z.coerce.date().nullable(),
+  seo: PageSeo,
+});
+export type PublicJournalPost = z.infer<typeof PublicJournalPost>;
 
 // ---------------------------------------------------------------------------
 // Media library — plan.md §7.13: "publicId, url, type, width, height, bytes,
