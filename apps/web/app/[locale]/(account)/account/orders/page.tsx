@@ -48,7 +48,7 @@ export default function AccountOrdersPage() {
         >
           <Input
             label="Order number"
-            placeholder="LF-260825-0001"
+            hint="e.g. LF-260825-0001"
             value={orderNumber}
             onChange={(e) => setOrderNumber(e.target.value)}
           />

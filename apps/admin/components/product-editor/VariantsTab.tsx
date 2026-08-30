@@ -104,7 +104,7 @@ export function VariantsTab({
           <div className="flex flex-col gap-12">
             <Input
               label="Colours — comma-separated, optional"
-              placeholder="e.g. Ferozi, Off White, Maroon"
+              hint="e.g. Ferozi, Off White, Maroon"
               value={colorsText}
               onChange={(e) => setColorsText(e.target.value)}
             />

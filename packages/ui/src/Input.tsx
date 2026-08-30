@@ -9,10 +9,25 @@ import { cx } from './cx.js';
  * floating label is built on Radix's `Label` primitive (correct
  * `for`/`id` wiring, click-to-focus) rather than a plain `<label>` — no
  * shadcn skin, just Radix behaviour with our own styling.
+ *
+ * `placeholder` is deliberately **not** an accepted prop (`Omit` below,
+ * not just documented) — the floating-label CSS trick depends on the
+ * real DOM `placeholder` being the literal single space this component
+ * sets internally (`:placeholder-shown` is how it knows whether to float
+ * the label at rest or shrink it to the top corner). A real `placeholder`
+ * string overrides that space via the trailing `{...props}` spread and
+ * silently breaks the shrink behavior — found live: two real call sites
+ * had done exactly this, rendering their example text and the floating
+ * label superimposed on top of each other at rest. `hint`, below, is the
+ * fix and the intended way to show example/format text: rendered once,
+ * as real static text under the field, not fighting the label for the
+ * same pixels.
  */
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'placeholder'> {
   label: string;
   errorMessage?: string;
+  /** Example/format text shown below the field (e.g. "e.g. LF-260825-0001") — not a native `placeholder`, see this file's doc comment on why. */
+  hint?: string;
 }
 
 const INPUT_CLASSES = cx(
@@ -29,7 +44,7 @@ const LABEL_CLASSES = cx(
 );
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, errorMessage, id, className, ...props },
+  { label, errorMessage, hint, id, className, ...props },
   ref,
 ) {
   const generatedId = useId();
@@ -45,7 +60,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           placeholder=" "
           className={cx(INPUT_CLASSES, isInvalid && 'border-danger focus:border-danger', className)}
           aria-invalid={isInvalid || undefined}
-          aria-describedby={isInvalid ? `${inputId}-error` : undefined}
+          aria-describedby={isInvalid ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           {...props}
         />
         <LabelPrimitive.Root htmlFor={inputId} className={LABEL_CLASSES}>
@@ -55,6 +70,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {errorMessage ? (
         <p id={`${inputId}-error`} role="alert" className="text-body-sm text-danger">
           {errorMessage}
+        </p>
+      ) : hint ? (
+        <p id={`${inputId}-hint`} className="text-body-sm text-mukaish">
+          {hint}
         </p>
       ) : null}
     </div>
