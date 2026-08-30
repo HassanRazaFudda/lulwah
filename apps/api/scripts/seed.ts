@@ -325,14 +325,21 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
  */
 /**
  * `lulwah-*.jpg` images (hero, the stitching/occasion tiles, the Eid
- * editorial) — real, styled South Asian formalwear/lawn photography,
- * replacing the original `panel-*`/`occasion-*`/`eid-edit-2026` fabric-
- * macro shots those same slots used before. Found live, reported by the
- * user: a fabric-texture close-up is the wrong *kind* of image for a tile
- * whose job is showing what an outfit looks like, not what the cloth feels
- * like (the old `occasion-mehndi.jpg` — a green-and-gold brocade swatch,
- * no garment, no styling — standing in for an actual "Mehndi" occasion
- * tile was the clearest case of this). `video_banner`'s own
+ * editorial — also reused below for the `homepage_top` banner and the
+ * "Ready to wear"/"Formal & wedding" header-menu flyout thumbnails) —
+ * real, styled South Asian formalwear/lawn photography, replacing the
+ * original `panel-*`/`occasion-*`/`eid-edit-2026`/`lawn-26-vol1-hero`
+ * fabric-macro shots those same slots used before. Found live, reported
+ * by the user: a fabric-texture close-up is the wrong *kind* of image for
+ * a tile whose job is showing what an outfit looks like, not what the
+ * cloth feels like (the old `occasion-mehndi.jpg` — a green-and-gold
+ * brocade swatch, no garment, no styling — standing in for an actual
+ * "Mehndi" occasion tile was the clearest case of this). The `Banner`/
+ * `Menu` content types aren't wired into any live `apps/web` page yet
+ * (only `HomeSection` is — see `app/[locale]/page.tsx`), so those two
+ * reuses aren't fixing something visibly broken on the storefront today,
+ * only in `apps/admin`'s own Content screens — done anyway so nothing in
+ * this seed still points at the old images. `video_banner`'s own
  * `fabric-macro-jamawar.jpg` is untouched — that section's whole point
  * (plan.md §15.2 §7: "a single fabric macro image, no text, pure rhythm")
  * is texture, so it was never actually mismatched.
@@ -508,8 +515,8 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
     },
     {
       placement: 'homepage_top',
-      mediaDesktop: media('eid-edit-2026', 1920, 480),
-      mediaMobile: media('eid-edit-2026', 800, 1000),
+      mediaDesktop: media('lulwah-editorial-eid', 1920, 480),
+      mediaMobile: media('lulwah-editorial-eid', 800, 1000),
       link: '/collections/eid-edition-26',
       textEn: 'The Eid Edit is here',
       textAr: 'إصدار العيد وصل الآن',
@@ -547,7 +554,7 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
           label: 'Ready to wear',
           labelAr: 'جاهز للارتداء',
           href: '/shop/pret',
-          featuredMedia: media('panel-pret', 600, 800),
+          featuredMedia: media('lulwah-tile-pret', 600, 800),
           badge: null,
           sortOrder: 1,
           children: [
@@ -559,7 +566,7 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
           label: 'Formal & wedding',
           labelAr: 'رسمي وزفاف',
           href: '/shop/formal-wedding',
-          featuredMedia: media('panel-formal', 600, 800),
+          featuredMedia: media('lulwah-tile-formal', 600, 800),
           badge: 'New',
           sortOrder: 2,
           children: [],
@@ -606,8 +613,8 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
   logger.info({ count: pages.length }, 'seed: pages created (2 published, 1 draft)');
 
   const mediaAssets: AdminCreateMediaAssetInput[] = [
-    { url: '/campaigns/lawn-26-vol1-hero.jpg', type: 'image', width: 1600, height: 900, bytes: null, alt: "Lawn '26 Volume One hero", altAr: '', folder: 'Campaigns', tags: ['hero', 'lawn', 'campaign'], dominantColor: null },
-    { url: '/campaigns/eid-edit-2026.jpg', type: 'image', width: 1200, height: 1500, bytes: null, alt: 'Eid Edition 2026 editorial', altAr: '', folder: 'Campaigns', tags: ['eid', 'editorial', 'campaign'], dominantColor: null },
+    { url: '/campaigns/lulwah-hero-lawn.jpg', type: 'image', width: 1600, height: 900, bytes: null, alt: "Lawn '26 Volume One hero", altAr: '', folder: 'Campaigns', tags: ['hero', 'lawn', 'campaign'], dominantColor: null },
+    { url: '/campaigns/lulwah-editorial-eid.jpg', type: 'image', width: 1200, height: 1500, bytes: null, alt: 'Eid Edition 2026 editorial', altAr: '', folder: 'Campaigns', tags: ['eid', 'editorial', 'campaign'], dominantColor: null },
     { url: '/campaigns/fabric-macro-jamawar.jpg', type: 'image', width: 1920, height: 800, bytes: null, alt: 'Jamawar fabric macro detail', altAr: '', folder: 'Campaigns', tags: ['fabric', 'macro'], dominantColor: null },
     { url: '/catalogue/khaadi-ferozi-1.jpg', type: 'image', width: 1000, height: 1250, bytes: null, alt: 'Ferozi lawn product shot', altAr: '', folder: 'Products', tags: ['khaadi', 'lawn'], dominantColor: null },
     { url: '/catalogue/elan-noir-1.jpg', type: 'image', width: 1000, height: 1250, bytes: null, alt: 'Elan Noir formalwear', altAr: '', folder: 'Products', tags: ['elan', 'formal'], dominantColor: null },
