@@ -54,6 +54,8 @@ import '../modules/catalog/variant.model.js';
 import '../modules/checkout/checkout.model.js';
 import '../modules/content/banner.model.js';
 import '../modules/content/home-section.model.js';
+import '../modules/content/journal.model.js';
+import '../modules/content/lookbook.model.js';
 import '../modules/content/media-asset.model.js';
 import '../modules/content/menu.model.js';
 import '../modules/content/page.model.js';
