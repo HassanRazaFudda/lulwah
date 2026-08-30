@@ -39,6 +39,14 @@ export const PERMISSIONS = [
   'users.read',
   'users.write',
   'audit.read',
+  // `engagement` module's review moderation (plan.md §5.3's "Review,
+  // Wishlist, ..." row) — declared here ahead of that module landing, same
+  // "declared as data so the pattern generalizes" rationale this file's own
+  // doc comment gives for `orders.status.update`/`settings.write` etc.
+  // `wishlist` needs no permission string of its own: it's a self-service
+  // `/me/*` resource, same as `cart` (see `engagement.policy.ts`).
+  'reviews.read',
+  'reviews.write',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -60,6 +68,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'discounts.read', 'discounts.write',
     'customers.read', 'customers.write',
     'content.read', 'content.write',
+    'reviews.read', 'reviews.write',
     'reports.read', 'reports.write',
     'settings.read',
     'users.read',
@@ -76,11 +85,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     // who needs it unconditionally.
     'audit.read',
   ],
-  catalog: ['products.read', 'products.write', 'inventory.read', 'inventory.write', 'discounts.read', 'content.read', 'content.write', 'reports.read'],
+  catalog: ['products.read', 'products.write', 'inventory.read', 'inventory.write', 'discounts.read', 'content.read', 'content.write', 'reviews.read', 'reviews.write', 'reports.read'],
   order_ops: ['products.read', 'inventory.read', 'orders.read', 'orders.status.update', 'discounts.read', 'customers.read', 'reports.read'],
   warehouse: ['products.read', 'inventory.read', 'inventory.write', 'orders.read', 'orders.status.update'],
   support: ['products.read', 'inventory.read', 'orders.read', 'orders.status.update', 'discounts.read', 'customers.read', 'customers.write'],
-  content: ['products.read', 'content.read', 'content.write', 'reports.read'],
+  content: ['products.read', 'content.read', 'content.write', 'reviews.read', 'reviews.write', 'reports.read'],
   finance: ['products.read', 'inventory.read', 'orders.read', 'refunds.write', 'discounts.read', 'customers.read', 'reports.read', 'reports.write'],
   customer: [], // storefront only — plan.md §10.2
 } as const;

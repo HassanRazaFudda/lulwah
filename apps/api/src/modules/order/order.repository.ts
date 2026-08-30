@@ -165,6 +165,24 @@ export async function getOrderStatsForUsers(userIds: string[]): Promise<Map<stri
   return new Map(rows.map((r) => [r._id.toString(), { orderCount: r.orderCount, totalSpentFils: r.totalSpentFils, lastOrderAt: r.lastOrderAt }]));
 }
 
+// ---------------------------------------------------------------------------
+// `engagement` module's exclusive read for `POST /me/reviews`'s server-side
+// "isVerifiedPurchase" check (plan.md §5.3: never `OrderModel` directly).
+// ---------------------------------------------------------------------------
+
+/** The most recent `delivered` order (if any) placed by `userId` that
+ *  contains `productId` — see `order.service.ts#findDeliveredOrderForProduct`
+ *  for why `delivered` (not any post-payment status) is the bar. `.sort()`
+ *  + a single doc, not a count, since the caller only needs one real
+ *  order's id to attach as `Review.orderId`. */
+export async function findDeliveredOrderForUserAndProduct(userId: string, productId: string): Promise<{ orderId: string } | null> {
+  const order = await OrderModel.findOne({ userId, status: 'delivered', 'items.productId': productId })
+    .sort({ deliveredAt: -1 })
+    .select('_id')
+    .exec();
+  return order ? { orderId: order._id.toString() } : null;
+}
+
 export interface CustomerCodRiskCounts {
   codOrdersPlaced: number;
   codOrdersCancelled: number;
