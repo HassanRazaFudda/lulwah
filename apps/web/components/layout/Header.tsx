@@ -80,8 +80,25 @@ const ANNOUNCEMENT_DISMISSED_KEY = 'lulwah-announcement-dismissed';
  * that bar is still on screen (re-checked on every scroll tick, since
  * this header lives in the persistent locale layout and never remounts
  * on client-side navigation to notice a same-session dismissal any other
- * way) so this header's own `top` offset stays correct either way.
+ * way) so this header's own resting offset stays correct either way.
+ *
+ * Position is one computed `transform: translateY()` (`translateYPx`
+ * below), not a `top-32`/`top-0` class pair plus a separate `-translate-
+ * y-full` for the hide state — found live, reported by the user: with
+ * `top` doing the announcement-offset and a *fixed* `-translate-y-full`
+ * (100% of this header's own height) doing the hide, hiding while the
+ * announcement bar was still visible only ever moved this header up by
+ * its own height, not by its own height *plus* the 32px `top` offset it
+ * was already resting at — so scrolling down while the bar was still up
+ * left exactly that 32px sliver of the header's own bottom edge stuck in
+ * the viewport, overlapping the announcement bar's own space. Computing
+ * one translateY that folds in both the resting offset and the hide
+ * distance fixes that at the source, and also drops `top` from the
+ * animated properties below — `transform` alone is the compositor-
+ * friendly one.
  */
+const HEADER_HEIGHT_PX = 64; // must match `h-64` below.
+const ANNOUNCEMENT_HEIGHT_PX = 32; // must match `AnnouncementBar.tsx`'s own `h-32`.
 export function Header() {
   const t = useTranslations('nav');
   const pathname = usePathname();
@@ -115,15 +132,30 @@ export function Header() {
   // including on the homepage itself once scrolled past it.
   const isTransparent = isHomePage && !isPastSolidThreshold;
 
+  const restingOffsetPx = isAnnouncementVisible ? ANNOUNCEMENT_HEIGHT_PX : 0;
+  const translateYPx = isHidden ? -(HEADER_HEIGHT_PX + restingOffsetPx) : restingOffsetPx;
+
   return (
     <header
+      style={{ transform: `translateY(${translateYPx}px)` }}
       className={cx(
-        'fixed inset-x-0 z-40 border-b transition-[background-color,color,border-color,top,transform] duration-base ease-out',
-        isAnnouncementVisible ? 'top-32' : 'top-0',
-        isHidden ? '-translate-y-full' : 'translate-y-0',
+        'fixed inset-x-0 top-0 z-40 border-b transition-[background-color,color,border-color,transform] duration-base ease-out',
         isTransparent ? 'border-transparent bg-transparent text-paper' : 'border-gold bg-paper text-ink',
       )}
     >
+      {isTransparent ? (
+        // Found live, reported by the user: the gold logo and the
+        // permanently-garnet "Sale" link (§13.3's "garnet marks sale
+        // links, unconditionally" rule — it doesn't switch to `text-paper`
+        // with the rest of the nav) both went unreadable over lighter
+        // patches of the Hero photo. A scrim guarantees contrast for both
+        // regardless of what's directly behind them, without touching
+        // Hero.tsx or making Sale's colour conditional on scroll state.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink/55 via-ink/15 to-transparent"
+        />
+      ) : null}
       <div className="relative mx-auto flex h-64 max-w-[1600px] items-center justify-between px-24 lg:px-[clamp(24px,5vw,88px)]">
         <button
           type="button"

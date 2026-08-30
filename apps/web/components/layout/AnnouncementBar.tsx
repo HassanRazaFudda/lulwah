@@ -20,6 +20,14 @@ import { useTranslations } from 'next-intl';
  * below is read by `Header.tsx` too (duplicated there with a
  * cross-reference comment, not imported, since it's a single stable
  * string) so the header can track whether this bar is still on screen.
+ *
+ * `h-32`, not `py-8` — found live, reported by the user: `py-8` plus the
+ * `label` type step's own line height rendered at ≈30px, not the 32px
+ * `Header.tsx`'s own resting offset (and `MainContent.tsx`'s `pt-96`)
+ * both assume, leaving a ~2px sliver of whatever sits behind this bar
+ * (the homepage's Hero) visible in the seam between this bar and the
+ * header below it. A fixed, exact height removes the approximation
+ * instead of chasing it with a bigger padding number.
  */
 const ROTATION_MS = 5000;
 const SESSION_KEY = 'lulwah-announcement-dismissed';
@@ -52,7 +60,7 @@ export function AnnouncementBar() {
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-40 flex items-center justify-center bg-zamurrad px-24 py-8 text-paper"
+      className="fixed inset-x-0 top-0 z-40 flex h-32 items-center justify-center bg-zamurrad px-24 text-paper"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       role="region"
