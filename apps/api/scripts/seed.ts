@@ -4,13 +4,17 @@
  *
  * Seeds, in order: the locked §7.4 category tree, the 6 brands already
  * referenced in `apps/web/lib/placeholder-data.ts`, 30+ realistic Pakistani-
- * fashion products with variants and real inventory rows, and 2–3
- * collections. A `super_admin` user is seeded too (upserted, not
- * duplicated) so there's a way into `/admin/*` on a fresh environment.
+ * fashion products with variants and real inventory rows, 2–3 collections,
+ * and (added in P3, once the `content` module existed to seed) a full real
+ * homepage's worth of CMS content — every one of the 9 `home_sections`
+ * types at least once, real banners, a real header menu, a couple of real
+ * pages, and a handful of media library assets — see `seedContent()`. A
+ * `super_admin` user is seeded too (upserted, not duplicated) so there's a
+ * way into `/admin/*` on a fresh environment.
  *
- * Idempotent: catalog/inventory collections are cleared and fully
- * reseeded on every run — simpler and less error-prone than upserting 30+
- * products field-by-field, and the brief explicitly allows either
+ * Idempotent: catalog/inventory/content collections are all cleared and
+ * fully reseeded on every run — simpler and less error-prone than
+ * upserting field-by-field, and the brief explicitly allows either
  * approach ("clear and reseed, or upsert by slug/articleCode").
  *
  * Runs through the same `catalog`/`inventory` *service* functions the
@@ -37,17 +41,32 @@ import { ProductModel } from '../src/modules/catalog/product.model.js';
 import { VariantModel } from '../src/modules/catalog/variant.model.js';
 import { InventoryItemModel } from '../src/modules/inventory/inventory-item.model.js';
 import { StockMovementModel } from '../src/modules/inventory/stock-movement.model.js';
+import { HomeSectionModel } from '../src/modules/content/home-section.model.js';
+import { BannerModel } from '../src/modules/content/banner.model.js';
+import { MenuModel } from '../src/modules/content/menu.model.js';
+import { PageModel } from '../src/modules/content/page.model.js';
+import { MediaAssetModel } from '../src/modules/content/media-asset.model.js';
 import * as brandService from '../src/modules/catalog/brand.service.js';
 import * as categoryService from '../src/modules/catalog/category.service.js';
 import * as collectionService from '../src/modules/catalog/collection.service.js';
 import * as productService from '../src/modules/catalog/product.service.js';
 import * as variantService from '../src/modules/catalog/variant.service.js';
 import * as inventoryService from '../src/modules/inventory/inventory.service.js';
+import * as homeSectionService from '../src/modules/content/home-section.service.js';
+import * as bannerService from '../src/modules/content/banner.service.js';
+import * as menuService from '../src/modules/content/menu.service.js';
+import * as pageService from '../src/modules/content/page.service.js';
+import * as mediaAssetService from '../src/modules/content/media-asset.service.js';
 import { fullReindex } from '../src/modules/catalog/search.service.js';
 import { AdminCreateBrandInput } from '../src/modules/catalog/brand.dto.js';
 import { AdminCreateCategoryInput } from '../src/modules/catalog/category.dto.js';
 import { AdminCreateCollectionInput } from '../src/modules/catalog/collection.dto.js';
 import { AdminCreateProductInput, AdminCreateVariantInput } from '../src/modules/catalog/product.dto.js';
+import { AdminCreateHomeSectionInput } from '../src/modules/content/home-section.dto.js';
+import { AdminCreateBannerInput } from '../src/modules/content/banner.dto.js';
+import { AdminCreateMenuInput } from '../src/modules/content/menu.dto.js';
+import { AdminCreatePageInput } from '../src/modules/content/page.dto.js';
+import { AdminCreateMediaAssetInput } from '../src/modules/content/media-asset.dto.js';
 import { BRANDS, CATEGORY_TAXONOMY, PRODUCTS } from './seed-data.js';
 import type { SeedProduct } from './seed-data.js';
 
@@ -104,6 +123,14 @@ async function clearCatalogAndInventory(): Promise<void> {
     InventoryItemModel.deleteMany({}),
     StockMovementModel.deleteMany({}),
   ]);
+}
+
+/** Separate from `clearCatalogAndInventory` — content is a genuinely
+ *  different concern (plan.md §5.3), and clearing it is only needed
+ *  because `seedContent` below is, like the rest of this script,
+ *  clear-and-reseed rather than upsert. */
+async function clearContent(): Promise<void> {
+  await Promise.all([HomeSectionModel.deleteMany({}), BannerModel.deleteMany({}), MenuModel.deleteMany({}), PageModel.deleteMany({}), MediaAssetModel.deleteMany({})]);
 }
 
 async function seedCategories(actor: AuthenticatedUser): Promise<Map<string, string>> {
@@ -220,12 +247,14 @@ async function seedProducts(actor: AuthenticatedUser, brandIdBySlug: Map<string,
   return created;
 }
 
-async function seedCollections(actor: AuthenticatedUser, products: CreatedProduct[]): Promise<void> {
+async function seedCollections(actor: AuthenticatedUser, products: CreatedProduct[]): Promise<Map<string, string>> {
   const lawnVolOneIds = products.filter((p) => p.seed.fabric === 'lawn' && p.seed.stitchingType === 'unstitched').map((p) => p.id);
   const eidEditIds = products.filter((p) => p.seed.occasion.includes('eid')).map((p) => p.id);
   const saleIds = products.filter((p) => p.seed.compareAtPriceFils !== undefined && p.seed.compareAtPriceFils > p.seed.basePriceFils).map((p) => p.id);
 
-  await collectionService.createCollection(
+  const idBySlug = new Map<string, string>();
+
+  const lawn = await collectionService.createCollection(
     actor,
     AdminCreateCollectionInput.parse({
       name: "Lawn '26 — Volume One",
@@ -239,8 +268,9 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
       isFeatured: true,
     }),
   );
+  idBySlug.set('lawn-26-vol-1', lawn.id);
 
-  await collectionService.createCollection(
+  const eid = await collectionService.createCollection(
     actor,
     AdminCreateCollectionInput.parse({
       name: "Eid Edition '26",
@@ -254,8 +284,9 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
       isFeatured: true,
     }),
   );
+  idBySlug.set('eid-edition-26', eid.id);
 
-  await collectionService.createCollection(
+  const sale = await collectionService.createCollection(
     actor,
     AdminCreateCollectionInput.parse({
       name: 'Season End Sale',
@@ -268,6 +299,287 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
       layout: 'grid',
     }),
   );
+  idBySlug.set('season-end-sale', sale.id);
+
+  return idBySlug;
+}
+
+/**
+ * Content/CMS seed data — plan.md §15.2's fixed Home section order, real
+ * images from `apps/web/public/campaigns/`/`catalogue/` (the "royalty-free,
+ * deliberately not the real brands' own photography" set §9/§29-risk#2
+ * already documents), real collection/brand ids from what this script just
+ * seeded above, and safe hrefs matching `Header.tsx`'s own real `NAV_LINKS`
+ * — not invented routes. Exists so `pnpm seed` gives a fresh environment
+ * something real to look at on both `/content` (admin) and the actual
+ * homepage, not just an empty CMS the storefront's own fixed-layout
+ * fallback (§5.1) silently papers over.
+ *
+ * Every image URL is web-app-relative (`/campaigns/...`) — these files live
+ * in `apps/web/public/`, not anywhere `apps/admin` serves, so an admin
+ * screen's own `<img>` preview may 404 against `admin`'s own origin; that
+ * matches how a real deployed site's media would work too (reachable from
+ * wherever it's actually hosted, not automatically from every app). The
+ * point of these URLs is `apps/web` rendering them correctly, which is what
+ * this data is for.
+ */
+async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, string>, collectionIdBySlug: Map<string, string>): Promise<void> {
+  const media = (publicId: string, width: number, height: number) => ({ publicId, url: `/campaigns/${publicId}.jpg`, width, height });
+
+  const homeSections: AdminCreateHomeSectionInput[] = [
+    {
+      type: 'hero',
+      settings: {
+        headlineEn: "Lawn '26 — Volume One",
+        headlineAr: "لان ٢٦ — الجزء الأول",
+        media: media('lawn-26-vol1-hero', 1600, 900),
+        mediaMobile: null,
+        videoUrl: null,
+        linkLabelEn: 'Shop the collection',
+        linkLabelAr: 'تسوقي المجموعة',
+        linkHref: '/collections/lawn-26-vol-1',
+        collectionId: collectionIdBySlug.get('lawn-26-vol-1') ?? null,
+      },
+      sortOrder: 0,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'collection_rail',
+      settings: { titleEn: 'New arrivals', titleAr: 'وصل حديثاً', collectionId: null, limit: 6, viewAllHref: '/shop/new-in' },
+      sortOrder: 1,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'category_grid',
+      settings: {
+        titleEn: 'Shop by stitching',
+        titleAr: 'تسوقي حسب الخياطة',
+        tiles: [
+          { labelEn: 'Unstitched', labelAr: 'غير مخيط', image: media('panel-unstitched', 800, 1000), href: '/shop/unstitched' },
+          { labelEn: 'Ready to wear', labelAr: 'جاهز للارتداء', image: media('panel-pret', 800, 1000), href: '/shop/pret' },
+          { labelEn: 'Formal & wedding', labelAr: 'رسمي وزفاف', image: media('panel-formal', 800, 1000), href: '/shop/formal-wedding' },
+        ],
+      },
+      sortOrder: 2,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'editorial_split',
+      settings: {
+        titleEn: 'The Eid Edit',
+        titleAr: 'إصدار العيد',
+        bodyEn: "Forty-two pieces from Pakistan's leading fashion houses — five silhouettes, one occasion.",
+        bodyAr: 'اثنان وأربعون قطعة من دور الأزياء الرائدة في باكستان.',
+        media: media('eid-edit-2026', 1200, 1500),
+        linkHref: '/collections/eid-edition-26',
+        mediaPosition: 'left',
+      },
+      sortOrder: 3,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'brand_strip',
+      settings: { brandIds: [...brandIdBySlug.values()] },
+      sortOrder: 4,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'collection_rail',
+      settings: { titleEn: 'Best sellers', titleAr: 'الأكثر مبيعاً', collectionId: null, limit: 6, viewAllHref: '/shop/best-sellers' },
+      sortOrder: 5,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'video_banner',
+      settings: { media: media('fabric-macro-jamawar', 1920, 800), videoUrl: null, captionEn: 'Woven, not printed.', captionAr: 'منسوج، وليس مطبوعاً.' },
+      sortOrder: 6,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'category_grid',
+      settings: {
+        titleEn: 'Shop by occasion',
+        titleAr: 'تسوقي حسب المناسبة',
+        tiles: [
+          { labelEn: 'Eid', labelAr: 'العيد', image: media('occasion-eid', 800, 1000), href: '/collections/eid-edition-26' },
+          { labelEn: 'Barat', labelAr: 'البرات', image: media('occasion-barat', 800, 1000), href: '/shop/formal-wedding' },
+          { labelEn: 'Mehndi', labelAr: 'المهندي', image: media('occasion-mehndi', 800, 1000), href: '/shop/formal-wedding' },
+          { labelEn: 'Walima', labelAr: 'الوليمة', image: media('occasion-walima', 800, 1000), href: '/shop/formal-wedding' },
+          { labelEn: 'Everyday', labelAr: 'يومي', image: media('occasion-everyday', 800, 1000), href: '/shop/pret' },
+        ],
+      },
+      sortOrder: 7,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'usp_bar',
+      settings: {
+        itemsEn: ['Free shipping over AED 300', 'Cash on delivery available', '7-day easy returns', 'Authentic designer pieces'],
+        itemsAr: ['شحن مجاني للطلبات فوق ٣٠٠ درهم', 'الدفع عند الاستلام متاح', 'إرجاع سهل خلال ٧ أيام', 'قطع مصممة أصلية'],
+      },
+      sortOrder: 8,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+    {
+      type: 'newsletter',
+      settings: {
+        headlineEn: 'Stay in the loop',
+        headlineAr: 'ابقي على اطلاع',
+        subtextEn: 'New arrivals, early access to drops, and the odd genuinely-good discount.',
+        subtextAr: 'وصل جديد، وصول مبكر للإصدارات، وخصومات حقيقية بين الحين والآخر.',
+      },
+      sortOrder: 9,
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+    },
+  ];
+  for (const section of homeSections) {
+    await homeSectionService.createHomeSection(actor, AdminCreateHomeSectionInput.parse(section));
+  }
+  logger.info({ count: homeSections.length }, 'seed: home sections created');
+
+  const banners: AdminCreateBannerInput[] = [
+    {
+      placement: 'announcement',
+      mediaDesktop: null,
+      mediaMobile: null,
+      link: null,
+      textEn: 'Free shipping on orders over AED 300 — every emirate.',
+      textAr: 'شحن مجاني للطلبات فوق ٣٠٠ درهم — لجميع الإمارات.',
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+      sortOrder: 0,
+    },
+    {
+      placement: 'homepage_top',
+      mediaDesktop: media('eid-edit-2026', 1920, 480),
+      mediaMobile: media('eid-edit-2026', 800, 1000),
+      link: '/collections/eid-edition-26',
+      textEn: 'The Eid Edit is here',
+      textAr: 'إصدار العيد وصل الآن',
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+      sortOrder: 0,
+    },
+    {
+      placement: 'cart',
+      mediaDesktop: null,
+      mediaMobile: null,
+      link: null,
+      textEn: "Add AED 50 more to your bag for free shipping.",
+      textAr: 'أضيفي ٥٠ درهم أخرى لحقيبتك للحصول على شحن مجاني.',
+      isActive: true,
+      startsAt: null,
+      endsAt: null,
+      sortOrder: 0,
+    },
+  ];
+  for (const banner of banners) {
+    await bannerService.createBanner(actor, AdminCreateBannerInput.parse(banner));
+  }
+  logger.info({ count: banners.length }, 'seed: banners created');
+
+  await menuService.createMenu(
+    actor,
+    AdminCreateMenuInput.parse({
+      location: 'header',
+      isActive: true,
+      items: [
+        { label: 'Unstitched', labelAr: 'غير مخيط', href: '/shop/unstitched', featuredMedia: null, badge: null, sortOrder: 0, children: [] },
+        {
+          label: 'Ready to wear',
+          labelAr: 'جاهز للارتداء',
+          href: '/shop/pret',
+          featuredMedia: media('panel-pret', 600, 800),
+          badge: null,
+          sortOrder: 1,
+          children: [
+            { label: '2-piece sets', labelAr: 'طقم قطعتين', href: '/shop/pret', featuredMedia: null, badge: null, sortOrder: 0, children: [] },
+            { label: '3-piece sets', labelAr: 'طقم ثلاث قطع', href: '/shop/pret', featuredMedia: null, badge: null, sortOrder: 1, children: [] },
+          ],
+        },
+        {
+          label: 'Formal & wedding',
+          labelAr: 'رسمي وزفاف',
+          href: '/shop/formal-wedding',
+          featuredMedia: media('panel-formal', 600, 800),
+          badge: 'New',
+          sortOrder: 2,
+          children: [],
+        },
+        { label: 'Brands', labelAr: 'العلامات التجارية', href: '/brands', featuredMedia: null, badge: null, sortOrder: 3, children: [] },
+        { label: 'Sale', labelAr: 'تخفيضات', href: '/shop/sale', featuredMedia: null, badge: null, sortOrder: 4, children: [] },
+      ],
+    }),
+  );
+  logger.info('seed: header menu created');
+
+  const pages: AdminCreatePageInput[] = [
+    {
+      slug: 'shipping-returns',
+      titleEn: 'Shipping & Returns',
+      titleAr: 'الشحن والإرجاع',
+      bodyEn: '<h2>Shipping</h2><p>Standard delivery is AED 20, free above AED 300, arriving in 1–4 days depending on your emirate.</p><h2>Returns</h2><p>Unworn items with tags attached can be returned within 7 days of delivery.</p>',
+      bodyAr: '<h2>الشحن</h2><p>الشحن القياسي بسعر ٢٠ درهم، مجاني فوق ٣٠٠ درهم.</p>',
+      status: 'published',
+      seo: { titleEn: 'Shipping & Returns — Lulwah', descEn: 'Shipping rates, delivery times, and our 7-day return policy.' },
+    },
+    {
+      slug: 'size-guide',
+      titleEn: 'Size Guide',
+      titleAr: 'دليل المقاسات',
+      bodyEn: '<p>Measurements are in inches, taken flat. Unsure of your size? Message us before ordering.</p>',
+      bodyAr: '<p>القياسات بالبوصة.</p>',
+      status: 'published',
+      seo: { titleEn: 'Size Guide — Lulwah' },
+    },
+    {
+      slug: 'careers',
+      titleEn: 'Careers',
+      titleAr: 'الوظائف',
+      bodyEn: '<p>We are not currently hiring, but check back soon.</p>',
+      bodyAr: '',
+      status: 'draft',
+      seo: {},
+    },
+  ];
+  for (const page of pages) {
+    await pageService.createPage(actor, AdminCreatePageInput.parse(page));
+  }
+  logger.info({ count: pages.length }, 'seed: pages created (2 published, 1 draft)');
+
+  const mediaAssets: AdminCreateMediaAssetInput[] = [
+    { url: '/campaigns/lawn-26-vol1-hero.jpg', type: 'image', width: 1600, height: 900, bytes: null, alt: "Lawn '26 Volume One hero", altAr: '', folder: 'Campaigns', tags: ['hero', 'lawn', 'campaign'], dominantColor: null },
+    { url: '/campaigns/eid-edit-2026.jpg', type: 'image', width: 1200, height: 1500, bytes: null, alt: 'Eid Edition 2026 editorial', altAr: '', folder: 'Campaigns', tags: ['eid', 'editorial', 'campaign'], dominantColor: null },
+    { url: '/campaigns/fabric-macro-jamawar.jpg', type: 'image', width: 1920, height: 800, bytes: null, alt: 'Jamawar fabric macro detail', altAr: '', folder: 'Campaigns', tags: ['fabric', 'macro'], dominantColor: null },
+    { url: '/catalogue/khaadi-ferozi-1.jpg', type: 'image', width: 1000, height: 1250, bytes: null, alt: 'Ferozi lawn product shot', altAr: '', folder: 'Products', tags: ['khaadi', 'lawn'], dominantColor: null },
+    { url: '/catalogue/elan-noir-1.jpg', type: 'image', width: 1000, height: 1250, bytes: null, alt: 'Elan Noir formalwear', altAr: '', folder: 'Products', tags: ['elan', 'formal'], dominantColor: null },
+  ];
+  for (const asset of mediaAssets) {
+    await mediaAssetService.createMediaAsset(actor, AdminCreateMediaAssetInput.parse(asset));
+  }
+  logger.info({ count: mediaAssets.length }, 'seed: media library assets created');
 }
 
 async function main(): Promise<void> {
@@ -283,7 +595,8 @@ async function main(): Promise<void> {
   };
 
   await clearCatalogAndInventory();
-  logger.info('seed: cleared catalog/inventory collections');
+  await clearContent();
+  logger.info('seed: cleared catalog/inventory/content collections');
 
   const categoryIdBySlug = await seedCategories(actor);
   logger.info({ count: categoryIdBySlug.size }, 'seed: categories created');
@@ -294,8 +607,11 @@ async function main(): Promise<void> {
   const products = await seedProducts(actor, brandIdBySlug, categoryIdBySlug);
   logger.info({ count: products.length }, 'seed: products + variants + inventory created');
 
-  await seedCollections(actor, products);
-  logger.info('seed: collections created');
+  const collectionIdBySlug = await seedCollections(actor, products);
+  logger.info({ count: collectionIdBySlug.size }, 'seed: collections created');
+
+  await seedContent(actor, brandIdBySlug, collectionIdBySlug);
+  logger.info('seed: content (home sections, banners, menu, pages, media) created');
 
   try {
     const { indexed } = await fullReindex();
