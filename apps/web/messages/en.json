@@ -105,6 +105,18 @@
     "newsletterSection": {
       "title": "Know when Lawn '26 lands.",
       "subtitle": "One email, before a collection sells out. Not a weekly blast."
+    },
+    "journalTeaser": {
+      "title": "From the Journal"
     }
+  },
+  "lookbook": {
+    "title": "Lookbook",
+    "empty": "No lookbooks published yet.",
+    "shopThisLook": "Shop this look"
+  },
+  "journal": {
+    "title": "Journal",
+    "empty": "No journal posts published yet."
   }
 }
