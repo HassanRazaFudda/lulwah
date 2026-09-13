@@ -1,6 +1,12 @@
-import type { PublicHomeSection } from '@lulwah/contracts';
-import { apiFetch } from './api-client';
-import { PublicHomeResponse } from './content-schemas';
+import type { PublicHomeSection, PublicJournalPost, PublicLookbook } from '@lulwah/contracts';
+import { apiFetch, apiFetchWithMeta } from './api-client';
+import {
+  PublicHomeResponse,
+  PublicJournalPostDetailResponse,
+  PublicJournalPostListResponse,
+  PublicLookbookDetailResponse,
+  PublicLookbookListResponse,
+} from './content-schemas';
 
 /**
  * Thin fetch function over `apiFetch` (matching `catalog-client.ts`'s
@@ -23,4 +29,103 @@ import { PublicHomeResponse } from './content-schemas';
 export async function getHomeSections(): Promise<PublicHomeSection[]> {
   const { sections } = await apiFetch('/content/home', PublicHomeResponse);
   return [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** Same "is this a real 404, not some other failure" check `catalog-client.ts`
+ *  already establishes for `getProductBySlug`/`getBrandBySlug` — duplicated
+ *  locally rather than imported, matching this codebase's existing
+ *  per-client-file convention (`isNotFound` isn't exported from anywhere). */
+function isNotFound(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'NOT_FOUND';
+}
+
+// ---------------------------------------------------------------------------
+// Lookbooks — `GET /content/lookbooks[/:slug]` (`apps/api/.../content/
+// lookbook.routes.ts`). Published only; the API 404s a draft/unknown slug.
+// ---------------------------------------------------------------------------
+
+/** List, already sorted `sortOrder` by the API (`lookbook.service.ts
+ *  #listPublicLookbooks`) — no defensive client-side re-sort needed, unlike
+ *  `getHomeSections`, since there's no separate ordering guarantee to drift
+ *  from here (a single, dedicated endpoint, not a mixed-type list). */
+export async function getLookbooks(): Promise<PublicLookbook[]> {
+  const { lookbooks } = await apiFetch('/content/lookbooks', PublicLookbookListResponse);
+  return lookbooks;
+}
+
+export async function getLookbookBySlug(slug: string): Promise<PublicLookbook | null> {
+  try {
+    const { lookbook } = await apiFetch(`/content/lookbooks/${encodeURIComponent(slug)}`, PublicLookbookDetailResponse);
+    return lookbook;
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Journal — `GET /content/journal[/:slug]` (`apps/api/.../content/
+// journal.routes.ts`). Published only, newest-first, paginated; `slugs=`
+// resolves specific posts in request order instead (see
+// `getJournalPostsBySlugs` below) — the real `journal_teaser.postSlugs`
+// resolution mechanism `journal.dto.ts#ListJournalPostsQuery`'s own doc
+// comment describes.
+// ---------------------------------------------------------------------------
+
+export interface ListJournalPostsParams {
+  page?: number;
+  limit?: number;
+}
+
+export interface ListJournalPostsResult {
+  posts: PublicJournalPost[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+function buildQueryString(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function getJournalPosts(params: ListJournalPostsParams = {}): Promise<ListJournalPostsResult> {
+  const query = buildQueryString({ page: params.page, limit: params.limit });
+  const { data, meta } = await apiFetchWithMeta(`/content/journal${query}`, PublicJournalPostListResponse);
+  return {
+    posts: data.posts,
+    page: meta?.page ?? params.page ?? 1,
+    limit: meta?.limit ?? params.limit ?? 20,
+    total: meta?.total ?? data.posts.length,
+    hasMore: meta?.hasMore ?? false,
+  };
+}
+
+/** `slugs` resolve to real, published posts in the order given, silently
+ *  dropping any unknown/draft slug — exactly `ListJournalPostsQuery`'s own
+ *  documented behavior. Returns `[]` without a network call for an empty
+ *  input rather than sending a meaningless `?slugs=` request. */
+export async function getJournalPostsBySlugs(slugs: string[]): Promise<PublicJournalPost[]> {
+  if (slugs.length === 0) return [];
+  const { posts } = await apiFetch(
+    `/content/journal?slugs=${encodeURIComponent(slugs.join(','))}`,
+    PublicJournalPostListResponse,
+  );
+  return posts;
+}
+
+export async function getJournalPostBySlug(slug: string): Promise<PublicJournalPost | null> {
+  try {
+    const { post } = await apiFetch(`/content/journal/${encodeURIComponent(slug)}`, PublicJournalPostDetailResponse);
+    return post;
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
 }

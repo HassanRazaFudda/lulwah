@@ -5,6 +5,7 @@ import { CollectionRail } from '@/components/sections/CollectionRail';
 import { EditorialSplit } from '@/components/sections/EditorialSplit';
 import { FullBleedBreak } from '@/components/sections/FullBleedBreak';
 import { Hero } from '@/components/sections/Hero';
+import { JournalTeaser, type JournalTeaserItem } from '@/components/sections/JournalTeaser';
 import { NewsletterSection } from '@/components/sections/NewsletterSection';
 import { OccasionTiles } from '@/components/sections/OccasionTiles';
 import { ShopByStitching } from '@/components/sections/ShopByStitching';
@@ -13,7 +14,7 @@ import { ProductCard, type ProductCardProps } from '@/components/commerce/Produc
 import { Link } from '@/i18n/navigation';
 import type { AppLocale } from '@/i18n/routing';
 import { listBrands, listCollections, listProducts } from '@/lib/catalog-client';
-import { getHomeSections } from '@/lib/content-client';
+import { getHomeSections, getJournalPostsBySlugs } from '@/lib/content-client';
 import {
   categoryGridVariant,
   inferCollectionRailSort,
@@ -70,15 +71,23 @@ export async function generateMetadata({ params }: HomePageProps): Promise<Metad
  *
  * `category_grid` sections dispatch between `ShopByStitching` and
  * `OccasionTiles` by tile count — see
- * `content-mappers.ts#categoryGridVariant`. `journal_teaser` sections are
- * skipped outright: plan.md §15.2 item 10 scopes that to R2, and no journal
- * exists anywhere in this codebase to render one against.
+ * `content-mappers.ts#categoryGridVariant`. `journal_teaser` sections now
+ * render for real (plan.md §15.2 item 10 was R2-scoped only until the
+ * `content` module's Lookbook/Journal storefront pages landed): each
+ * section's `postSlugs` (`JournalTeaserSectionSettings`) is resolved to real,
+ * published posts via `GET /content/journal?slugs=...`
+ * (`lib/content-client.ts#getJournalPostsBySlugs`), which already drops any
+ * unknown/draft slug and preserves the admin's own order — a section whose
+ * slugs are empty, or none of which resolve, renders nothing (`JournalTeaser`
+ * returns `null` for an empty `items` list), the same explicit,
+ * documented-fallback spirit every other section on this page already
+ * follows for its own empty-data case.
  */
 export default async function HomePage({ params }: HomePageProps) {
   const { locale } = await params;
 
   const rawSections = await getHomeSections();
-  const typedSections = parseHomeSections(rawSections).filter((section) => section.type !== 'journal_teaser');
+  const typedSections = parseHomeSections(rawSections);
 
   if (typedSections.length === 0) {
     return <DefaultHomeComposition locale={locale} />;
@@ -96,19 +105,27 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
 
   const collectionRailSections = sections.filter(isHomeSectionType('collection_rail'));
   const brandStripSections = sections.filter(isHomeSectionType('brand_strip'));
+  const journalTeaserSections = sections.filter(isHomeSectionType('journal_teaser'));
   const needsBrands = collectionRailSections.length > 0 || brandStripSections.length > 0;
   const needsCollectionLookup = collectionRailSections.some((section) => section.settings.collectionId !== null);
+  // Deduped across every `journal_teaser` section on the page — one batch
+  // call resolves every section's slugs at once; each section then looks its
+  // own `postSlugs` up in the resulting map, so per-section order is never
+  // lost even though the fetch itself is a single deduped union.
+  const allJournalSlugs = Array.from(new Set(journalTeaserSections.flatMap((section) => section.settings.postSlugs)));
 
-  const [brands, collections] = await Promise.all([
+  const [brands, collections, journalPosts] = await Promise.all([
     needsBrands ? listBrands() : Promise.resolve([]),
     // A generous limit — resolving a CMS-referenced `collectionId` to its
     // slug (`listProducts` takes slugs, not ids, per `catalog-client.ts`'s
     // own doc comment) needs the full collection list, not just a first page.
     needsCollectionLookup ? listCollections(100) : Promise.resolve([]),
+    allJournalSlugs.length > 0 ? getJournalPostsBySlugs(allJournalSlugs) : Promise.resolve([]),
   ]);
   const brandNameById = buildBrandNameById(brands);
   const brandsById = new Map(brands.map((brand) => [brand.id, brand]));
   const collectionSlugById = new Map(collections.map((collection) => [collection.id, collection.slug]));
+  const journalPostBySlug = new Map(journalPosts.map((post) => [post.slug, post]));
 
   const railItemsBySectionId = new Map<string, ProductCardProps[]>();
   await Promise.all(
@@ -199,6 +216,27 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
           case 'newsletter':
             return <NewsletterSection key={section.id} settings={section.settings} locale={locale} />;
 
+          case 'journal_teaser': {
+            const items: JournalTeaserItem[] = section.settings.postSlugs
+              .map((slug) => journalPostBySlug.get(slug))
+              .filter((post): post is NonNullable<typeof post> => post !== undefined)
+              .map((post) => {
+                const postTitle = pickLocale(post.titleEn, post.titleAr, locale);
+                return {
+                  slug: post.slug,
+                  title: postTitle,
+                  excerpt: pickLocale(post.excerptEn, post.excerptAr, locale),
+                  image: post.coverMedia ? { src: post.coverMedia.url, alt: postTitle } : null,
+                };
+              });
+            if (items.length === 0) return null;
+            return (
+              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
+                <JournalTeaser title={t('journalTeaser.title')} items={items} />
+              </div>
+            );
+          }
+
           default:
             return null;
         }
@@ -286,7 +324,11 @@ async function DefaultHomeComposition({ locale }: { locale: AppLocale }) {
       {/* 9. The Lulwah promise (USP bar) */}
       <UspBar />
 
-      {/* 11. Newsletter — item 10 "Journal teaser" is explicitly R2-scoped (§15.2), skipped here. */}
+      {/* 11. Newsletter — item 10 "Journal teaser" has no fixed launch-order
+          slot of its own in this fallback composition: it only ever renders
+          from a real CMS section's own `postSlugs` (see `CmsHomeComposition`
+          above), and this branch renders only when there is no usable CMS
+          composition at all, so there are never any real slugs to show here. */}
       <NewsletterSection />
     </>
   );
