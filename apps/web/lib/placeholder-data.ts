@@ -358,6 +358,12 @@ export function toProductCardProps(product: PlaceholderProduct, locale: 'en' | '
   const [primaryImage, secondaryImage] = product.images;
   return {
     slug: product.slug,
+    // Placeholder data has no real Mongo id — this function isn't wired to
+    // any real page (see this file's own doc comment), so the slug stands
+    // in only to satisfy `ProductCardProps`'s type; a `WishlistButton`
+    // rendered off this data would fail `objectId` validation server-side
+    // if ever actually clicked, which is fine since nothing does.
+    productId: product.slug,
     brandName: product.brandName,
     title: product.title,
     image: primaryImage ?? { ...PLACEHOLDER_IMAGE, alt: product.title },

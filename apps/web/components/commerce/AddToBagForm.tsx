@@ -32,6 +32,7 @@ import { WishlistButton } from './WishlistButton';
  * (per-brand measurement tables) this workstream has no source for yet.
  */
 export interface AddToBagFormProps {
+  productId: string;
   productSlug: string;
   brandName: string;
   title: string;
@@ -55,6 +56,7 @@ function estimateDeliveryDayLabel(): string {
 }
 
 export function AddToBagForm({
+  productId,
   productSlug,
   brandName,
   title,
@@ -195,7 +197,7 @@ export function AddToBagForm({
         >
           {addCartItem.isPending ? 'Adding…' : justAdded ? 'Added to bag' : inStock ? 'Add to bag' : 'Sold out'}
         </Button>
-        <WishlistButton productSlug={productSlug} productTitle={title} />
+        <WishlistButton productId={productId} productTitle={title} variantId={matchedVariant?.id ?? null} />
       </div>
 
       {addToBagErrorMessage ? (

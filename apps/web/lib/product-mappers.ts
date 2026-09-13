@@ -30,6 +30,7 @@ export function toProductCardProps(product: Product, brandName: string, locale: 
   const { image, hoverImage } = resolveImages(product.media, product.title);
   return {
     slug: product.slug,
+    productId: product.id,
     brandName,
     title: product.title,
     image,
