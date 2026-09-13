@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import type { Order } from '@lulwah/contracts';
+import type { Order, Review, WishlistItem } from '@lulwah/contracts';
 import { formatDate, formatDateTime, formatMoney, formatUaePhone } from '@lulwah/utils';
 import { Button } from '@lulwah/ui';
 import { DataTable } from '../../../../components/DataTable';
@@ -11,8 +12,12 @@ import { Panel } from '../../../../components/Panel';
 import { PageHeader } from '../../../../components/PageHeader';
 import { Skeleton } from '../../../../components/Skeleton';
 import { StatusFlagPill } from '../../../../components/StatusFlagPill';
+import { ReviewStatusPill } from '../../../../components/ReviewStatusPill';
 import type { AdminCustomerCartItem } from '../../../../lib/queries/customers';
 import { useAdminCustomerQuery, useUpdateCustomerMutation } from '../../../../lib/queries/customers';
+import { useAdminCustomerReviewsQuery } from '../../../../lib/queries/reviews';
+import { useAdminCustomerWishlistQuery } from '../../../../lib/queries/wishlist';
+import { useAdminProductsQuery } from '../../../../lib/queries/products';
 
 const ORDERS_PAGE_SIZE = 10;
 
@@ -54,11 +59,18 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
  * `docs/implemented-plan.md` and `lib/queries/customers.ts`'s doc comment
  * for exactly what that composes and how it was verified).
  *
- * Deliberately has NO wishlist/reviews/measurement-profile sections —
- * nothing in this codebase builds those anywhere (checked the backend
- * module directly; `customer.dto.ts`'s own doc comment says the same). A
- * plain note stands in below rather than fabricating empty panels for
- * features that don't exist yet.
+ * Wishlist and Reviews panels were added in P4, once the `engagement`
+ * module shipped real `GET /admin/customers/:id/{wishlist,reviews}`
+ * endpoints for exactly this screen (`engagement.routes.ts`'s own doc
+ * comment names this page as the reason those two routes exist) — they are
+ * separate fetches from `GET /admin/customers/:id` itself, not folded into
+ * `AdminCustomerDetailResponse`, since that response shape belongs to the
+ * `customer` module and `engagement` composes across the module boundary
+ * the same way `catalog`/`order`/`cart` already do for the rest of this
+ * page (plan.md §5.3: "a module may only touch another module through its
+ * exported service interface"). Measurement profiles still have no
+ * section — nothing in this codebase builds that anywhere (checked the
+ * backend directly; `customer.dto.ts`'s own doc comment says the same).
  */
 export default function CustomerDetailPage() {
   const params = useParams();
@@ -68,6 +80,12 @@ export default function CustomerDetailPage() {
   const [ordersPage, setOrdersPage] = useState(1);
   const { data, isLoading } = useAdminCustomerQuery(customerId, ordersPage, ORDERS_PAGE_SIZE);
   const updateCustomer = useUpdateCustomerMutation();
+  const { data: reviews, isLoading: reviewsLoading } = useAdminCustomerReviewsQuery(customerId);
+  const { data: wishlist, isLoading: wishlistLoading } = useAdminCustomerWishlistQuery(customerId);
+  const productsQuery = useAdminProductsQuery();
+
+  const productById = useMemo(() => new Map((productsQuery.data ?? []).map((p) => [p.id, p])), [productsQuery.data]);
+  const productLabel = (productId: string): string => productById.get(productId)?.title ?? productId.slice(-8);
 
   const [tagDraft, setTagDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
@@ -120,6 +138,50 @@ export default function CustomerDetailPage() {
   };
 
   const ordersPageCount = Math.max(1, Math.ceil(ordersTotal / ORDERS_PAGE_SIZE));
+
+  const wishlistColumns: DataTableColumn<WishlistItem>[] = [
+    {
+      id: 'product',
+      header: 'Product',
+      cell: (item) => (
+        <Link href={`/products/${item.productId}`} className="text-zamurrad underline underline-offset-4">
+          {productLabel(item.productId)}
+        </Link>
+      ),
+    },
+    {
+      id: 'variant',
+      header: 'Variant',
+      cell: (item) => (item.variantId ? <span className="font-mono text-body-sm">{item.variantId.slice(-8)}</span> : '—'),
+    },
+    { id: 'priceAtAdd', header: 'Price at add', align: 'right', cell: (item) => formatMoney(item.priceAtAddFils, 'en') },
+    { id: 'addedAt', header: 'Added', cell: (item) => formatDate(item.addedAt, 'en') },
+  ];
+
+  const reviewColumns: DataTableColumn<Review>[] = [
+    {
+      id: 'product',
+      header: 'Product',
+      cell: (r) => (
+        <Link href={`/products/${r.productId}`} className="text-zamurrad underline underline-offset-4">
+          {productLabel(r.productId)}
+        </Link>
+      ),
+    },
+    { id: 'rating', header: 'Rating', align: 'center', cell: (r) => `${r.rating} / 5` },
+    {
+      id: 'title',
+      header: 'Review',
+      cell: (r) => (
+        <span className="block max-w-[220px] truncate" title={r.title}>
+          {r.title}
+        </span>
+      ),
+    },
+    { id: 'verified', header: 'Verified', align: 'center', cell: (r) => (r.isVerifiedPurchase ? 'Yes' : 'No') },
+    { id: 'status', header: 'Status', cell: (r) => <ReviewStatusPill status={r.status} size="sm" /> },
+    { id: 'date', header: 'Date', cell: (r) => formatDate(r.createdAt, 'en') },
+  ];
 
   return (
     <div className="flex flex-col gap-16">
@@ -262,6 +324,29 @@ export default function CustomerDetailPage() {
               <Row label="Grand total" value={formatMoney(currentCart.totals.grandTotalFils, 'en')} />
             </dl>
           </div>
+        )}
+      </Panel>
+
+      <Panel title="Wishlist">
+        {wishlistLoading ? (
+          <Skeleton className="h-[80px]" />
+        ) : !wishlist || wishlist.items.length === 0 ? (
+          <p className="text-body-sm text-ink-70">{wishlist ? 'Wishlist is empty.' : 'No wishlist yet.'}</p>
+        ) : (
+          <DataTable
+            columns={wishlistColumns}
+            rows={wishlist.items}
+            getRowId={(item) => `${item.productId}:${item.variantId ?? 'any'}`}
+            emptyMessage="Wishlist is empty."
+          />
+        )}
+      </Panel>
+
+      <Panel title="Reviews" actions={<span className="text-body-sm text-ink-70">{(reviews ?? []).length} total</span>}>
+        {reviewsLoading ? (
+          <Skeleton className="h-[80px]" />
+        ) : (
+          <DataTable columns={reviewColumns} rows={reviews ?? []} getRowId={(r) => r.id} emptyMessage="No reviews yet." />
         )}
       </Panel>
 
