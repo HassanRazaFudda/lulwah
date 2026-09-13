@@ -5,6 +5,7 @@ import { AddToBagForm } from '@/components/commerce/AddToBagForm';
 import { PriceBlock } from '@/components/commerce/PriceBlock';
 import { ProductCard } from '@/components/commerce/ProductCard';
 import { ProductGallery } from '@/components/commerce/ProductGallery';
+import { ReviewsSection } from '@/components/commerce/ReviewsSection';
 import { StitchingPill } from '@/components/commerce/StitchingPill';
 import type { AppLocale } from '@/i18n/routing';
 import { getProductBySlug, getRelatedProducts, listBrands } from '@/lib/catalog-client';
@@ -131,6 +132,7 @@ export default async function ProductPage({ params }: PdpPageProps) {
           <StitchingPill stitchingType={product.stitchingType} pieceCount={product.pieceCount} />
 
           <AddToBagForm
+            productId={product.id}
             productSlug={product.slug}
             brandName={brand.name}
             title={product.title}
@@ -151,6 +153,8 @@ export default async function ProductPage({ params }: PdpPageProps) {
           </ul>
         </div>
       </div>
+
+      <ReviewsSection productId={product.id} productTitle={product.title} />
 
       {related.length > 0 ? (
         <section className="flex flex-col gap-24 border-t border-line pt-48">

@@ -31,6 +31,8 @@ export interface ProductCardImage {
 
 export interface ProductCardProps {
   slug: string;
+  /** Real Mongo product id — required by the wishlist API (`WishlistButton`), which is keyed by `productId`, not `slug`. */
+  productId: string;
   brandName: string;
   title: string;
   image: ProductCardImage;
@@ -55,6 +57,7 @@ const MAX_VISIBLE_COLORS = 4;
 
 export function ProductCard({
   slug,
+  productId,
   brandName,
   title,
   image,
@@ -126,7 +129,7 @@ export function ProductCard({
           </span>
         ) : null}
 
-        <WishlistButton productSlug={slug} productTitle={title} className="absolute end-4 top-4" />
+        <WishlistButton productId={productId} productTitle={title} className="absolute end-4 top-4" />
 
         {availableSizes.length > 0 ? (
           <div
