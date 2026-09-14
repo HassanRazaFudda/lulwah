@@ -69,10 +69,10 @@ COPY --from=build --chown=lulwah:lulwah /repo/apps/web/.next/static ./apps/web/.
 COPY --from=build --chown=lulwah:lulwah /repo/apps/web/public ./apps/web/public
 USER lulwah
 ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
-EXPOSE 3000
+ENV PORT=3900
+EXPOSE 3900
 # Liveness: the storefront has no dedicated /health route — plan `/en` (a
 # real, always-seeded locale route) as the healthcheck target instead.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/en').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3900)+'/en').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "apps/web/server.js"]

@@ -51,11 +51,11 @@ COPY --from=build --chown=lulwah:lulwah /repo/apps/admin/.next/static ./apps/adm
 COPY --from=build --chown=lulwah:lulwah /repo/apps/admin/public ./apps/admin/public
 USER lulwah
 ENV HOSTNAME=0.0.0.0
-ENV PORT=3001
-EXPOSE 3001
+ENV PORT=3901
+EXPOSE 3901
 # Liveness: admin has no dedicated /health route either — the login page
 # is always reachable unauthenticated, so it doubles as the healthcheck
 # target.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3901)+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "apps/admin/server.js"]

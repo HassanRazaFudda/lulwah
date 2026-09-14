@@ -70,7 +70,8 @@ COPY --from=build --chown=lulwah:lulwah /repo/out/api/node_modules ./node_module
 COPY --from=build --chown=lulwah:lulwah /repo/apps/api/dist ./dist
 COPY --from=build --chown=lulwah:lulwah /repo/apps/api/package.json ./package.json
 USER lulwah
-EXPOSE 4000
+ENV PORT=3902
+EXPOSE 3902
 # Liveness: GET /api/v1/health must return 200 (see src/app.ts).
 # 127.0.0.1, not localhost: on this Alpine base, a musl/BusyBox resolver
 # has been observed (see docker-compose.yml's healthcheck comments)
@@ -80,5 +81,5 @@ EXPOSE 4000
 # own `healthcheck:` block under Compose; it only matters for a bare
 # `docker run`.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3902)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.js"]
