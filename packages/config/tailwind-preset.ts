@@ -58,6 +58,7 @@ const preset = {
       'gold-light': colors.goldLight,
       garnet: colors.garnet,
       plum: colors.plum,
+      'plum-dark': colors.plumDark,
       mukaish: colors.mukaish,
       line: colorAlphas.line,
       success: colors.success,

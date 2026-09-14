@@ -208,7 +208,23 @@ export function Header() {
               proportions, rather than two arbitrarily-guessed pixel widths
               that happened to look right at one size and wrong at another. */}
           <span className="flex flex-col leading-none">
-            <span className="font-display text-center text-[21px] tracking-display uppercase">Lulwah</span>
+            {/* `plum-dark` here, `plum` (inherited from the Link above) for
+                the monogram + "Fashion" — found live, reported by the user
+                with exact eyedropper-sampled hex values off the real file:
+                these are genuinely two distinct, if close, shades in the
+                source mark, not a rounding artifact of the first (disproven)
+                CMYK-conversion attempt — see colors.ts's own doc comment.
+                Only applied when solid (`!isTransparent`): over the hero
+                scrim both collapse to plain white regardless, where two
+                near-black plums would be indistinguishable anyway. */}
+            <span
+              className={cx(
+                'font-display text-center text-[21px] tracking-display uppercase',
+                !isTransparent && 'text-plum-dark',
+              )}
+            >
+              Lulwah
+            </span>
             {/* Flanking hairlines either side of "Fashion" — the source
                 logo (LULWAH.pdf/.ai) draws these as two thin rules bracketing
                 a notably smaller "FASHION" than "LULWAH" above it, not
@@ -223,15 +239,26 @@ export function Header() {
                 isn't one of its steps, so `gap-6` generated no CSS at all —
                 the exact same silent-failure class of bug §8.1 already
                 documents for `-0` utilities.
-                `me-[-0.16em]` on "Fashion" (matching `tracking-label`'s own
-                0.16em) — found live, reported by the user via DevTools'
-                own box-model overlay: `letter-spacing` adds space after
-                *every* character it tracks, including the last one, so the
-                gap to the closing hairline reads visibly wider than the gap
-                from the opening one even with the same `gap` on both sides.
-                This cancels exactly that trailing addition, in `em` so it
-                keeps tracking the text's own font-size if that ever changes,
-                rather than a fixed px guess. */}
+                No letter-spacing compensation on "Fashion" — briefly added,
+                then removed: measured via Chrome DevTools Protocol
+                (`getBoundingClientRect()` on the real elements) that the gap
+                either side is already exactly equal without it, and adding
+                one made the two sides measurably unequal instead. What the
+                user's own DevTools screenshot was very likely showing
+                instead is optical, not geometric: "F"'s flat stroke and
+                "N"'s angled ones carry different visual weight at their
+                edges, which a margin hack doesn't fix and shouldn't try to.
+                Reported live by the user as visually thicker than the
+                source file's own hairline: still `h-[1px]` for now, not
+                changed here — `h-[1px]` and the Tailwind-named `h-px` are
+                the same 1 CSS pixel either way, so swapping between them
+                changes nothing (a real near-miss caught before committing
+                it). A genuinely thinner sub-pixel line needs a deliberate
+                technique (e.g. `scale-y-50` on a 1px line, rendering as
+                half a *device* pixel on a 2x+ screen) verified before use,
+                not assumed — left for a follow-up once the colour fix
+                above is confirmed, since a flat, over-saturated colour can
+                itself read as "thicker" at the same literal height. */}
             <span className="mt-4 flex items-center gap-4">
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
               <span className="font-body text-[10px] font-semibold tracking-label uppercase">Fashion</span>

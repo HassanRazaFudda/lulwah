@@ -11,17 +11,20 @@
  * Garnet appears only on sale/discount markers. **Plum is reserved for the
  * logo mark and wordmark only** — this correction supersedes the original
  * law's "gold ... the monogram" clause, written before any real logo
- * existed. `plum` is not a designer's guess: it's extracted directly from
- * the client-provided `LULWAH.pdf`/`LULWAH.ai` — both files fill the "LF"
- * monogram, "LULWAH", "FASHION" and the flanking hairlines with one of two
- * near-identical CMYK values (`0.8 0.98 0.373 0.533 k` for the "LULWAH"
- * text, `0.812 1 0.275 0.333 k` for everything else in the mark), found by
- * inflating the PDF's own FlateDecode content stream and reading its real
- * fill operators — not eyeballed off a rendered preview. Converted to RGB,
- * these round to the same visible plum; `#20007B` (the more common of the
- * two, covering the monogram + "FASHION" + both hairlines) is used as the
- * single on-screen value throughout. Everything else stays paper, pearl
- * and ink; the clothes bring the colour.
+ * existed.
+ *
+ * `plum`/`plumDark` are sourced from the client-provided `LULWAH.pdf`/
+ * `LULWAH.ai`, and corrected once already: the first pass converted the
+ * PDF's own embedded CMYK fill operators to RGB with the naive formula
+ * (`R=255×(1-C)×(1-K)` etc.) and landed on `#20007B` — visibly too blue/
+ * saturated once actually compared side by side against the source file,
+ * because that formula doesn't reproduce the colour-managed conversion a
+ * real design tool applies. Replaced with the client's own eyedropper-
+ * sampled values, reported directly: `plum` (`#411956`) for the "LF"
+ * monogram, "FASHION" and both hairlines; `plumDark` (`#310C3C`, a touch
+ * darker) for "LULWAH" specifically — genuinely two close but distinct
+ * shades in the source mark, not a rounding artifact. Everything else
+ * stays paper, pearl and ink; the clothes bring the colour.
  */
 export const colors = {
   ink: '#131311',
@@ -34,7 +37,8 @@ export const colors = {
   gold: '#D9AE4A',
   goldLight: '#F2E0A8',
   garnet: '#8A2B36',
-  plum: '#20007B',
+  plum: '#411956',
+  plumDark: '#310C3C',
   mukaish: '#8E9086',
   success: '#1F6B4A',
   warning: '#A9761A',
