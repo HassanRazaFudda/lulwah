@@ -200,15 +200,34 @@ export function Header() {
           )}
         >
           <LulwahMonogram className="h-[38px] w-auto shrink-0" />
-          <span className="flex flex-col items-center leading-none">
-            <span className="font-display text-[21px] tracking-display uppercase">Lulwah</span>
+          {/* No `items-center` here — flex's own default (`stretch`) is what
+              does the real work: both rows below stretch to the width of
+              whichever is naturally widest ("Lulwah", the larger of the two
+              type sizes), so the "— Fashion —" row is automatically exactly
+              as wide as "Lulwah" above it, matching the source lockup's own
+              proportions, rather than two arbitrarily-guessed pixel widths
+              that happened to look right at one size and wrong at another. */}
+          <span className="flex flex-col leading-none">
+            <span className="font-display text-center text-[21px] tracking-display uppercase">Lulwah</span>
             {/* Flanking hairlines either side of "Fashion" — the source
                 logo (LULWAH.pdf/.ai) draws these as two thin rules bracketing
-                the word, not just tracked type on its own. */}
-            <span className="mt-4 flex items-center gap-6">
-              <span aria-hidden="true" className="h-[1px] w-16 bg-current" />
+                the word, not just tracked type on its own. `flex-1` on each
+                (not a fixed width) is what makes them fill exactly to the
+                row's own width above, symmetrically, on both sides.
+                `gap-4`, not `gap-6` — found live, reported by the user: this
+                project's spacing scale is a locked, replaced set (packages/
+                tokens/src/spacing.ts), not Tailwind's default one, and "6"
+                isn't one of its steps, so `gap-6` generated no CSS at all —
+                the exact same silent-failure class of bug §8.1 already
+                documents for `-0` utilities. That, not `tracking-label`'s
+                letter-spacing (briefly suspected, then ruled out by
+                measuring with `gap` fixed and no compensation applied —
+                both sides came out exactly equal on their own), was the
+                entire cause of the asymmetric gap the user saw. */}
+            <span className="mt-4 flex items-center gap-4">
+              <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
               <span className="font-body text-label font-semibold tracking-label uppercase">Fashion</span>
-              <span aria-hidden="true" className="h-[1px] w-16 bg-current" />
+              <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
             </span>
           </span>
         </Link>
