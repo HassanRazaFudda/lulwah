@@ -247,7 +247,7 @@ export function Header() {
                 not assumed — left for a follow-up once the colour fix
                 above is confirmed, since a flat, over-saturated colour can
                 itself read as "thicker" at the same literal height. */}
-            <span className="mt-4 flex items-center gap-4">
+            <span className="mt-8 flex items-center gap-4">
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
               <FashionWord className="block h-[7px] w-auto shrink-0" />
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
