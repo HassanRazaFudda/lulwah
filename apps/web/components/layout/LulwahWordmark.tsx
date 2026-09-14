@@ -1,0 +1,65 @@
+/**
+ * "LULWAH" and "FASHION" — extracted the same way as `LulwahMonogram.tsx`'s
+ * "LF" mark: not redrawn in a substitute typeface, but reproduced path-for-
+ * path from the client's own source file.
+ *
+ * The earlier version of this wordmark used a real Latin serif web font
+ * (Bodoni Moda) tuned by eye against screenshots of `LULWAH.ai`/`LULWAH.pdf`
+ * — weight, size and tracking corrected round after round, but still an
+ * approximation of a different typeface, not the source file's own
+ * letterforms. Asked directly why that approach was used instead of
+ * extracting the real glyphs, the honest answer was: it hadn't been tried
+ * yet for the wordmark (only the monogram got real vector extraction), so
+ * this component is that follow-through.
+ *
+ * `LULWAH.ai` turns out to be PDF-compatible (Illustrator's default save
+ * format), and embeds the wordmark's actual TrueType font program
+ * (`FontFile2`) rather than outlined paths. That embedded font's own
+ * internal name is `YBWARR+Jameel-Noori-Nastaleeq-Kasheeda` — a Nastaliq/
+ * Urdu-calligraphy font name that has nothing to do with the clean Latin
+ * serif it actually renders (confirmed by extracting the font program and
+ * test-rendering it: the glyphs are a real, unrelated Didone-style Latin
+ * face). PDF subsetting tools commonly strip/rewrite a font's own name
+ * table when they build a page-specific subset, so the original typeface's
+ * real identity is gone — this file's `name` table has been overwritten
+ * with the subset tag for every field, including the family name.
+ *
+ * That name mismatch, plus the font being a full ~25,600-glyph program (not
+ * a small custom subset built just for this logo), is why this component
+ * does not embed that font file itself and load it as a web font: with no
+ * way to verify what commercial typeface it actually is or what its
+ * licence permits, redistributing the whole font program on a public
+ * website carries real licensing risk. Extracting only the ~10 individual
+ * letterforms this wordmark actually uses (L, U, W, A, H, F, S, I, O, N) as
+ * static vector outlines and shipping just those — never the font program
+ * itself — is the same thing a designer does by converting logo type to
+ * outlines before handing off final art, and it's what `LulwahMonogram.tsx`
+ * already does for the "LF" mark.
+ *
+ * Extraction method: parsed the embedded TrueType program directly out of
+ * `LULWAH.ai`'s `FontFile2` stream (`cmap` → glyph ID, `loca` + `glyf` →
+ * quadratic outline points, `hmtx` → advance widths), converted each
+ * letter's quadratic contours straight to SVG `Q` commands (TrueType's own
+ * curve type — no cubic conversion or re-fitting involved), and laid the
+ * letters out left-to-right using the font's own advance widths, exactly
+ * matching the spacing baked into the source file. No manual tracing.
+ *
+ * `currentColor`, not a hardcoded fill — same reasoning as the monogram:
+ * `Header.tsx` switches the colour per header state, and a vector mark
+ * takes whatever colour paints it.
+ */
+export function LulwahWord({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 7258 1169" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M 929 829 L 956 835 L 861 1137 L 0 1137 L 0 1107 L 41 1107 Q 112 1107 142 1061 Q 160 1034 160 939 L 160 222 Q 160 118 137 91 Q 105 55 41 55 L 0 55 L 0 25 L 503 25 L 503 55 Q 415 55 379 72 Q 343 89 330 115.5 Q 317 142 317 241 L 317 939 Q 317 1007 330 1033 Q 340 1050 360.5 1058 Q 381 1066 488 1066 L 570 1066 Q 697 1066 749 1047.5 Q 801 1029 843.5 981 Q 886 933 929 829 Z M 1808 61 L 1808 31 L 2202 31 L 2202 61 L 2160 61 Q 2094 61 2059 116 Q 2042 142 2042 234 L 2042 685 Q 2042 852 2008.5 944.5 Q 1975 1037 1878 1103 Q 1781 1169 1614 1169 Q 1432 1169 1337.5 1106 Q 1243 1043 1204 936 Q 1178 863 1178 662 L 1178 228 Q 1178 125 1149.5 93 Q 1121 61 1058 61 L 1016 61 L 1016 31 L 1497 31 L 1497 61 L 1454 61 Q 1385 61 1356 105 Q 1335 134 1335 228 L 1335 712 Q 1335 777 1347 860.5 Q 1359 944 1390 991 Q 1421 1038 1479.5 1068 Q 1538 1098 1624 1098 Q 1733 1098 1819 1050.5 Q 1905 1003 1936.5 929 Q 1968 855 1968 678 L 1968 228 Q 1968 123 1945 97 Q 1913 61 1850 61 L 1808 61 Z M 3189 829 L 3216 835 L 3121 1137 L 2260 1137 L 2260 1107 L 2301 1107 Q 2372 1107 2402 1061 Q 2420 1034 2420 939 L 2420 222 Q 2420 118 2397 91 Q 2365 55 2301 55 L 2260 55 L 2260 25 L 2763 25 L 2763 55 Q 2675 55 2639 72 Q 2603 89 2590 115.5 Q 2577 142 2577 241 L 2577 939 Q 2577 1007 2590 1033 Q 2600 1050 2620.5 1058 Q 2641 1066 2748 1066 L 2830 1066 Q 2957 1066 3009 1047.5 Q 3061 1029 3103.5 981 Q 3146 933 3189 829 Z M 4839 31 L 4839 61 Q 4795 61 4768 76.5 Q 4741 92 4717 135 Q 4700 163 4665 272 L 4355 1168 L 4322 1168 L 4069 457 L 3817 1168 L 3788 1168 L 3457 245 Q 3420 141 3411 122 Q 3394 91 3366 76 Q 3338 61 3289 61 L 3289 31 L 3701 31 L 3701 61 L 3681 61 Q 3638 61 3615 80.5 Q 3592 100 3592 128 Q 3592 157 3628 260 L 3847 884 L 4031 354 L 3998 260 L 3972 186 Q 3955 145 3934 113 Q 3923 98 3907 87 Q 3887 72 3866 66 Q 3851 61 3817 61 L 3817 31 L 4250 31 L 4250 61 L 4221 61 Q 4175 61 4153.5 80.5 Q 4132 100 4132 134 Q 4132 176 4169 280 L 4382 884 L 4594 272 Q 4630 170 4630 131 Q 4630 112 4618 95.5 Q 4606 79 4588 72 Q 4557 61 4507 61 L 4507 31 L 4839 31 Z M 5628 765 L 5198 765 L 5122 940 Q 5095 1005 5095 1037 Q 5095 1062 5119 1081.5 Q 5143 1101 5223 1107 L 5223 1137 L 4873 1137 L 4873 1107 Q 4943 1094 4963 1075 Q 5005 1035 5056 915 L 5447 0 L 5476 0 L 5863 925 Q 5910 1036 5948 1069.5 Q 5986 1103 6054 1107 L 6054 1137 L 5615 1137 L 5615 1107 Q 5682 1103 5705 1084.5 Q 5728 1066 5728 1039 Q 5728 1003 5696 925 L 5628 765 Z M 5605 704 L 5417 255 L 5223 704 L 5605 704 Z M 6425 541 L 6942 541 L 6942 223 Q 6942 137 6931 110 Q 6923 90 6897 75 Q 6861 55 6822 55 L 6783 55 L 6783 25 L 7258 25 L 7258 55 L 7219 55 Q 7180 55 7144 74 Q 7118 87 7108.5 114 Q 7099 141 7099 223 L 7099 940 Q 7099 1025 7110 1052 Q 7118 1072 7144 1087 Q 7180 1107 7219 1107 L 7258 1107 L 7258 1137 L 6783 1137 L 6783 1107 L 6822 1107 Q 6890 1107 6921 1066 Q 6942 1040 6942 940 L 6942 602 L 6425 602 L 6425 940 Q 6425 1025 6436 1052 Q 6444 1072 6470 1087 Q 6506 1107 6545 1107 L 6585 1107 L 6585 1137 L 6109 1137 L 6109 1107 L 6148 1107 Q 6217 1107 6248 1066 Q 6268 1040 6268 940 L 6268 223 Q 6268 137 6257 110 Q 6249 90 6224 75 Q 6187 55 6148 55 L 6109 55 L 6109 25 L 6585 25 L 6585 55 L 6545 55 Q 6506 55 6470 74 Q 6445 87 6435 114 Q 6425 141 6425 223 L 6425 541 Z" />
+    </svg>
+  );
+}
+
+export function FashionWord({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 7358 1168" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M 317 86 L 317 523 L 519 523 Q 589 523 621.5 492 Q 654 461 664 370 L 695 370 L 695 747 L 664 747 Q 663 682 647 651.5 Q 631 621 603 606 Q 575 591 519 591 L 317 591 L 317 940 Q 317 1025 327 1052 Q 335 1072 362 1087 Q 398 1107 437 1107 L 477 1107 L 477 1137 L 0 1137 L 0 1107 L 39 1107 Q 108 1107 139 1066 Q 159 1040 159 940 L 159 222 Q 159 137 148 110 Q 140 90 115 75 Q 80 55 39 55 L 0 55 L 0 25 L 827 25 L 838 269 L 809 269 Q 788 192 760 155.5 Q 732 119 690.5 102.5 Q 649 86 562 86 L 317 86 Z M 1696 765 L 1266 765 L 1190 940 Q 1163 1005 1163 1037 Q 1163 1062 1187 1081.5 Q 1211 1101 1291 1107 L 1291 1137 L 941 1137 L 941 1107 Q 1011 1094 1031 1075 Q 1073 1035 1124 915 L 1515 0 L 1544 0 L 1931 925 Q 1978 1036 2016 1069.5 Q 2054 1103 2122 1107 L 2122 1137 L 1683 1137 L 1683 1107 Q 1750 1103 1773 1084.5 Q 1796 1066 1796 1039 Q 1796 1003 1764 925 L 1696 765 Z M 1673 704 L 1485 255 L 1291 704 L 1673 704 Z M 2918 5 L 2918 390 L 2888 390 Q 2873 279 2835 213.5 Q 2797 148 2726.5 109.5 Q 2656 71 2580 71 Q 2495 71 2439 123 Q 2383 175 2383 241 Q 2383 292 2419 334 Q 2469 396 2661 498 Q 2816 582 2873 626.5 Q 2930 671 2961 731.5 Q 2992 792 2992 859 Q 2992 985 2894 1076.5 Q 2796 1168 2642 1168 Q 2593 1168 2551 1161 Q 2525 1157 2445 1131 Q 2365 1105 2344 1105 Q 2323 1105 2311.5 1117 Q 2300 1129 2294 1168 L 2264 1168 L 2264 787 L 2294 787 Q 2315 906 2351 965.5 Q 2387 1025 2461.5 1064.5 Q 2536 1104 2624 1104 Q 2727 1104 2786.5 1050 Q 2846 996 2846 922 Q 2846 881 2823.5 839 Q 2801 797 2753 761 Q 2721 737 2578.5 657 Q 2436 577 2375.5 529.5 Q 2315 482 2284 424.5 Q 2253 367 2253 298 Q 2253 178 2345 91.5 Q 2437 5 2579 5 Q 2667 5 2766 49 Q 2812 69 2831 69 Q 2852 69 2865.5 56.5 Q 2879 44 2888 5 L 2918 5 Z M 3470 541 L 3987 541 L 3987 223 Q 3987 137 3976 110 Q 3968 90 3942 75 Q 3906 55 3867 55 L 3828 55 L 3828 25 L 4303 25 L 4303 55 L 4264 55 Q 4225 55 4189 74 Q 4163 87 4153.5 114 Q 4144 141 4144 223 L 4144 940 Q 4144 1025 4155 1052 Q 4163 1072 4189 1087 Q 4225 1107 4264 1107 L 4303 1107 L 4303 1137 L 3828 1137 L 3828 1107 L 3867 1107 Q 3935 1107 3966 1066 Q 3987 1040 3987 940 L 3987 602 L 3470 602 L 3470 940 Q 3470 1025 3481 1052 Q 3489 1072 3515 1087 Q 3551 1107 3590 1107 L 3630 1107 L 3630 1137 L 3154 1137 L 3154 1107 L 3193 1107 Q 3262 1107 3293 1066 Q 3313 1040 3313 940 L 3313 223 Q 3313 137 3302 110 Q 3294 90 3269 75 Q 3232 55 3193 55 L 3154 55 L 3154 25 L 3630 25 L 3630 55 L 3590 55 Q 3551 55 3515 74 Q 3490 87 3480 114 Q 3470 141 3470 223 L 3470 541 Z M 4870 1107 L 4870 1137 L 4394 1137 L 4394 1107 L 4433 1107 Q 4502 1107 4533 1066 Q 4553 1040 4553 940 L 4553 222 Q 4553 137 4542 110 Q 4534 90 4509 75 Q 4473 55 4433 55 L 4394 55 L 4394 25 L 4870 25 L 4870 55 L 4830 55 Q 4762 55 4731 96 Q 4710 122 4710 222 L 4710 940 Q 4710 1025 4721 1052 Q 4729 1072 4755 1087 Q 4791 1107 4830 1107 L 4870 1107 Z M 5543 5 Q 5760 5 5918.5 169.5 Q 6077 334 6077 580 Q 6077 833 5917 1000.5 Q 5757 1168 5530 1168 Q 5300 1168 5144 1005 Q 4988 842 4988 583 Q 4988 318 5168 150 Q 5325 5 5543 5 Z M 5528 65 Q 5378 65 5288 176 Q 5176 314 5176 579 Q 5176 851 5292 998 Q 5382 1110 5528 1110 Q 5685 1110 5787 987.5 Q 5889 865 5889 602 Q 5889 317 5777 177 Q 5687 65 5528 65 Z M 6147 29 L 6449 29 L 7128 863 L 7128 222 Q 7128 119 7105 94 Q 7075 59 7010 59 L 6971 59 L 6971 29 L 7358 29 L 7358 59 L 7319 59 Q 7248 59 7219 102 Q 7201 128 7201 222 L 7201 1159 L 7171 1159 L 6438 264 L 6438 948 Q 6438 1051 6460 1076 Q 6491 1111 6556 1111 L 6595 1111 L 6595 1141 L 6208 1141 L 6208 1111 L 6247 1111 Q 6318 1111 6348 1068 Q 6366 1042 6366 948 L 6366 175 Q 6317 118 6292 100 Q 6267 82 6219 67 Q 6195 59 6147 59 L 6147 29 Z" />
+    </svg>
+  );
+}

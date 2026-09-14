@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { cx } from '@lulwah/ui';
 import { Link, usePathname } from '@/i18n/navigation';
 import { LulwahMonogram } from './LulwahMonogram';
+import { FashionWord, LulwahWord } from './LulwahWordmark';
 
 // Deviation: plan.md's full mega-menu (four link columns plus a
 // crossfading featured tile, §15.1) is not built here — it's a
@@ -208,46 +209,33 @@ export function Header() {
               proportions, rather than two arbitrarily-guessed pixel widths
               that happened to look right at one size and wrong at another. */}
           <span className="flex flex-col leading-none">
-            {/* `plum-dark` here, `plum` (inherited from the Link above) for
-                the monogram + "Fashion" — found live, reported by the user
-                with exact eyedropper-sampled hex values off the real file:
-                these are genuinely two distinct, if close, shades in the
-                source mark, not a rounding artifact of the first (disproven)
-                CMYK-conversion attempt — see colors.ts's own doc comment.
-                Only applied when solid (`!isTransparent`): over the hero
-                scrim both collapse to plain white regardless, where two
-                near-black plums would be indistinguishable anyway. */}
-            <span
-              className={cx(
-                'font-display text-center text-[21px] font-bold tracking-display uppercase',
-                !isTransparent && 'text-plum-dark',
-              )}
-            >
-              Lulwah
+            {/* Real vector letterforms now, not a web font — see
+                `LulwahWordmark.tsx`'s doc comment for the full extraction
+                story (asked directly why this used a substitute typeface
+                instead of the source file's own glyphs; it hadn't been
+                tried yet, so this is that follow-through). `plum-dark`
+                here, `plum` (inherited from the Link above) for the
+                monogram + "Fashion" — the client's own eyedropper-sampled
+                values, genuinely two distinct, if close, shades in the
+                source mark — see colors.ts's own doc comment. Only applied
+                when solid (`!isTransparent`): over the hero scrim both
+                collapse to plain white regardless. */}
+            <span className={cx('block', !isTransparent && 'text-plum-dark')}>
+              <LulwahWord className="block h-[16px] w-auto" />
             </span>
             {/* Flanking hairlines either side of "Fashion" — the source
                 logo (LULWAH.pdf/.ai) draws these as two thin rules bracketing
-                a notably smaller "FASHION" than "LULWAH" above it, not
-                tracked type on its own. `flex-1` on each hairline (not a
-                fixed width) is what makes the whole row fill exactly to
-                `LULWAH`'s own width regardless of how small the text
-                itself is — a smaller "Fashion" here means longer hairlines
-                automatically, not a separate width to tune by hand.
-                `gap-4`, not `gap-6` — found live, reported by the user: this
-                project's spacing scale is a locked, replaced set (packages/
-                tokens/src/spacing.ts), not Tailwind's default one, and "6"
-                isn't one of its steps, so `gap-6` generated no CSS at all —
-                the exact same silent-failure class of bug §8.1 already
-                documents for `-0` utilities.
-                No letter-spacing compensation on "Fashion" — briefly added,
-                then removed: measured via Chrome DevTools Protocol
-                (`getBoundingClientRect()` on the real elements) that the gap
-                either side is already exactly equal without it, and adding
-                one made the two sides measurably unequal instead. What the
-                user's own DevTools screenshot was very likely showing
-                instead is optical, not geometric: "F"'s flat stroke and
-                "N"'s angled ones carry different visual weight at their
-                edges, which a margin hack doesn't fix and shouldn't try to.
+                a notably smaller "FASHION" than "LULWAH" above it. `flex-1`
+                on each hairline (not a fixed width) is what makes the whole
+                row fill exactly to `LULWAH`'s own width regardless of how
+                small "Fashion" itself is — a smaller word here means longer
+                hairlines automatically, not a separate width to tune by
+                hand. `gap-4`, not `gap-6` — found live, reported by the
+                user: this project's spacing scale is a locked, replaced set
+                (packages/tokens/src/spacing.ts), not Tailwind's default
+                one, and "6" isn't one of its steps, so `gap-6` generated no
+                CSS at all — the exact same silent-failure class of bug §8.1
+                already documents for `-0` utilities.
                 Reported live by the user as visually thicker than the
                 source file's own hairline: still `h-[1px]` for now, not
                 changed here — `h-[1px]` and the Tailwind-named `h-px` are
@@ -261,7 +249,7 @@ export function Header() {
                 itself read as "thicker" at the same literal height. */}
             <span className="mt-4 flex items-center gap-4">
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
-              <span className="font-display text-[10px] font-semibold tracking-label uppercase">Fashion</span>
+              <FashionWord className="block h-[7px] w-auto shrink-0" />
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
             </span>
           </span>
