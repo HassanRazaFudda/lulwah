@@ -211,22 +211,30 @@ export function Header() {
             <span className="font-display text-center text-[21px] tracking-display uppercase">Lulwah</span>
             {/* Flanking hairlines either side of "Fashion" — the source
                 logo (LULWAH.pdf/.ai) draws these as two thin rules bracketing
-                the word, not just tracked type on its own. `flex-1` on each
-                (not a fixed width) is what makes them fill exactly to the
-                row's own width above, symmetrically, on both sides.
+                a notably smaller "FASHION" than "LULWAH" above it, not
+                tracked type on its own. `flex-1` on each hairline (not a
+                fixed width) is what makes the whole row fill exactly to
+                `LULWAH`'s own width regardless of how small the text
+                itself is — a smaller "Fashion" here means longer hairlines
+                automatically, not a separate width to tune by hand.
                 `gap-4`, not `gap-6` — found live, reported by the user: this
                 project's spacing scale is a locked, replaced set (packages/
                 tokens/src/spacing.ts), not Tailwind's default one, and "6"
                 isn't one of its steps, so `gap-6` generated no CSS at all —
                 the exact same silent-failure class of bug §8.1 already
-                documents for `-0` utilities. That, not `tracking-label`'s
-                letter-spacing (briefly suspected, then ruled out by
-                measuring with `gap` fixed and no compensation applied —
-                both sides came out exactly equal on their own), was the
-                entire cause of the asymmetric gap the user saw. */}
+                documents for `-0` utilities.
+                `me-[-0.16em]` on "Fashion" (matching `tracking-label`'s own
+                0.16em) — found live, reported by the user via DevTools'
+                own box-model overlay: `letter-spacing` adds space after
+                *every* character it tracks, including the last one, so the
+                gap to the closing hairline reads visibly wider than the gap
+                from the opening one even with the same `gap` on both sides.
+                This cancels exactly that trailing addition, in `em` so it
+                keeps tracking the text's own font-size if that ever changes,
+                rather than a fixed px guess. */}
             <span className="mt-4 flex items-center gap-4">
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
-              <span className="font-body text-label font-semibold tracking-label uppercase">Fashion</span>
+              <span className="font-body text-[10px] font-semibold tracking-label uppercase">Fashion</span>
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
             </span>
           </span>
