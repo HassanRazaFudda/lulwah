@@ -1,5 +1,5 @@
 import type { PublicHomeSection, PublicJournalPost, PublicLookbook } from '@lulwah/contracts';
-import { apiFetch, apiFetchWithMeta } from './api-client';
+import { apiFetch, apiFetchWithMeta, isBuildTimeUnreachable } from './api-client';
 import {
   PublicHomeResponse,
   PublicJournalPostDetailResponse,
@@ -24,11 +24,19 @@ import {
  * necessarily built a homepage yet (`docs/implemented-plan.md` §4.7.3/§6.8
  * both note this honestly). Callers must handle it; see
  * `app/[locale]/page.tsx`'s documented fallback to the fixed launch
- * composition.
+ * composition. The same empty-array fallback also covers the build-time-
+ * only case where no API is reachable at all — see `isBuildTimeUnreachable`'s
+ * doc comment (api-client.ts) — since the home page's own `revalidate`
+ * fetches real data again on the next real request/revalidation anyway.
  */
 export async function getHomeSections(): Promise<PublicHomeSection[]> {
-  const { sections } = await apiFetch('/content/home', PublicHomeResponse);
-  return [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+  try {
+    const { sections } = await apiFetch('/content/home', PublicHomeResponse);
+    return [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch (err) {
+    if (isBuildTimeUnreachable(err)) return [];
+    throw err;
+  }
 }
 
 /** Same "is this a real 404, not some other failure" check `catalog-client.ts`
@@ -49,8 +57,14 @@ function isNotFound(err: unknown): boolean {
  *  `getHomeSections`, since there's no separate ordering guarantee to drift
  *  from here (a single, dedicated endpoint, not a mixed-type list). */
 export async function getLookbooks(): Promise<PublicLookbook[]> {
-  const { lookbooks } = await apiFetch('/content/lookbooks', PublicLookbookListResponse);
-  return lookbooks;
+  try {
+    const { lookbooks } = await apiFetch('/content/lookbooks', PublicLookbookListResponse);
+    return lookbooks;
+  } catch (err) {
+    // Build-time-only fallback — see `getHomeSections`'s doc comment.
+    if (isBuildTimeUnreachable(err)) return [];
+    throw err;
+  }
 }
 
 export async function getLookbookBySlug(slug: string): Promise<PublicLookbook | null> {
@@ -96,15 +110,23 @@ function buildQueryString(params: Record<string, string | number | undefined>): 
 }
 
 export async function getJournalPosts(params: ListJournalPostsParams = {}): Promise<ListJournalPostsResult> {
-  const query = buildQueryString({ page: params.page, limit: params.limit });
-  const { data, meta } = await apiFetchWithMeta(`/content/journal${query}`, PublicJournalPostListResponse);
-  return {
-    posts: data.posts,
-    page: meta?.page ?? params.page ?? 1,
-    limit: meta?.limit ?? params.limit ?? 20,
-    total: meta?.total ?? data.posts.length,
-    hasMore: meta?.hasMore ?? false,
-  };
+  try {
+    const query = buildQueryString({ page: params.page, limit: params.limit });
+    const { data, meta } = await apiFetchWithMeta(`/content/journal${query}`, PublicJournalPostListResponse);
+    return {
+      posts: data.posts,
+      page: meta?.page ?? params.page ?? 1,
+      limit: meta?.limit ?? params.limit ?? 20,
+      total: meta?.total ?? data.posts.length,
+      hasMore: meta?.hasMore ?? false,
+    };
+  } catch (err) {
+    // Build-time-only fallback — see `getHomeSections`'s doc comment.
+    if (isBuildTimeUnreachable(err)) {
+      return { posts: [], page: params.page ?? 1, limit: params.limit ?? 20, total: 0, hasMore: false };
+    }
+    throw err;
+  }
 }
 
 /** `slugs` resolve to real, published posts in the order given, silently

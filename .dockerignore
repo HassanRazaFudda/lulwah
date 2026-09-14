@@ -1,0 +1,53 @@
+# Root .dockerignore — applies to every `docker build` in this repo
+# regardless of which app's Dockerfile is used (apps/api, apps/web,
+# apps/admin), since the build context is always the monorepo root.
+#
+# The concrete bug this exists to prevent: without it, `COPY packages
+# ./packages` / `COPY apps/<app> ./apps/<app>` pulls in whatever
+# `node_modules` already exists on the HOST (present on every real dev
+# machine after `pnpm install`, absent only in a clean CI checkout) —
+# including its pnpm symlinks, which on this platform point at absolute
+# host paths (`C:/Code/lulwah/node_modules/...`). Copied into a Linux
+# container, that overwrites the correct relative symlinks the image's
+# own `deps` stage just installed with dangling ones, so a later `pnpm
+# run build` step fails with "Cannot find module .../typescript/bin/tsc"
+# despite the file being present moments earlier — this exact failure is
+# how the gap was found, build-testing apps/api/Dockerfile locally rather
+# than only in a clean CI runner, which never had a host node_modules to
+# leak in the first place.
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs — each Dockerfile builds these itself; a stale host copy
+# should never leak into or shadow a fresh in-image build.
+dist/
+**/dist/
+.next/
+**/.next/
+.turbo/
+out/
+**/out/
+
+.git/
+.claude/
+
+.env
+.env.*
+!.env.example
+
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+coverage/
+playwright-report/
+test-results/
+
+*.tsbuildinfo
+.eslintcache

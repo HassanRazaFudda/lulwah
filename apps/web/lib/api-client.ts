@@ -18,15 +18,32 @@ import type { z } from 'zod';
  * workstream.
  */
 export class ApiError extends Error {
-  readonly code: ErrorCode | 'UNKNOWN_RESPONSE_SHAPE';
+  readonly code: ErrorCode | 'UNKNOWN_RESPONSE_SHAPE' | 'BUILD_TIME_UNREACHABLE';
   readonly httpStatus: number;
 
-  constructor(code: ErrorCode | 'UNKNOWN_RESPONSE_SHAPE', message: string, httpStatus: number) {
+  constructor(code: ErrorCode | 'UNKNOWN_RESPONSE_SHAPE' | 'BUILD_TIME_UNREACHABLE', message: string, httpStatus: number) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.httpStatus = httpStatus;
   }
+}
+
+/**
+ * A handful of ISR pages (home, lookbook/journal listings) fetch live data
+ * with no `generateStaticParams`, so `next build` still eagerly prerenders
+ * them once at build time — which needs a reachable API. That's fine when
+ * images are built in CI with live service containers (plan.md §36's
+ * original design), but not in an isolated `docker build` with no network
+ * access to one (found live: building this app's own Dockerfile for
+ * Coolify's build-from-Dockerfile flow, which has no such sibling
+ * services). `NEXT_PHASE` is Next's own standard env var, set to this
+ * value only while `next build` is running — never during a real request
+ * or a background ISR revalidation — so this can only ever fire during
+ * that one build-time prerender pass, never mask a genuine runtime outage.
+ */
+export function isBuildTimeUnreachable(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'BUILD_TIME_UNREACHABLE';
 }
 
 /**
@@ -62,12 +79,37 @@ interface FetchedEnvelope<T> {
   meta: ResponseMeta | undefined;
 }
 
+/**
+ * Wraps the native `fetch` to recognise a network-level failure (the
+ * connection itself never reached a server — `TypeError: fetch failed`,
+ * `ECONNREFUSED`/`ENOTFOUND` — as opposed to the server responding with an
+ * HTTP error, which `fetchEnvelope` below already handles via the parsed
+ * envelope's `success: false` branch). Only during `next build`'s own
+ * prerender pass (`NEXT_PHASE === 'phase-production-build'`) is that
+ * converted into `isBuildTimeUnreachable`'s `ApiError`, which the handful
+ * of ISR pages that fetch at build time (see that function's doc comment)
+ * catch and fall back to empty data for. At every other time — a real
+ * request, a background ISR revalidation — the original error propagates
+ * completely unchanged, so a genuine runtime API outage still surfaces
+ * normally rather than being silently swallowed as if it were empty data.
+ */
+async function doFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      throw new ApiError('BUILD_TIME_UNREACHABLE', `No API reachable at build time for ${url}`, 0);
+    }
+    throw err;
+  }
+}
+
 /** Shared by `apiFetch` and `apiFetchWithMeta` — one request/parse path, two return shapes. */
 async function fetchEnvelope<T>(path: string, dataSchema: z.ZodType<T>, init: ApiFetchInit): Promise<FetchedEnvelope<T>> {
   const baseUrl = resolveBaseUrl();
   const { body, headers, ...rest } = init;
 
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await doFetch(`${baseUrl}${path}`, {
     // Cart/checkout rely on the non-httpOnly `lulwah_cart` cookie the API
     // sets on `POST /cart` (plan.md §8.5) round-tripping automatically —
     // `credentials: 'include'` is required for that on cross-origin

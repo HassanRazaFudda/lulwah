@@ -21,6 +21,7 @@
     "@lulwah/tokens": "workspace:*",
     "@lulwah/ui": "workspace:*",
     "@lulwah/utils": "workspace:*",
+    "@swc/helpers": "^0.5.23",
     "@tanstack/react-query": "^5.101.4",
     "lucide-react": "^1.31.0",
     "next": "^16.3.1",

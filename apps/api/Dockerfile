@@ -7,11 +7,29 @@
 # and Turborepo needs the root `turbo.json`. Actual `docker-compose*`
 # wiring is a separate workstream (see plan.md §36); this Dockerfile only
 # needs to build and run the image standalone.
+#
+# Requires the repo-root `.dockerignore` to exist — found live,
+# build-tested locally (this file had apparently never actually been
+# built before; a clean CI checkout has no local `node_modules` to
+# trigger this): without it, the `build` stage's `COPY packages
+# ./packages` pulls in whatever `node_modules` already exists on the HOST
+# (present on any real dev machine, absent only in CI) alongside the real
+# source — including its pnpm symlinks, which on this platform resolve to
+# absolute host paths (`C:/Code/lulwah/node_modules/...`). Copied into
+# this Linux container, that silently overwrites the correct *relative*
+# symlinks the `deps` stage had just installed moments earlier with
+# dangling ones, so `packages/tokens`'s own `tsc` build step then fails
+# with "Cannot find module '.../node_modules/typescript/bin/tsc'" even
+# though the file demonstrably exists right before that `COPY` runs.
 
 # ---- deps ------------------------------------------------------------
-# Installs the full workspace's dependency graph with a frozen lockfile,
-# cached separately from the source copy so `pnpm install` only reruns
-# when a package.json / the lockfile actually changes.
+# `--filter @lulwah/api...` (dots after) selects @lulwah/api plus every
+# workspace package it actually depends on (contracts, utils, config,
+# tokens — not `ui`, which api doesn't use), so this install only ever
+# pulls in what api needs — never `@lulwah/web`'s or `@lulwah/admin`'s
+# own (much heavier: Next.js, React) dependency trees. Three separate
+# Coolify builds, one per app, must not each install all three apps'
+# full dependency graphs just to build one of them.
 FROM node:24-alpine AS deps
 WORKDIR /repo
 RUN corepack enable

@@ -17,6 +17,11 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: 'standalone',
   transpilePackages: ['@lulwah/ui', '@lulwah/tokens', '@lulwah/contracts', '@lulwah/utils'],
+  // Same standalone-trace gap as apps/web/next.config.ts — see that
+  // file's own comment (`outputFileTracingIncludes` was tried first and
+  // didn't fix it; `serverExternalPackages` is the actual fix). This app
+  // hit the identical container boot crash.
+  serverExternalPackages: ['@swc/helpers'],
   async headers() {
     return [
       {

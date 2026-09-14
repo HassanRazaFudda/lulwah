@@ -1,6 +1,18 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Forces one deduplicated `@swc/helpers` across the whole store — found
+# live, container-tested: apps/web/apps/admin's own `@swc/helpers`
+# dependency (their own package.json) wasn't enough on its own. Next's
+# `output: 'standalone'` runtime crashed looking for `@swc/helpers` inside
+# `next`'s *own* nested node_modules within pnpm's virtual store
+# (`node_modules/.pnpm/next@.../node_modules/@swc/helpers`), which pnpm's
+# isolated linker doesn't populate just because a sibling workspace
+# package also depends on the same package at the top level — only a
+# workspace-wide override forces every consumer, including next's own
+# internal dependency, onto the one instance.
+overrides:
+  '@swc/helpers': ^0.5.23
 allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true

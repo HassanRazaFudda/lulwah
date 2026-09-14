@@ -1,6 +1,6 @@
 import type { Brand, ColorFamily, Collection, Fabric, Occasion, Product, Size, StitchingType, Work } from '@lulwah/contracts';
 import { Collection as CollectionSchema } from '@lulwah/contracts';
-import { apiFetch, apiFetchWithMeta } from './api-client';
+import { apiFetch, apiFetchWithMeta, isBuildTimeUnreachable } from './api-client';
 import {
   BrandListResponse,
   CategoryTreeResponse,
@@ -64,15 +64,26 @@ function buildQueryString(params: Record<string, string | number | boolean | und
 }
 
 export async function listProducts(params: ListProductsParams = {}): Promise<ListProductsResult> {
-  const query = buildQueryString({ ...params });
-  const { data, meta } = await apiFetchWithMeta(`/products${query}`, ProductListResponse);
-  return {
-    products: data.products,
-    page: meta?.page ?? params.page ?? 1,
-    limit: meta?.limit ?? params.limit ?? 24,
-    total: meta?.total ?? data.products.length,
-    hasMore: meta?.hasMore ?? false,
-  };
+  try {
+    const query = buildQueryString({ ...params });
+    const { data, meta } = await apiFetchWithMeta(`/products${query}`, ProductListResponse);
+    return {
+      products: data.products,
+      page: meta?.page ?? params.page ?? 1,
+      limit: meta?.limit ?? params.limit ?? 24,
+      total: meta?.total ?? data.products.length,
+      hasMore: meta?.hasMore ?? false,
+    };
+  } catch (err) {
+    // Build-time-only fallback (the home page's collection rails call this
+    // with no live API reachable during `next build`) — never triggers for
+    // a real request or ISR revalidation. See `isBuildTimeUnreachable`'s
+    // doc comment (api-client.ts).
+    if (isBuildTimeUnreachable(err)) {
+      return { products: [], page: params.page ?? 1, limit: params.limit ?? 24, total: 0, hasMore: false };
+    }
+    throw err;
+  }
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDetailResponse | null> {
@@ -95,8 +106,14 @@ export async function getRelatedProducts(slug: string, limit = 4): Promise<Produ
 }
 
 export async function listBrands(): Promise<Brand[]> {
-  const { brands } = await apiFetch('/brands', BrandListResponse);
-  return brands;
+  try {
+    const { brands } = await apiFetch('/brands', BrandListResponse);
+    return brands;
+  } catch (err) {
+    // Build-time-only fallback — see `listProducts`'s doc comment.
+    if (isBuildTimeUnreachable(err)) return [];
+    throw err;
+  }
 }
 
 export async function getBrandBySlug(slug: string): Promise<Brand | null> {
@@ -114,8 +131,14 @@ export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
 }
 
 export async function listCollections(limit = 24): Promise<Collection[]> {
-  const { collections } = await apiFetch(`/collections?limit=${limit}`, CollectionListResponse);
-  return collections;
+  try {
+    const { collections } = await apiFetch(`/collections?limit=${limit}`, CollectionListResponse);
+    return collections;
+  } catch (err) {
+    // Build-time-only fallback — see `listProducts`'s doc comment.
+    if (isBuildTimeUnreachable(err)) return [];
+    throw err;
+  }
 }
 
 export async function getCollectionBySlug(slug: string): Promise<Collection | null> {
