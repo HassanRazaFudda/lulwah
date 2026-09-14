@@ -219,7 +219,7 @@ export function Header() {
                 near-black plums would be indistinguishable anyway. */}
             <span
               className={cx(
-                'font-display text-center text-[21px] tracking-display uppercase',
+                'font-display text-center text-[21px] font-bold tracking-display uppercase',
                 !isTransparent && 'text-plum-dark',
               )}
             >
@@ -261,7 +261,7 @@ export function Header() {
                 itself read as "thicker" at the same literal height. */}
             <span className="mt-4 flex items-center gap-4">
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
-              <span className="font-body text-[10px] font-semibold tracking-label uppercase">Fashion</span>
+              <span className="font-display text-[10px] font-semibold tracking-label uppercase">Fashion</span>
               <span aria-hidden="true" className="h-[1px] flex-1 bg-current" />
             </span>
           </span>
