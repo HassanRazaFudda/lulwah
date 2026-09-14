@@ -2,9 +2,8 @@
 
 import type { HomeSectionType } from '@lulwah/contracts';
 import { Input } from '@lulwah/ui';
-import { useAdminBrandsQuery, useAdminCollectionsQuery } from '../../lib/queries/catalog-refs';
+import { useAdminCollectionsQuery } from '../../lib/queries/catalog-refs';
 import { labelClassName, selectClassName, textareaClassName } from '../product-editor/field-styles';
-import { MultiCheckList } from '../product-editor/MultiCheckList';
 import { MediaRefField } from './MediaRefField';
 import { StringListEditor } from './StringListEditor';
 
@@ -29,7 +28,6 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
   const str = (key: string) => (typeof settings[key] === 'string' ? (settings[key] as string) : '');
   const media = (key: string) => (settings[key] as { publicId: string; url: string } | null | undefined) ?? null;
 
-  const { data: brands } = useAdminBrandsQuery();
   const { data: collections } = useAdminCollectionsQuery();
 
   switch (type) {
@@ -167,21 +165,12 @@ export function HomeSectionSettingsForm({ type, settings, onChange }: HomeSectio
         </div>
       );
 
-    case 'brand_strip':
-      return (
-        <div className="flex flex-col gap-4">
-          <span className={labelClassName}>Brands (marquee order follows selection order below is not preserved; see note)</span>
-          <p className="text-body-sm text-ink-70">
-            Checklist order is alphabetical, not the storefront render order. `brandIds` is a plain array with no
-            separate ordering UI in this pass; reorder by editing the underlying array if a specific sequence matters.
-          </p>
-          <MultiCheckList
-            options={(brands ?? []).map((b) => ({ value: b.id, label: b.name }))}
-            selected={(settings.brandIds as string[]) ?? []}
-            onChange={(next) => set('brandIds', next)}
-          />
-        </div>
-      );
+    // `brand_strip` has no settings form here any more — it can no longer
+    // be created (`HomeSectionsPanel.tsx`'s `ALL_TYPES`), since Lulwah
+    // Fashion sells its own product rather than carrying a marquee of
+    // brands. See `docs/adr/0001-remove-brand-listing.md`. Falls through
+    // to `default` below, same graceful-degradation treatment any other
+    // section type this form doesn't recognise already gets.
 
     case 'category_grid':
       return (

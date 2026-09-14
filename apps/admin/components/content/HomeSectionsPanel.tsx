@@ -21,7 +21,14 @@ import { defaultHomeSectionSettings, HOME_SECTION_TYPE_LABELS } from './home-sec
 import { HomeSectionSettingsForm } from './HomeSectionSettingsForm';
 import { labelClassName, selectClassName } from '../product-editor/field-styles';
 
-const ALL_TYPES = Object.keys(HOME_SECTION_TYPE_LABELS) as HomeSectionType[];
+// Every type EXCEPT `brand_strip` — Lulwah Fashion sells its own product,
+// not a marquee of brands it carries, so a new one of these can no longer
+// be created here (see `docs/adr/0001-remove-brand-listing.md`). Still a
+// real `HomeSectionType` in the schema (line 149 below, which shows an
+// *existing* section's own label regardless of type, still needs a
+// complete `HOME_SECTION_TYPE_LABELS` map) — this only narrows the
+// "add new section" picker, not the type itself.
+const ALL_TYPES = (Object.keys(HOME_SECTION_TYPE_LABELS) as HomeSectionType[]).filter((type) => type !== 'brand_strip');
 
 function toDatetimeLocal(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');

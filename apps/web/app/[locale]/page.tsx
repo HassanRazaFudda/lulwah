@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { BrandStrip } from '@/components/sections/BrandStrip';
 import { CollectionRail } from '@/components/sections/CollectionRail';
 import { EditorialSplit } from '@/components/sections/EditorialSplit';
 import { FullBleedBreak } from '@/components/sections/FullBleedBreak';
@@ -104,9 +103,10 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
   const t = await getTranslations('home');
 
   const collectionRailSections = sections.filter(isHomeSectionType('collection_rail'));
-  const brandStripSections = sections.filter(isHomeSectionType('brand_strip'));
   const journalTeaserSections = sections.filter(isHomeSectionType('journal_teaser'));
-  const needsBrands = collectionRailSections.length > 0 || brandStripSections.length > 0;
+  // Only `collection_rail` needs brand data now — `brand_strip` itself is
+  // never rendered (see the `case 'brand_strip'` removal note below).
+  const needsBrands = collectionRailSections.length > 0;
   const needsCollectionLookup = collectionRailSections.some((section) => section.settings.collectionId !== null);
   // Deduped across every `journal_teaser` section on the page — one batch
   // call resolves every section's slugs at once; each section then looks its
@@ -123,7 +123,6 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
     allJournalSlugs.length > 0 ? getJournalPostsBySlugs(allJournalSlugs) : Promise.resolve([]),
   ]);
   const brandNameById = buildBrandNameById(brands);
-  const brandsById = new Map(brands.map((brand) => [brand.id, brand]));
   const collectionSlugById = new Map(collections.map((collection) => [collection.id, collection.slug]));
   const journalPostBySlug = new Map(journalPosts.map((post) => [post.slug, post]));
 
@@ -143,7 +142,7 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
 
   // Two adjacent sections never share a background (plan.md §13.5) — this
   // alternates paper/pearl across the section types that render as a plain
-  // wrapped block (`collection_rail`, `brand_strip`, the grid variant of
+  // wrapped block (`collection_rail`, the grid variant of
   // `category_grid`). Types with their own inherent background (hero, the
   // panel variant of `category_grid`, video_banner, usp_bar, newsletter)
   // don't participate — they already visually differ from any neighbour.
@@ -182,17 +181,16 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
               </div>
             );
 
-          case 'brand_strip': {
-            const resolved = section.settings.brandIds
-              .map((id) => brandsById.get(id))
-              .filter((brand): brand is NonNullable<typeof brand> => brand !== undefined);
-            return (
-              <div key={section.id} className={`${nextBg()} py-[clamp(64px,9vw,160px)]`}>
-                <BrandStrip brands={resolved} locale={locale} />
-              </div>
-            );
-          }
-
+          // `brand_strip` sections are never rendered — Lulwah Fashion sells
+          // its own product, it isn't a multi-brand retailer, so a marquee
+          // of "brands we carry" no longer describes anything real. See
+          // `docs/adr/0001-remove-brand-listing.md`. The section TYPE stays
+          // in the schema (an admin can no longer create one — see
+          // `home-section-defaults.ts` — but a pre-existing document of this
+          // type, if one is ever restored from a backup, degrades to
+          // rendering nothing rather than a hard error), same "explicit,
+          // documented no-op" treatment `default` below already gives any
+          // section type this switch doesn't know.
           case 'category_grid': {
             const variant = categoryGridVariant(section.settings.tiles.length);
             if (variant === 'none') return null;
@@ -288,10 +286,9 @@ async function DefaultHomeComposition({ locale }: { locale: AppLocale }) {
         <EditorialSplit />
       </div>
 
-      {/* 5. Brand strip */}
-      <div className="bg-paper py-[clamp(64px,9vw,160px)]">
-        <BrandStrip />
-      </div>
+      {/* 5. Brand strip — removed; Lulwah Fashion sells its own product, it
+          isn't a multi-brand retailer. See
+          `docs/adr/0001-remove-brand-listing.md`. */}
 
       {/* 6. Best sellers */}
       {bestSellers.length > 0 ? (

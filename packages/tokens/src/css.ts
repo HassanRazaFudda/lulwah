@@ -18,6 +18,7 @@ const colorCssVarNames: Record<keyof typeof colors, string> = {
   gold: '--gold',
   goldLight: '--gold-light',
   garnet: '--garnet',
+  plum: '--plum',
   mukaish: '--mukaish',
   success: '--success',
   warning: '--warning',

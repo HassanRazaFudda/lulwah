@@ -22,7 +22,6 @@ export function Footer() {
     { href: '/shop/unstitched', label: tNav('unstitched') },
     { href: '/shop/pret', label: tNav('readyToWear') },
     { href: '/shop/formal-wedding', label: tNav('formalWedding') },
-    { href: '/brands', label: tNav('brands') },
     { href: '/collections', label: t('collections') },
   ];
   const helpLinks = [

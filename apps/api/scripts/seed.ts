@@ -366,7 +366,7 @@ async function seedCollections(actor: AuthenticatedUser, products: CreatedProduc
  * substitute for the client's own real photography before this site is
  * ever public, which remains `plan.md` §29 risk #2 either way.
  */
-async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, string>, collectionIdBySlug: Map<string, string>): Promise<void> {
+async function seedContent(actor: AuthenticatedUser, collectionIdBySlug: Map<string, string>): Promise<void> {
   const media = (publicId: string, width: number, height: number) => ({ publicId, url: `/campaigns/${publicId}.jpg`, width, height });
 
   const homeSections: AdminCreateHomeSectionInput[] = [
@@ -424,14 +424,6 @@ async function seedContent(actor: AuthenticatedUser, brandIdBySlug: Map<string, 
         mediaPosition: 'left',
       },
       sortOrder: 3,
-      isActive: true,
-      startsAt: null,
-      endsAt: null,
-    },
-    {
-      type: 'brand_strip',
-      settings: { brandIds: [...brandIdBySlug.values()] },
-      sortOrder: 4,
       isActive: true,
       startsAt: null,
       endsAt: null,
@@ -653,7 +645,7 @@ async function main(): Promise<void> {
   const collectionIdBySlug = await seedCollections(actor, products);
   logger.info({ count: collectionIdBySlug.size }, 'seed: collections created');
 
-  await seedContent(actor, brandIdBySlug, collectionIdBySlug);
+  await seedContent(actor, collectionIdBySlug);
   logger.info('seed: content (home sections, banners, menu, pages, media) created');
 
   try {

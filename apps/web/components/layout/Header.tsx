@@ -1,37 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import { Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cx } from '@lulwah/ui';
 import { Link, usePathname } from '@/i18n/navigation';
-
-// Client-provided mark (logo.png at the repo root), extracted onto a
-// transparent background. Native aspect ratio preserved (731:640) so
-// next/image never has to guess and shift layout.
-//
-// Only one source file now, not the previous gold/ink colorway pair --
-// found live, reported by the user, and this was the one complaint that
-// survived two rounds of scrim tuning (§8.x): both `logo-lockup-gold.png`
-// and `logo-lockup-ink.png` are extremely pale, softly-shaded "embossed
-// foil" exports -- barely legible even sitting on plain white, let alone
-// a photographic hero. No amount of scrim contrast behind them was ever
-// going to fix that; the asset itself has almost no internal contrast to
-// work with. Recolouring via `filter` instead of picking between two
-// pre-baked colourways sidesteps the source files' own softness
-// entirely: `brightness-0` forces every non-transparent pixel of
-// whichever file is loaded to pure black regardless of its original
-// shading (the alpha channel, which is what actually defines the
-// letterforms, is untouched), and `invert` flips that to pure white for
-// the dark/transparent header state. A solid white mark over the scrim
-// is also the more correct reading of plan.md §13.3's own colour law
-// anyway ("gold is metal, not paint -- hairlines ... never a large
-// fill") -- a large gold-filled logo would have been in tension with
-// that rule even if the source file had been bold enough to use as-is.
-const LOGO_ASPECT = 731 / 640;
-const LOGO_HEIGHT = 40;
-const LOGO_SRC = '/brand/logo-lockup-ink.png';
+import { LulwahMonogram } from './LulwahMonogram';
 
 // Deviation: plan.md's full mega-menu (four link columns plus a
 // crossfading featured tile, §15.1) is not built here — it's a
@@ -41,11 +15,17 @@ const LOGO_SRC = '/brand/logo-lockup-ink.png';
 // core-navigation destinations the mega menu would headline (§15.2 item
 // 3's "store's core navigation idea"), so the chrome is complete and
 // functional; the elaborated panel is left as a follow-up.
+//
+// No "Brands" entry — removed along with the rest of the storefront's
+// "Brands We Carry" marketing surface (the home page's brand marquee,
+// `/brands` + `/brands/[slug]`, the footer link): Lulwah Fashion sells
+// its own product, it isn't a multi-brand retailer, so a nav item
+// inviting a shopper to browse "brands" no longer describes anything
+// real. See `docs/adr/0001-remove-brand-listing.md`.
 const NAV_LINKS = [
   { href: '/shop/unstitched', labelKey: 'unstitched' },
   { href: '/shop/pret', labelKey: 'readyToWear' },
   { href: '/shop/formal-wedding', labelKey: 'formalWedding' },
-  { href: '/brands', labelKey: 'brands' },
   { href: '/shop/sale', labelKey: 'sale' },
 ] as const;
 
@@ -214,16 +194,23 @@ export function Header() {
         <Link
           href="/"
           aria-label="Lulwah Fashion"
-          className="absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          className={cx(
+            'absolute start-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-12',
+            isTransparent ? 'text-paper' : 'text-plum',
+          )}
         >
-          <Image
-            src={LOGO_SRC}
-            alt="Lulwah Fashion"
-            width={Math.round(LOGO_HEIGHT * LOGO_ASPECT)}
-            height={LOGO_HEIGHT}
-            priority
-            className={cx('h-[40px] w-auto brightness-0', isTransparent && 'invert')}
-          />
+          <LulwahMonogram className="h-[38px] w-auto shrink-0" />
+          <span className="flex flex-col items-center leading-none">
+            <span className="font-display text-[21px] tracking-display uppercase">Lulwah</span>
+            {/* Flanking hairlines either side of "Fashion" — the source
+                logo (LULWAH.pdf/.ai) draws these as two thin rules bracketing
+                the word, not just tracked type on its own. */}
+            <span className="mt-4 flex items-center gap-6">
+              <span aria-hidden="true" className="h-[1px] w-16 bg-current" />
+              <span className="font-body text-label font-semibold tracking-label uppercase">Fashion</span>
+              <span aria-hidden="true" className="h-[1px] w-16 bg-current" />
+            </span>
+          </span>
         </Link>
 
         <div className="flex items-center gap-16">

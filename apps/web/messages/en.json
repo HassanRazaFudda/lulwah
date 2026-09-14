@@ -2,13 +2,12 @@
   "meta": {
     "defaultTitle": "Lulwah Fashion | Pakistani Designer Wear in the UAE",
     "titleTemplate": "%s | Lulwah Fashion",
-    "description": "Khaadi, Asim Jofa, Sana Safinaz and more: unstitched lawn, pret and wedding formals, delivered across the UAE in 2–4 days."
+    "description": "Unstitched lawn, pret and wedding formals, delivered across the UAE in 2–4 days."
   },
   "nav": {
     "unstitched": "Unstitched",
     "readyToWear": "Ready to Wear",
     "formalWedding": "Formal & Wedding",
-    "brands": "Brands",
     "sale": "Sale",
     "menu": "Menu",
     "primary": "Primary",
@@ -78,9 +77,6 @@
       "body": "Forty-two pieces from Pakistan's leading fashion houses, shot in Dubai against the fabric they're cut from. Nothing sized for a Western catalogue; every chart is the brand's own.",
       "cta": "Read the edit",
       "ctaGeneric": "Read more"
-    },
-    "brandStrip": {
-      "title": "Houses we carry"
     },
     "bestSellers": {
       "title": "Best sellers this week",

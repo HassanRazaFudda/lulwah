@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { routing } from '@/i18n/routing';
-import { BRANDS, PRODUCTS } from '@/lib/placeholder-data';
+import { PRODUCTS } from '@/lib/placeholder-data';
 
 /** plan.md §17: "Rendering | ISR/SSG on every indexable route" and hreflang per page (§17). */
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://lulwahfashion.com';
@@ -11,7 +11,6 @@ const STATIC_PATHS = [
   '/shop/pret',
   '/shop/formal-wedding',
   '/collections',
-  '/brands',
   '/about',
   '/faq',
 ];
@@ -26,14 +25,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
         lastModified: new Date(),
         changeFrequency: path === '' ? 'daily' : 'weekly',
         priority: path === '' ? 1 : 0.7,
-      });
-    }
-    for (const brand of BRANDS) {
-      entries.push({
-        url: `${SITE_URL}/${locale}/brands/${brand.slug}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.6,
       });
     }
     for (const product of PRODUCTS) {

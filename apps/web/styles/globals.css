@@ -80,19 +80,6 @@
   }
 }
 
-/* plan.md §14.4: "Marquee brand strip — Continuous horizontal loop, pauses
-   on hover, 60s per cycle." `BrandStrip` renders the brand list twice back
-   to back and translates exactly one copy's width (-50%) so the loop reads
-   as seamless. */
-@keyframes marquee {
-  from {
-    transform: translateX(0%);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
 /* plan.md §14.1 rule 4: reduced motion collapses every transform-based
    transition to a near-instant opacity change. Component-level motion
    (GSAP/Motion, out of scope for this skeleton) must honour the same
