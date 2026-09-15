@@ -26,7 +26,11 @@ interface JournalIndexPageProps {
  * `?page=` search param — a real, shareable URL rendered cumulatively, not a
  * client-only fetch-and-append.
  */
-export const revalidate = 300;
+// `force-dynamic`, not 300s ISR — same reasoning as `app/[locale]/page.tsx`'s
+// own doc comment: a build-time-prerendered listing page with no dynamic
+// route segment hits the "Coolify's build can't reach the API, bakes in an
+// empty/wrong result permanently" failure Home actually hit in production.
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: JournalIndexPageProps): Promise<Metadata> {
   const { locale } = await params;

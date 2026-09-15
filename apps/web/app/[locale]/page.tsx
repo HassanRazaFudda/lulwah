@@ -28,8 +28,26 @@ interface HomePageProps {
   params: Promise<{ locale: AppLocale }>;
 }
 
-/** plan.md §12.2: "Home | ISR | 300 s + on-demand on content publish." */
-export const revalidate = 300;
+/**
+ * plan.md §12.2 calls for "Home | ISR | 300 s + on-demand on content
+ * publish" — deliberately overridden to `force-dynamic` here instead.
+ *
+ * Found live, in production: Coolify's build environment can't reach the
+ * API during `next build` (this app's own `isBuildTimeUnreachable`
+ * fallback in api-client.ts exists specifically to let the build survive
+ * that and still succeed), so with plain ISR this page's build-time
+ * prerender permanently baked in the "no CMS content" fallback
+ * (DefaultHomeComposition's hardcoded placeholder copy/images) —
+ * correct, live data in Mongo and a correct API response did nothing to
+ * fix the page actually being served, since ISR's background
+ * revalidation never reliably re-ran it in this deployment even well
+ * past the 300s window. `force-dynamic` renders fresh on every request
+ * instead of trusting a build-time snapshot that can get poisoned this
+ * way — real fetch-level caching (`apiFetch`'s own defaults) still
+ * avoids hitting the API on every single field read, this only removes
+ * Next's *page-level* static cache, the thing that was actually wrong.
+ */
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: HomePageProps): Promise<Metadata> {
   const { locale } = await params;

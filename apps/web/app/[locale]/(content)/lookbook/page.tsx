@@ -15,10 +15,16 @@ interface LookbookIndexPageProps {
  * and §12.1's `(content)` route group (same group `faq`/`about` already
  * live in). `GET /content/lookbooks` (`apps/api/.../content/lookbook.routes.ts`)
  * returns only published lookbooks, already sorted by `sortOrder` — see
- * `lib/content-client.ts#getLookbooks`'s own doc comment. `revalidate`
- * matches this app's other CMS-driven listing page (Home, §12.2: 300s ISR).
+ * `lib/content-client.ts#getLookbooks`'s own doc comment.
+ *
+ * `force-dynamic`, not the 300s ISR this page originally matched Home on
+ * — same reasoning as `app/[locale]/page.tsx`'s own doc comment: this is
+ * a build-time-prerendered listing page with no dynamic route segment,
+ * so it hits the identical "Coolify's build can't reach the API, bakes
+ * in an empty/wrong result permanently" failure mode Home actually hit
+ * in production.
  */
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: LookbookIndexPageProps): Promise<Metadata> {
   const { locale } = await params;
