@@ -1,10 +1,15 @@
-import type { Brand, Product } from '@lulwah/contracts';
+import type { Product } from '@lulwah/contracts';
 
 /**
- * Builds the PLP filter rail's facet data — plan.md §15.3: "Facets in this
- * order: Stitching type · Piece count · Brand · Fabric · Occasion · Work ·
- * Colour · Size · Price (histogram slider) · Availability · On sale. Every
- * facet shows counts."
+ * Builds the PLP filter rail's facet data — plan.md §15.3's original order
+ * was "Stitching type · Piece count · Brand · Fabric · Occasion · Work ·
+ * Colour · Size · Price (histogram slider) · Availability · On sale", but
+ * `Brand` is deliberately omitted here: Lulwah Fashion doesn't surface
+ * brand identity to customers at all (see `docs/adr/0001-remove-brand-
+ * listing.md`) — `Product.brandId` and the underlying `?brand=` query
+ * param still work server-side (discount targeting, reports, collection
+ * rules all still key off it), there's just no customer-facing way to
+ * discover or filter by it.
  *
  * Operates on real `Product[]` (`@lulwah/contracts`) — this used to run
  * against `PlaceholderProduct[]`; swapped when the PLP moved to a real
@@ -76,10 +81,7 @@ function toOptions(counts: Map<string, number>, label: (value: string) => string
     .sort((a, b) => b.count - a.count);
 }
 
-export function buildFacetGroups(products: Product[], brands: Brand[]): FacetGroupData[] {
-  const brandById = new Map(brands.map((brand) => [brand.id, brand]));
-  const brandNameBySlug = new Map(brands.map((brand) => [brand.slug, brand.name]));
-
+export function buildFacetGroups(products: Product[]): FacetGroupData[] {
   return [
     {
       key: 'stitching',
@@ -87,17 +89,6 @@ export function buildFacetGroups(products: Product[], brands: Brand[]): FacetGro
       options: toOptions(
         countValues(products, (p) => [p.stitchingType]),
         (value) => STITCHING_LABELS[value] ?? humanize(value),
-      ),
-    },
-    {
-      key: 'brand',
-      label: 'Brand',
-      options: toOptions(
-        countValues(products, (p) => {
-          const brand = brandById.get(p.brandId);
-          return brand ? [brand.slug] : [];
-        }),
-        (value) => brandNameBySlug.get(value) ?? humanize(value),
       ),
     },
     {

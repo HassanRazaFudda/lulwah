@@ -220,11 +220,6 @@ function CartLine({ item, locale }: { item: CartItemView; locale: 'en' | 'ar' })
       <div className="flex flex-1 flex-col gap-8">
         <div className="flex items-start justify-between gap-16">
           <div className="flex flex-col gap-4">
-            {display?.brandName ? (
-              <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
-                {display.brandName}
-              </span>
-            ) : null}
             <Link href={href} className="font-body text-body font-medium text-ink">
               {title}
             </Link>

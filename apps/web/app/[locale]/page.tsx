@@ -12,7 +12,7 @@ import { UspBar } from '@/components/sections/UspBar';
 import { ProductCard, type ProductCardProps } from '@/components/commerce/ProductCard';
 import { Link } from '@/i18n/navigation';
 import type { AppLocale } from '@/i18n/routing';
-import { listBrands, listCollections, listProducts } from '@/lib/catalog-client';
+import { listCollections, listProducts } from '@/lib/catalog-client';
 import { getHomeSections, getJournalPostsBySlugs } from '@/lib/content-client';
 import {
   categoryGridVariant,
@@ -22,7 +22,7 @@ import {
   pickLocale,
   type TypedHomeSection,
 } from '@/lib/content-mappers';
-import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
+import { toProductCardProps } from '@/lib/product-mappers';
 
 interface HomePageProps {
   params: Promise<{ locale: AppLocale }>;
@@ -104,9 +104,6 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
 
   const collectionRailSections = sections.filter(isHomeSectionType('collection_rail'));
   const journalTeaserSections = sections.filter(isHomeSectionType('journal_teaser'));
-  // Only `collection_rail` needs brand data now — `brand_strip` itself is
-  // never rendered (see the `case 'brand_strip'` removal note below).
-  const needsBrands = collectionRailSections.length > 0;
   const needsCollectionLookup = collectionRailSections.some((section) => section.settings.collectionId !== null);
   // Deduped across every `journal_teaser` section on the page — one batch
   // call resolves every section's slugs at once; each section then looks its
@@ -114,15 +111,13 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
   // lost even though the fetch itself is a single deduped union.
   const allJournalSlugs = Array.from(new Set(journalTeaserSections.flatMap((section) => section.settings.postSlugs)));
 
-  const [brands, collections, journalPosts] = await Promise.all([
-    needsBrands ? listBrands() : Promise.resolve([]),
+  const [collections, journalPosts] = await Promise.all([
     // A generous limit — resolving a CMS-referenced `collectionId` to its
     // slug (`listProducts` takes slugs, not ids, per `catalog-client.ts`'s
     // own doc comment) needs the full collection list, not just a first page.
     needsCollectionLookup ? listCollections(100) : Promise.resolve([]),
     allJournalSlugs.length > 0 ? getJournalPostsBySlugs(allJournalSlugs) : Promise.resolve([]),
   ]);
-  const brandNameById = buildBrandNameById(brands);
   const collectionSlugById = new Map(collections.map((collection) => [collection.id, collection.slug]));
   const journalPostBySlug = new Map(journalPosts.map((post) => [post.slug, post]));
 
@@ -135,7 +130,7 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
         : await listProducts({ sort: inferCollectionRailSort(section.settings.viewAllHref), limit: section.settings.limit });
       railItemsBySectionId.set(
         section.id,
-        result.products.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale)),
+        result.products.map((product) => toProductCardProps(product, locale)),
       );
     }),
   );
@@ -252,14 +247,12 @@ async function CmsHomeComposition({ sections, locale }: { sections: TypedHomeSec
 async function DefaultHomeComposition({ locale }: { locale: AppLocale }) {
   const t = await getTranslations('home');
 
-  const [newArrivalsResult, bestSellersResult, brands] = await Promise.all([
+  const [newArrivalsResult, bestSellersResult] = await Promise.all([
     listProducts({ sort: 'newest', limit: 6 }),
     listProducts({ sort: 'bestselling', limit: 6 }),
-    listBrands(),
   ]);
-  const brandNameById = buildBrandNameById(brands);
-  const newArrivals = newArrivalsResult.products.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale));
-  const bestSellers = bestSellersResult.products.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale));
+  const newArrivals = newArrivalsResult.products.map((product) => toProductCardProps(product, locale));
+  const bestSellers = bestSellersResult.products.map((product) => toProductCardProps(product, locale));
 
   return (
     <>

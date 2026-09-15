@@ -4,8 +4,8 @@ import { FilterRail, type FilterGroupView, type FilterOptionView } from '@/compo
 import { LoadMoreButton } from '@/components/commerce/LoadMoreButton';
 import type { AppLocale } from '@/i18n/routing';
 import { buildFacetGroups, getPriceRange, humanize } from '@/lib/facets';
-import { listBrands, type ProductSort } from '@/lib/catalog-client';
-import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
+import type { ProductSort } from '@/lib/catalog-client';
+import { toProductCardProps } from '@/lib/product-mappers';
 import { loadPlpData, type PlpFacetSelections } from '@/lib/plp-data';
 import { resolveShopSegments } from '@/lib/shop-segment';
 import type { ColorFamily, Fabric, Occasion, Size, StitchingType, Work } from '@lulwah/contracts';
@@ -149,10 +149,9 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
     ...(search.sort ? { sort: search.sort as ProductSort } : {}),
   };
 
-  const [plpData, brands] = await Promise.all([loadPlpData(scope, selections, page), listBrands()]);
+  const plpData = await loadPlpData(scope, selections, page);
 
-  const brandNameById = buildBrandNameById(brands);
-  const visible = plpData.displayProducts.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale));
+  const visible = plpData.displayProducts.map((product) => toProductCardProps(product, locale));
   const hasMore = plpData.hasMore;
   const remainingCount = Math.max(plpData.total - plpData.displayProducts.length, 0);
 
@@ -167,7 +166,7 @@ export default async function ShopCategoryPage({ params, searchParams }: PlpPage
 
       <div className="flex flex-col gap-32 lg:flex-row lg:items-start lg:gap-48">
         <FilterRail
-          groups={buildFacetGroupViews(buildFacetGroups(plpData.scopeProducts, brands), basePath, search)}
+          groups={buildFacetGroupViews(buildFacetGroups(plpData.scopeProducts), basePath, search)}
           priceRangeFils={getPriceRange(plpData.scopeProducts)}
           clearHref={basePath}
           hasActiveFilters={hasActiveFilters}

@@ -33,7 +33,6 @@ export interface ProductCardProps {
   slug: string;
   /** Real Mongo product id — required by the wishlist API (`WishlistButton`), which is keyed by `productId`, not `slug`. */
   productId: string;
-  brandName: string;
   title: string;
   image: ProductCardImage;
   /** Revealed on hover via a diagonal clip-path wipe — §13.6, §14.4. Optional: cards with only one shot just skip the hover state. */
@@ -58,7 +57,6 @@ const MAX_VISIBLE_COLORS = 4;
 export function ProductCard({
   slug,
   productId,
-  brandName,
   title,
   image,
   hoverImage,
@@ -79,7 +77,7 @@ export function ProductCard({
     <div className={cx('group relative flex flex-col gap-12', className)}>
       {/* Media — 3:4, radius 0, no shadow/border (§13.5, §13.6). */}
       <div className="relative aspect-[3/4] overflow-hidden bg-pearl">
-        <Link href={href} aria-label={`${brandName}: ${title}`} className="absolute inset-0 block">
+        <Link href={href} aria-label={title} className="absolute inset-0 block">
           <Image
             src={image.src}
             alt={image.alt}
@@ -153,9 +151,6 @@ export function ProductCard({
 
       {/* Info */}
       <Link href={href} className="flex flex-col gap-4">
-        <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
-          {brandName}
-        </span>
         <h3 className="truncate font-body text-body font-medium text-ink">{title}</h3>
         <PriceBlock priceFils={priceFils} compareAtPriceFils={compareAtPriceFils} locale={locale} />
       </Link>

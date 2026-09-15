@@ -364,7 +364,6 @@ export function toProductCardProps(product: PlaceholderProduct, locale: 'en' | '
     // rendered off this data would fail `objectId` validation server-side
     // if ever actually clicked, which is fine since nothing does.
     productId: product.slug,
-    brandName: product.brandName,
     title: product.title,
     image: primaryImage ?? { ...PLACEHOLDER_IMAGE, alt: product.title },
     hoverImage: secondaryImage,

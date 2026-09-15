@@ -1,4 +1,4 @@
-import type { Brand, Product, ProductMediaItem } from '@lulwah/contracts';
+import type { Product, ProductMediaItem } from '@lulwah/contracts';
 import type { ProductCardImage, ProductCardProps } from '@/components/commerce/ProductCard';
 
 /**
@@ -19,19 +19,11 @@ function resolveImages(media: ProductMediaItem[], title: string): { image: Produ
   };
 }
 
-/** `GET /products`'s list response doesn't embed the brand — only
- *  `brandId` — so every listing page (PLP, home rails, search, brand page)
- *  fetches `/brands` once and passes a lookup built from this in. */
-export function buildBrandNameById(brands: Brand[]): Map<string, string> {
-  return new Map(brands.map((brand) => [brand.id, brand.name]));
-}
-
-export function toProductCardProps(product: Product, brandName: string, locale: 'en' | 'ar'): ProductCardProps {
+export function toProductCardProps(product: Product, locale: 'en' | 'ar'): ProductCardProps {
   const { image, hoverImage } = resolveImages(product.media, product.title);
   return {
     slug: product.slug,
     productId: product.id,
-    brandName,
     title: product.title,
     image,
     ...(hoverImage ? { hoverImage } : {}),

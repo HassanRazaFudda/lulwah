@@ -34,7 +34,6 @@ import { WishlistButton } from './WishlistButton';
 export interface AddToBagFormProps {
   productId: string;
   productSlug: string;
-  brandName: string;
   title: string;
   stitchingType: string;
   pieceCount: 1 | 2 | 3 | null;
@@ -58,7 +57,6 @@ function estimateDeliveryDayLabel(): string {
 export function AddToBagForm({
   productId,
   productSlug,
-  brandName,
   title,
   stitchingType,
   image,
@@ -95,11 +93,10 @@ export function AddToBagForm({
   async function handleAddToBag() {
     if (!matchedVariant) return;
     // Remember display data for this variant — the cart API's `CartItem`
-    // has no title/brand/image snapshot (see `cart-display-cache.ts`'s doc
+    // has no title/image snapshot (see `cart-display-cache.ts`'s doc
     // comment); this is purely cosmetic, never consulted for price/qty.
     rememberCartLineDisplay(matchedVariant.id, {
       productSlug,
-      brandName,
       title,
       image,
       stitchingType,

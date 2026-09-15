@@ -3,8 +3,8 @@ import { Input } from '@lulwah/ui';
 import { ProductCard } from '@/components/commerce/ProductCard';
 import { Link } from '@/i18n/navigation';
 import type { AppLocale } from '@/i18n/routing';
-import { listBrands, listCollections, searchProducts } from '@/lib/catalog-client';
-import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
+import { listCollections, searchProducts } from '@/lib/catalog-client';
+import { toProductCardProps } from '@/lib/product-mappers';
 
 export const metadata: Metadata = {
   title: 'Search',
@@ -33,9 +33,8 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
   const { q = '' } = await searchParams;
   const query = q.trim();
 
-  const [{ products: results }, brands] = await Promise.all([searchProducts(query, 24), listBrands()]);
-  const brandNameById = buildBrandNameById(brands);
-  const cards = results.map((product) => toProductCardProps(product, brandNameById.get(product.brandId) ?? '', locale));
+  const { products: results } = await searchProducts(query, 24);
+  const cards = results.map((product) => toProductCardProps(product, locale));
 
   const nearestCollections = query && results.length === 0 ? (await listCollections(3)).slice(0, 3) : [];
 

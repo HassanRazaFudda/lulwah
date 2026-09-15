@@ -23,7 +23,6 @@
  */
 export interface CartLineDisplay {
   productSlug: string;
-  brandName: string;
   title: string;
   image: { src: string; alt: string };
   stitchingType: string;

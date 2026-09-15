@@ -8,8 +8,8 @@ import { ProductGallery } from '@/components/commerce/ProductGallery';
 import { ReviewsSection } from '@/components/commerce/ReviewsSection';
 import { StitchingPill } from '@/components/commerce/StitchingPill';
 import type { AppLocale } from '@/i18n/routing';
-import { getProductBySlug, getRelatedProducts, listBrands } from '@/lib/catalog-client';
-import { buildBrandNameById, toProductCardProps } from '@/lib/product-mappers';
+import { getProductBySlug, getRelatedProducts } from '@/lib/catalog-client';
+import { toProductCardProps } from '@/lib/product-mappers';
 import { buildFabricCareLine, buildPiecesSummary } from '@/lib/pdp-content';
 
 interface PdpPageProps {
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: PdpPageProps): Promise<Metada
   const detail = await getProductBySlug(slug);
   if (!detail) return {};
   return {
-    title: `${detail.product.title} | ${detail.brand.name}`,
+    title: `${detail.product.title} | Lulwah Fashion`,
     description: detail.product.seo.descEn ?? detail.product.title,
   };
 }
@@ -43,11 +43,10 @@ export default async function ProductPage({ params }: PdpPageProps) {
   const detail = await getProductBySlug(slug);
   if (!detail) notFound();
 
-  const { product, brand, variants, breadcrumbs } = detail;
+  const { product, variants, breadcrumbs } = detail;
 
-  const [relatedProducts, brands] = await Promise.all([getRelatedProducts(slug, 3), listBrands()]);
-  const brandNameById = buildBrandNameById(brands);
-  const related = relatedProducts.map((item) => toProductCardProps(item, brandNameById.get(item.brandId) ?? '', locale));
+  const relatedProducts = await getRelatedProducts(slug, 3);
+  const related = relatedProducts.map((item) => toProductCardProps(item, locale));
 
   const images =
     product.media.length > 0
@@ -90,11 +89,6 @@ export default async function ProductPage({ params }: PdpPageProps) {
         </p>
       ),
     },
-    {
-      id: 'about-brand',
-      title: `About ${brand.name}`,
-      content: <p>{brand.description || `A Pakistani design house carried by Lulwah Fashion, shipped to the UAE from Karachi and Lahore.`}</p>,
-    },
   ];
 
   return (
@@ -115,12 +109,7 @@ export default async function ProductPage({ params }: PdpPageProps) {
 
         <div className="flex flex-col gap-24 lg:sticky lg:top-96 lg:self-start">
           <div className="flex flex-col gap-4">
-            <div className="flex items-baseline justify-between">
-              <span className="font-body text-label font-semibold tracking-label text-mukaish uppercase">
-                {brand.name}
-              </span>
-              <span className="font-body text-body-sm text-mukaish">{product.articleCode}</span>
-            </div>
+            <span className="font-body text-body-sm text-mukaish">{product.articleCode}</span>
             <h1 className="font-display text-heading-1 tracking-display text-ink">{product.title}</h1>
           </div>
 
@@ -134,7 +123,6 @@ export default async function ProductPage({ params }: PdpPageProps) {
           <AddToBagForm
             productId={product.id}
             productSlug={product.slug}
-            brandName={brand.name}
             title={product.title}
             stitchingType={product.stitchingType}
             pieceCount={product.pieceCount}
