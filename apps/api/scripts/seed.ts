@@ -563,8 +563,7 @@ async function seedContent(actor: AuthenticatedUser, collectionIdBySlug: Map<str
           sortOrder: 2,
           children: [],
         },
-        { label: 'Brands', labelAr: 'العلامات التجارية', href: '/brands', featuredMedia: null, badge: null, sortOrder: 3, children: [] },
-        { label: 'Sale', labelAr: 'تخفيضات', href: '/shop/sale', featuredMedia: null, badge: null, sortOrder: 4, children: [] },
+        { label: 'Sale', labelAr: 'تخفيضات', href: '/shop/sale', featuredMedia: null, badge: null, sortOrder: 3, children: [] },
       ],
     }),
   );
