@@ -73,6 +73,13 @@ ENV PORT=3900
 EXPOSE 3900
 # Liveness: the storefront has no dedicated /health route — plan `/en` (a
 # real, always-seeded locale route) as the healthcheck target instead.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+# `--timeout=10s`, not 3s — found live: /en is now force-dynamic (see
+# app/[locale]/page.tsx's own doc comment), so every healthcheck actually
+# does the full server-side data fetch, not a cached static response; 3s
+# was tight enough to fail the healthcheck on completely normal render
+# latency alone, on top of masking the real error when the API was
+# genuinely unreachable (DNS failures don't need 10s to fail, but a slow-
+# but-succeeding render shouldn't be flagged unhealthy either).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3900)+'/en').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "apps/web/server.js"]
